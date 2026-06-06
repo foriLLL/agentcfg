@@ -1,0 +1,5 @@
+schemaVersion: 1
+provider: openai
+model: gpt-4.1-mini
+baseURL: https://api.openai.com/v1
+apiKey: sk-test-redacted
