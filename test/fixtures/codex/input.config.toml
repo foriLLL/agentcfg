@@ -1,0 +1,8 @@
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[history]
+persistence = "save-all"
+
+[model_providers.openai]
+wire_api = "responses"

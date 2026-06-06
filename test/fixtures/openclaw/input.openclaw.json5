@@ -1,0 +1,29 @@
+{
+  // OpenClaw JSON5 input with comments, single quotes, unquoted keys, and trailing commas.
+  ui: {
+    theme: 'system',
+    compactMode: false,
+  },
+  agents: {
+    defaults: {
+      model: {
+        primary: 'legacy/old-model',
+        fallback: 'local/fallback-model',
+      },
+    },
+  },
+  models: {
+    providers: {
+      legacy: {
+        baseUrl: 'https://legacy.example.test/v1',
+        apiKey: 'legacy-placeholder',
+        runtime: {
+          timeoutMs: 30000,
+        },
+      },
+    },
+  },
+  gateway: {
+    reloadOnChange: false,
+  },
+}

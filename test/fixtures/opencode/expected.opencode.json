@@ -1,0 +1,34 @@
+{
+  "theme": "system",
+  "model": "openai/gpt-4.1-mini",
+  "tools": {
+    "bash": true,
+    "webfetch": false
+  },
+  "permissions": {
+    "edit": "ask",
+    "bash": {
+      "npm test": "allow"
+    }
+  },
+  "plugins": [
+    "local-plugin"
+  ],
+  "commands": {
+    "lint": "npm run lint"
+  },
+  "provider": {
+    "openai": {
+      "options": {
+        "baseURL": "https://api.openai.com/v1",
+        "apiKey": "sk-test-redacted"
+      },
+      "models": {
+        "gpt-4.1-mini": {
+          "reasoning": true
+        }
+      },
+      "name": "openai"
+    }
+  }
+}

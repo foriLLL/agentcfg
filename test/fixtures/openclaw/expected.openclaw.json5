@@ -1,0 +1,32 @@
+{
+  "ui": {
+    "theme": "system",
+    "compactMode": false
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai/gpt-4.1-mini",
+        "fallback": "local/fallback-model"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "legacy": {
+        "baseUrl": "https://legacy.example.test/v1",
+        "apiKey": "legacy-placeholder",
+        "runtime": {
+          "timeoutMs": 30000
+        }
+      },
+      "openai": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKey": "sk-test-redacted"
+      }
+    }
+  },
+  "gateway": {
+    "reloadOnChange": false
+  }
+}

@@ -1,0 +1,13 @@
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model = "gpt-4.1-mini"
+model_provider = "openai"
+
+[history]
+persistence = "save-all"
+
+[model_providers.openai]
+wire_api = "responses"
+name = "openai"
+base_url = "https://api.openai.com/v1"
+env_key = "AGENTCFG_OPENAI_API_KEY"
