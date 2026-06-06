@@ -1,0 +1,18 @@
+{
+  "theme": "system",
+  "tools": {
+    "bash": true
+  },
+  "permission": {
+    "edit": "ask"
+  },
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-4.1-mini": {
+          "reasoning": true
+        }
+      }
+    }
+  }
+}
