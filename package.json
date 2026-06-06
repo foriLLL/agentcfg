@@ -1,0 +1,30 @@
+{
+  "name": "agentcfg",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript CLI scaffold for agentcfg",
+  "bin": {
+    "agentcfg": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && npm run test:unit && npm run test:fixtures && npm run test:cli && npm run test:docker:opencode",
+    "test:unit": "node --test dist/test/unit/*.test.js",
+    "test:fixtures": "node --test dist/test/fixtures/*.test.js",
+    "test:cli": "node --test dist/test/cli/*.test.js",
+    "test:docker:opencode": "scripts/validate-opencode-docker.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "json5": "^2.2.3",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.6.1",
+    "yaml": "^2.9.0"
+  }
+}
