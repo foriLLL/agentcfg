@@ -3,7 +3,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 
 export type GistRequest = {
   url: string | undefined;
+  method: string | undefined;
   authorization: string | undefined;
+  accept: string | undefined;
+  userAgent: string | undefined;
+  contentType: string | undefined;
+  body: string;
 };
 
 export type FakeGistServer = {
@@ -14,7 +19,7 @@ export type FakeGistServer = {
 
 export type FakeGistResponse = {
   status: number;
-  body: Record<string, unknown>;
+  body: unknown;
   etag?: string;
 };
 
@@ -33,20 +38,32 @@ export function buildGistBody(content: string, revision = 'test-revision'): Reco
 export async function startFakeGistServer(response: FakeGistResponse | FakeGistResponse[]): Promise<FakeGistServer> {
   const requests: GistRequest[] = [];
   const server = createServer((request: IncomingMessage, serverResponse: ServerResponse) => {
-    const currentResponse = Array.isArray(response)
-      ? response[Math.min(requests.length, response.length - 1)]
-      : response;
-    requests.push({
-      url: request.url,
-      authorization: request.headers.authorization,
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk: string) => {
+      body += chunk;
     });
-    serverResponse.statusCode = currentResponse.status;
-    serverResponse.setHeader('content-type', 'application/json');
-    serverResponse.setHeader('connection', 'close');
-    if (currentResponse.etag !== undefined) {
-      serverResponse.setHeader('etag', currentResponse.etag);
-    }
-    serverResponse.end(JSON.stringify(currentResponse.body));
+    request.on('end', () => {
+      const currentResponse = Array.isArray(response)
+        ? response[Math.min(requests.length, response.length - 1)]
+        : response;
+      requests.push({
+        url: request.url,
+        method: request.method,
+        authorization: request.headers.authorization,
+        accept: request.headers.accept,
+        userAgent: request.headers['user-agent'],
+        contentType: request.headers['content-type'],
+        body,
+      });
+      serverResponse.statusCode = currentResponse.status;
+      serverResponse.setHeader('content-type', 'application/json');
+      serverResponse.setHeader('connection', 'close');
+      if (currentResponse.etag !== undefined) {
+        serverResponse.setHeader('etag', currentResponse.etag);
+      }
+      serverResponse.end(JSON.stringify(currentResponse.body));
+    });
   });
 
   await new Promise<void>((resolvePromise) => {

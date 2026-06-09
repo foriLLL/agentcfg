@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 export type PlainApiKey = {
   type: 'plain';
@@ -57,6 +57,20 @@ export function parseAgentConfigYaml(yaml: string): AgentConfigInput {
 
 export function parseCanonicalAgentConfig(yaml: string): CanonicalAgentConfig {
   return validateAgentConfig(parseAgentConfigYaml(yaml));
+}
+
+export function serializeCanonicalAgentConfig(config: AgentConfigInput): string {
+  const canonicalConfig = validateAgentConfig(config);
+  return stringifyYaml({
+    schemaVersion: canonicalConfig.schemaVersion,
+    provider: canonicalConfig.provider,
+    model: canonicalConfig.model,
+    baseURL: canonicalConfig.baseURL,
+    apiKey: {
+      type: canonicalConfig.apiKey.type,
+      value: canonicalConfig.apiKey.value,
+    },
+  });
 }
 
 export function validateAgentConfig(input: AgentConfigInput): CanonicalAgentConfig {

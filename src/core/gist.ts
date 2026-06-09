@@ -30,16 +30,21 @@ export type GistHttpResponse = {
 
 export type GistHttpClient = (
   url: string,
-  options: { headers: Record<string, string> },
+  options: { method?: string; headers: Record<string, string>; body?: string },
 ) => Promise<GistHttpResponse>;
 
 export type CommandRunner = (command: string, args: string[]) => Promise<{ stdout: string }>;
 
 export type FetchGistOptions = {
   apiBaseUrl?: string;
+  token?: string;
   env?: NodeJS.ProcessEnv;
   httpClient?: GistHttpClient;
   commandRunner?: CommandRunner;
+};
+
+export type GistSummary = {
+  id: string;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -62,22 +67,10 @@ export async function fetchGistAgentConfig(
     throw new GistError('Gist ID is required');
   }
 
-  const token = await lookupGitHubToken(options);
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'agentcfg',
-  };
-
-  if (token !== undefined) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await (options.httpClient ?? defaultHttpClient)(buildGistUrl(normalizedGistId, options.apiBaseUrl), {
-    headers,
-  });
+  const response = await requestGistApi(buildGistUrl(normalizedGistId, options.apiBaseUrl), options);
 
   if (!response.ok) {
-    throw new GistError(`GitHub Gist fetch failed with ${response.status} ${response.statusText}`);
+    throw new GistError(await formatGistHttpError('fetch', response));
   }
 
   const body = await response.json();
@@ -90,7 +83,85 @@ export async function fetchGistAgentConfig(
   };
 }
 
+export async function listAuthenticatedGists(options: FetchGistOptions = {}): Promise<unknown[]> {
+  const response = await requestGistApi(`${buildGistCollectionUrl(options.apiBaseUrl)}?per_page=100`, options);
+
+  if (!response.ok) {
+    throw new GistError(await formatGistHttpError('list', response));
+  }
+
+  const body = await response.json();
+  if (!Array.isArray(body)) {
+    throw new GistError('GitHub Gist list response was not an array');
+  }
+
+  return body;
+}
+
+export async function discoverAgentConfigGist(options: FetchGistOptions = {}): Promise<GistSummary | undefined> {
+  for (const gist of await listAuthenticatedGists(options)) {
+    if (isAgentConfigGist(gist)) {
+      return { id: gist.id };
+    }
+  }
+  return undefined;
+}
+
+export async function createSecretAgentConfigGist(
+  content: string,
+  options: FetchGistOptions = {},
+): Promise<{ id: string; metadata: GistRevisionMetadata }> {
+  const response = await requestGistApi(buildGistCollectionUrl(options.apiBaseUrl), options, {
+    method: 'POST',
+    body: JSON.stringify({
+      public: false,
+      description: 'agentcfg remote config',
+      files: {
+        [GIST_AGENTCFG_FILE]: { content },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new GistError(await formatGistHttpError('create', response));
+  }
+
+  const body = await response.json();
+  return { id: extractGistId(body), metadata: extractGistMetadata(body, response) };
+}
+
+export async function updateGistAgentConfig(
+  gistId: string,
+  content: string,
+  options: FetchGistOptions = {},
+): Promise<{ id: string; metadata: GistRevisionMetadata }> {
+  const normalizedGistId = gistId.trim();
+  if (normalizedGistId === '') {
+    throw new GistError('Gist ID is required');
+  }
+
+  const response = await requestGistApi(buildGistUrl(normalizedGistId, options.apiBaseUrl), options, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      files: {
+        [GIST_AGENTCFG_FILE]: { content },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new GistError(await formatGistHttpError('update', response));
+  }
+
+  const body = await response.json();
+  return { id: extractGistId(body), metadata: extractGistMetadata(body, response) };
+}
+
 export async function lookupGitHubToken(options: FetchGistOptions = {}): Promise<string | undefined> {
+  if (options.token !== undefined && options.token.trim() !== '') {
+    return options.token.trim();
+  }
+
   const tokenFromEnvironment = options.env?.GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
   if (tokenFromEnvironment !== undefined && tokenFromEnvironment.trim() !== '') {
     return tokenFromEnvironment.trim();
@@ -108,13 +179,50 @@ export async function lookupGitHubToken(options: FetchGistOptions = {}): Promise
   }
 }
 
+async function requestGistApi(
+  url: string,
+  options: FetchGistOptions,
+  requestOptions: { method?: string; body?: string } = {},
+): Promise<GistHttpResponse> {
+  const token = await lookupGitHubToken(options);
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'agentcfg',
+  };
+
+  if (requestOptions.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (token !== undefined) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    return await (options.httpClient ?? defaultHttpClient)(url, {
+      method: requestOptions.method,
+      headers,
+      body: requestOptions.body,
+    });
+  } catch (error) {
+    if (error instanceof GistError) {
+      throw error;
+    }
+    throw new GistError(`GitHub Gist network request failed before receiving a response: ${formatTransportError(error)}`);
+  }
+}
+
 function buildGistUrl(gistId: string, apiBaseUrl = DEFAULT_GIST_API_BASE_URL): string {
-  return `${apiBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(gistId)}`;
+  return `${buildGistCollectionUrl(apiBaseUrl)}/${encodeURIComponent(gistId)}`;
+}
+
+function buildGistCollectionUrl(apiBaseUrl = DEFAULT_GIST_API_BASE_URL): string {
+  return apiBaseUrl.replace(/\/+$/, '');
 }
 
 async function defaultHttpClient(
   url: string,
-  options: { headers: Record<string, string> },
+  options: { method?: string; headers: Record<string, string>; body?: string },
 ): Promise<GistHttpResponse> {
   return new Promise<GistHttpResponse>((resolvePromise, rejectPromise) => {
     const parsedUrl = new URL(url);
@@ -122,7 +230,7 @@ async function defaultHttpClient(
     const clientRequest = request(
       parsedUrl,
       {
-        method: 'GET',
+        method: options.method ?? 'GET',
         headers: options.headers,
       },
       (response) => {
@@ -156,6 +264,9 @@ async function defaultHttpClient(
     );
 
     clientRequest.on('error', rejectPromise);
+    if (options.body !== undefined) {
+      clientRequest.write(options.body);
+    }
     clientRequest.end();
   });
 }
@@ -208,8 +319,97 @@ function extractGistRevision(body: unknown): string | undefined {
   return latestHistoryEntry.version.trim() === '' ? undefined : latestHistoryEntry.version;
 }
 
+function extractGistMetadata(body: unknown, response: GistHttpResponse): GistRevisionMetadata {
+  return {
+    revision: extractGistRevision(body),
+    etag: response.headers.get('etag') ?? response.headers.get('ETag') ?? undefined,
+  };
+}
+
+function extractGistId(body: unknown): string {
+  if (!isRecord(body) || typeof body.id !== 'string' || body.id.trim() === '') {
+    throw new GistError('GitHub Gist response did not include an id');
+  }
+  return body.id;
+}
+
+function isAgentConfigGist(value: unknown): value is JsonRecord & { id: string } {
+  if (!isRecord(value) || typeof value.id !== 'string' || value.id.trim() === '') {
+    return false;
+  }
+
+  if (isRecord(value.files) && isRecord(value.files[GIST_AGENTCFG_FILE])) {
+    return true;
+  }
+
+  return typeof value.description === 'string' && value.description.toLowerCase().includes('agentcfg');
+}
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatTransportError(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message;
+  }
+  return 'unknown network error';
+}
+
+async function formatGistHttpError(action: 'create' | 'fetch' | 'list' | 'update', response: GistHttpResponse): Promise<string> {
+  const status = `GitHub Gist ${action} failed with ${response.status} ${response.statusText}`;
+  const details = formatGistErrorDetails(await readGistErrorBody(response));
+  const hint = action === 'create' && response.status === 403
+    ? 'Verify the GitHub token can create Gists; classic personal access tokens need the gist scope.'
+    : undefined;
+  return [status, details, hint].filter((part): part is string => part !== undefined && part.trim() !== '').join(': ');
+}
+
+async function readGistErrorBody(response: GistHttpResponse): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function formatGistErrorDetails(body: unknown): string | undefined {
+  if (!isRecord(body)) {
+    return undefined;
+  }
+
+  const details: string[] = [];
+  if (typeof body.message === 'string' && body.message.trim() !== '') {
+    details.push(body.message.trim());
+  }
+  const validationErrors = formatGistValidationErrors(body.errors);
+  if (validationErrors !== undefined) {
+    details.push(validationErrors);
+  }
+  if (typeof body.documentation_url === 'string' && body.documentation_url.trim() !== '') {
+    details.push(`Docs: ${body.documentation_url.trim()}`);
+  }
+  return details.length === 0 ? undefined : details.join(' ');
+}
+
+function formatGistValidationErrors(errors: unknown): string | undefined {
+  if (!Array.isArray(errors)) {
+    return undefined;
+  }
+  const messages = errors
+    .map((error) => {
+      if (!isRecord(error)) {
+        return undefined;
+      }
+      if (typeof error.message === 'string' && error.message.trim() !== '') {
+        return error.message.trim();
+      }
+      const field = typeof error.field === 'string' ? error.field : undefined;
+      const code = typeof error.code === 'string' ? error.code : undefined;
+      return [field, code].filter((part): part is string => part !== undefined && part.trim() !== '').join(' ');
+    })
+    .filter((message): message is string => message !== undefined && message.trim() !== '');
+  return messages.length === 0 ? undefined : `Errors: ${messages.join('; ')}`;
 }
 
 function isNodeErrorWithCode(error: unknown, code: string): boolean {

@@ -1,0 +1,193 @@
+import type { AdapterName } from '../adapters';
+import type { ApplyAgentResult } from '../core/apply';
+import type { ManagedDiffField } from '../core/diff';
+import type { MaskedAgentConfig } from '../core/mask';
+import type { NativeConfigFormat } from '../core/native-io';
+import type { AgentConfigInput } from '../core/schema';
+import type { RemoteRevisionMetadata } from '../core/state';
+
+export type RuntimeApiErrorCode =
+  | 'invalid-request'
+  | 'state-error'
+  | 'gist-error'
+  | 'validation-error'
+  | 'diff-error'
+  | 'apply-error';
+
+export type RuntimeApiErrorDetails = {
+  results?: ApiApplyAgentResult[];
+};
+
+export type RuntimeRequest = {
+  statePath?: string;
+};
+
+export type RuntimeStateSummary = {
+  statePath: string;
+  schemaVersion: 1;
+  secrets: {
+    hasGitHubToken: boolean;
+  };
+  gist: {
+    present: boolean;
+    id?: string;
+  };
+  remote?: RemoteRevisionMetadata;
+  cache: {
+    present: boolean;
+    updatedAt?: string;
+    config?: MaskedAgentConfig;
+  };
+  conflict: {
+    present: boolean;
+    baseRevision?: string;
+    baseETag?: string;
+    baseConfig?: MaskedAgentConfig;
+  };
+};
+
+export type GetRuntimeStateRequest = RuntimeRequest;
+
+export type GetRuntimeStateResponse = {
+  state: RuntimeStateSummary;
+};
+
+export type InitRuntimeRequest = RuntimeRequest & {
+  gistId: string;
+};
+
+export type InitRuntimeResponse = {
+  state: RuntimeStateSummary;
+};
+
+export type PullRuntimeRequest = RuntimeRequest & {
+  githubToken?: string;
+  rememberGitHubToken?: boolean;
+};
+
+export type PullRuntimeResponse = {
+  state: RuntimeStateSummary;
+  config: MaskedAgentConfig;
+  remote?: RemoteRevisionMetadata;
+};
+
+export type RemoteConfigRuntimeRequest = RuntimeRequest & {
+  githubToken?: string;
+  rememberGitHubToken?: boolean;
+};
+
+export type ClearSavedGitHubTokenRuntimeRequest = RuntimeRequest;
+
+export type ClearSavedGitHubTokenRuntimeResponse = {
+  state: RuntimeStateSummary;
+};
+
+export type SetupRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest;
+
+export type SetupRemoteConfigRuntimeResponse = {
+  state: RuntimeStateSummary;
+  config?: MaskedAgentConfig;
+  remote?: RemoteRevisionMetadata;
+};
+
+export type LoadRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest;
+
+export type LoadRemoteConfigRuntimeResponse = {
+  state: RuntimeStateSummary;
+  config: MaskedAgentConfig;
+  remote?: RemoteRevisionMetadata;
+};
+
+export type SaveRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest & {
+  config?: AgentConfigInput;
+};
+
+export type SaveRemoteConfigRuntimeResponse = {
+  state: RuntimeStateSummary;
+  config: MaskedAgentConfig;
+  remote?: RemoteRevisionMetadata;
+};
+
+export type RuntimeTargetRequest = RuntimeRequest & {
+  agent?: AdapterName;
+  allAgents?: boolean;
+  configPath?: string;
+  fixturesRoot?: string;
+};
+
+export type ApiManagedDiffChange = {
+  field: ManagedDiffField;
+  current?: string;
+  expected?: string;
+  secret: boolean;
+};
+
+export type ApiAgentDiffResult = {
+  agent: AdapterName;
+  changes: ApiManagedDiffChange[];
+};
+
+export type DiffRuntimeRequest = RuntimeTargetRequest;
+
+export type DiffRuntimeResponse = {
+  results: ApiAgentDiffResult[];
+};
+
+export type ApiApplyAgentResult = Omit<ApplyAgentResult, 'changes'> & {
+  changes: ApiManagedDiffChange[];
+};
+
+export type ApiApplyPlanSummary = {
+  agent: AdapterName;
+  configPath: string;
+  envPath?: string;
+  changes: ApiManagedDiffChange[];
+  operationCount: number;
+  operationPaths: string[];
+  filePreviews: ApiApplyFilePreview[];
+};
+
+export type ApiApplyFilePreview = {
+  path: string;
+  kind: 'native' | 'env';
+  mode?: number;
+  currentContent?: string;
+  expectedContent: string;
+};
+
+export type PlanApplyRuntimeRequest = RuntimeTargetRequest;
+
+export type PlanApplyRuntimeResponse = {
+  plans: ApiApplyPlanSummary[];
+  results: ApiApplyAgentResult[];
+};
+
+export type ApplyRuntimeRequest = RuntimeTargetRequest & {
+  confirm?: 'APPLY' | string;
+};
+
+export type ApplyRuntimeResponse = {
+  results: ApiApplyAgentResult[];
+};
+
+export type ConfigFileRuntimeRequest = RuntimeRequest & {
+  agent?: string;
+  configPath?: string;
+  fixturesRoot?: string;
+};
+
+export type ConfigFileRuntimeResponse = {
+  agent: AdapterName;
+  path: string;
+  format: NativeConfigFormat;
+  content: string;
+  updatedAt?: string;
+};
+
+export type SaveConfigFileRuntimeRequest = ConfigFileRuntimeRequest & {
+  content?: string;
+};
+
+export type SaveConfigFileRuntimeResponse = ConfigFileRuntimeResponse & {
+  backupPath?: string;
+};

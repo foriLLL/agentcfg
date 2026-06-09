@@ -1,4 +1,4 @@
-export const CLI_COMMANDS = ['init', 'pull', 'diff', 'apply'] as const;
+export const CLI_COMMANDS = ['init', 'pull', 'diff', 'apply', 'web'] as const;
 
 export type CliCommand = (typeof CLI_COMMANDS)[number];
 
@@ -11,4 +11,5 @@ export * from './mask';
 export * from './gist';
 export * from './native-io';
 export * from './schema';
+export * from './secrets';
 export * from './state';

@@ -64,6 +64,10 @@ export function isAdapterName(value: string): value is AdapterName {
   return (ADAPTER_NAMES as readonly string[]).includes(value);
 }
 
+export async function resolveAdapterConfigPath(name: AdapterName, options: AdapterDiffOptions = {}): Promise<string> {
+  return (await resolveNativePath(getAdapter(name), options)).configPath;
+}
+
 async function diffCodex(config: CanonicalAgentConfig, options: AdapterDiffOptions = {}): Promise<AgentDiffResult> {
   const paths = await resolveNativePath(adapters.codex, options);
   const currentText = await readNativeText(paths.configPath, 'codex');

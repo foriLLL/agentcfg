@@ -12,6 +12,7 @@ const REQUIRED_HEADINGS = [
   'MVP scope',
   'Canonical schema',
   'Gist auth and state',
+  'Web UI',
   'Setup',
   'Commands',
   'Adapter behavior',
@@ -27,13 +28,24 @@ const REQUIRED_COMMANDS = [
   'agentcfg diff',
   'agentcfg apply --dry-run',
   'agentcfg apply --yes',
+  'agentcfg web',
+  '--host <host>',
+  '--port <port>',
   '--state',
+  '--no-open',
   '--config-path',
   '--agent',
   '--all-agents',
   '--fixtures-root',
+  'dev:web',
+  'build:web',
+  'preview:web',
+  'test:api',
+  'test:server',
+  'test:gui',
   'npm install',
   'npm run build',
+  'npm run build:web',
   'npm test',
   'npm run test:docker:opencode',
   'SKIP: Docker/OpenCode validation unavailable',
@@ -57,6 +69,15 @@ test('readme documents the required agentcfg MVP sections', () => {
   assert.ok(readme.includes('Encryption is deferred to a later release.'));
   assert.ok(readme.includes('private Gist is not a hard security boundary'));
   assert.ok(readme.includes('examples/agentcfg.yaml'));
+  assert.ok(readme.includes('The Web UI still respects the same security warning as the CLI.'));
+  assert.ok(readme.includes('stores it as local plain text in `secrets.json`'));
+  assert.ok(readme.includes('they never return the saved token value'));
+  assert.ok(readme.includes("Use the Web UI's clear-token control to delete it."));
+  assert.ok(readme.includes('Remember GitHub Token'));
+  assert.ok(readme.includes('type `APPLY` before the UI sends a write request.'));
+  assert.ok(readme.includes('inspect the raw native config file before editing or applying changes.'));
+  assert.ok(readme.includes("including each planned file's current content and post-apply content."));
+  assert.ok(readme.includes('The raw config editor and dry-run file previews intentionally show file contents as they exist or will be written, so they may include API keys.'));
 });
 
 test('example config parses and masks the fake API key', () => {

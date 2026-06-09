@@ -54,6 +54,65 @@ Run `agentcfg init --gist <gist-id>` first so the CLI knows which Gist to read.
 
 By default, local state lives at `~/.agentcfg/state.json`. Use `--state <path>` if you want a different file.
 
+The Web UI can optionally remember the GitHub Token for Gist operations. When enabled, agentcfg stores it as local plain text in `secrets.json` next to the selected state file, normally `~/.agentcfg/secrets.json`, with restrictive file permissions. Runtime API responses only report whether a token is saved; they never return the saved token value. Use the Web UI's clear-token control to delete it.
+
+## Web UI
+
+agentcfg includes a local Web UI for init, pull, diff review, dry-run planning, and confirmed apply flows.
+
+The UI shows the current state, cached config, and remote Gist metadata, then keeps the secret hidden while surfacing the managed fields that matter.
+
+The apply screen uses strong confirmation. You must run a dry-run first, pick the target agents, and type `APPLY` before the UI sends a write request.
+
+The Web UI still respects the same security warning as the CLI. The private Gist stores provider and agent API keys in plain text, so don’t treat it as a secret vault.
+
+If you choose to remember the GitHub Token, the UI writes that token to local plain text `secrets.json`. This is intended for trusted local machines only.
+
+### Run locally
+
+From the `agentcfg/` directory:
+
+```sh
+PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" npm run build:web
+PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" npm run build
+PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" agentcfg web
+```
+
+`agentcfg web` starts the local server, serves the built UI, and opens a browser unless you pass `--no-open` or run in an environment that suppresses auto-open.
+
+Use these options when you need a different bind or state file:
+
+- `--host <host>` binds the server to a different host, default `127.0.0.1`.
+- `--port <port>` binds a different port, default `8787`, and `0` asks for an ephemeral port.
+- `--state <path>` points the UI and API at a different state file.
+- `--no-open` stops browser auto-open.
+
+### Web scripts
+
+- `dev:web` starts the Vite dev server for the Web UI.
+- `build:web` typechecks and bundles the Web UI.
+- `preview:web` previews the built Web UI.
+
+### Test lanes
+
+- `test:api` covers the runtime API contract.
+- `test:server` covers the local HTTP server.
+- `test:gui` covers the full browser flow with system Chrome and CDP.
+- `npm test` runs the full suite, including the Web UI lanes.
+
+### GUI flow
+
+- `Init` stores the Gist ID in local state.
+- `Remember GitHub Token` stores the GitHub Token locally in plain text and exposes only a saved/not-saved status in the UI.
+- `Pull` fetches `agentcfg.yaml` and refreshes the cache.
+- The dashboard shows state, cache, and remote metadata.
+- `Config file` lets you choose Codex, OpenCode, or OpenClaw and inspect the raw native config file before editing or applying changes.
+- `Diff` shows masked managed-field changes for one agent or all agents.
+- `Dry-run` shows the plan without writing files, including each planned file's current content and post-apply content.
+- `Apply` requires typed `APPLY`, validates again, writes backups, and shows the backup paths and result summary.
+
+Diff/apply summaries keep API keys masked. The remote form preview also avoids showing typed API keys. The raw config editor and dry-run file previews intentionally show file contents as they exist or will be written, so they may include API keys.
+
 ## Setup
 
 From the `agentcfg/` directory:
@@ -108,6 +167,12 @@ Use the same target selector and path flags as `diff`.
 
 `apply` creates backups before writes, writes atomically, and asks for confirmation unless `--yes` is set.
 
+### `agentcfg web`
+
+Starts the local Web UI on `127.0.0.1:8787` by default.
+
+Use `--host`, `--port`, `--state`, and `--no-open` to match your local setup.
+
 ## Adapter behavior
 
 ### Codex
@@ -161,7 +226,7 @@ That skip is acceptable for local development.
 MVP does not include:
 
 - encryption
-- desktop or web UI
+- desktop packaging or an Electron wrapper
 - per-device profiles
 - daemon, watch, or background sync
 - automatic model discovery

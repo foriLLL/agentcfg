@@ -4,6 +4,7 @@ import { runApplyCommand } from './commands/apply';
 import { runDiffCommand } from './commands/diff';
 import { runInitCommand } from './commands/init';
 import { runPullCommand } from './commands/pull';
+import { buildWebHelpText, runWebCommand } from './commands/web';
 
 const VERSION = '0.0.0';
 
@@ -30,12 +31,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 0;
   }
 
-  if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
+  if (argv.length === 0 || ((argv[0] !== 'web' || argv.length === 1) && (argv.includes('--help') || argv.includes('-h')))) {
     console.log(buildHelpText());
     return 0;
   }
 
   const [command, ...commandArgs] = argv;
+
+  if (command === 'web' && (commandArgs.includes('--help') || commandArgs.includes('-h'))) {
+    console.log(buildWebHelpText());
+    return 0;
+  }
 
   try {
     if (command === 'init') {
@@ -63,6 +69,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
     if (command === 'apply') {
       console.log(await runApplyCommand(parseApplyArgs(commandArgs)));
+      return 0;
+    }
+
+    if (command === 'web') {
+      await runWebCommand(parseWebArgs(commandArgs));
       return 0;
     }
 
@@ -100,6 +111,13 @@ type ParsedDiffArgs = {
 type ParsedApplyArgs = ParsedDiffArgs & {
   dryRun?: boolean;
   yes?: boolean;
+};
+
+type ParsedWebArgs = {
+  port?: number;
+  host?: string;
+  open?: boolean;
+  statePath?: string;
 };
 
 function parseInitArgs(args: string[]): ParsedInitArgs {
@@ -228,6 +246,48 @@ function parseApplyArgs(args: string[]): ParsedApplyArgs {
   }
 
   return parsed;
+}
+
+function parseWebArgs(args: string[]): ParsedWebArgs {
+  const parsed: ParsedWebArgs = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--port') {
+      parsed.port = parsePort(readOptionValue(args, index, '--port'));
+      index += 1;
+      continue;
+    }
+    if (arg === '--host') {
+      const host = readOptionValue(args, index, '--host').trim();
+      if (host === '') {
+        throw new Error('--host requires a non-empty value');
+      }
+      parsed.host = host;
+      index += 1;
+      continue;
+    }
+    if (arg === '--state') {
+      parsed.statePath = readOptionValue(args, index, '--state');
+      index += 1;
+      continue;
+    }
+    if (arg === '--no-open') {
+      parsed.open = false;
+      continue;
+    }
+    throw new Error(`Unknown web option: ${arg}`);
+  }
+
+  return parsed;
+}
+
+function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error('--port must be an integer from 0 to 65535');
+  }
+  return port;
 }
 
 function readOptionValue(args: string[], index: number, option: string): string {

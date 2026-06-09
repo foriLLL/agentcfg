@@ -8,7 +8,18 @@ test('cli help prints the planned commands', () => {
     encoding: 'utf8',
   });
 
-  for (const command of ['init', 'pull', 'diff', 'apply']) {
+  for (const command of ['init', 'pull', 'diff', 'apply', 'web']) {
     assert.ok(output.includes(command));
+  }
+});
+
+
+test('cli web help prints web options', () => {
+  const output = execFileSync(process.execPath, [resolve(process.cwd(), 'dist/cli.js'), 'web', '--help'], {
+    encoding: 'utf8',
+  });
+
+  for (const option of ['--port', '--host', '--no-open', '--state']) {
+    assert.ok(output.includes(option));
   }
 });
