@@ -66,7 +66,7 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(pull.stdout, /Pulled agentcfg\.yaml from Gist e2e-gist-id/);
     assert.match(pull.stdout, /\*\*\*MASKED\*\*\*/);
     assertNoSecretOutput(pull);
-    assert.deepEqual(server.requests, [{ url: '/e2e-gist-id', authorization: undefined }]);
+    assert.deepEqual(server.requests.map(({ url, authorization }) => ({ url, authorization })), [{ url: '/e2e-gist-id', authorization: undefined }]);
     await assertCachedState(statePath);
 
     const diff = await runCli(['diff', '--all-agents', '--state', statePath, '--fixtures-root', fixturesRoot], {
@@ -248,7 +248,7 @@ test('E2E second pull updates remote metadata without mutating native fixtures',
     assert.match(secondPull.stdout, /Pulled agentcfg\.yaml from Gist second-pull-gist/);
     assertNoSecretOutput(secondPull);
 
-    assert.deepEqual(server.requests, [
+    assert.deepEqual(server.requests.map(({ url, authorization }) => ({ url, authorization })), [
       { url: '/second-pull-gist', authorization: undefined },
       { url: '/second-pull-gist', authorization: undefined },
     ]);
