@@ -77,12 +77,14 @@ test('runtime state init and pull responses show provider API keys', async () =>
     assert.equal(pulled.state.conflict.baseConfig?.apiKey.value, CACHED_SECRET);
     assert.equal(pulled.remote?.revision, 'api-revision');
     assert.equal(responseJson.includes(CACHED_SECRET), true);
+    assert.equal(responseJson.includes('github-token-for-test'), false);
     assert.deepEqual(server.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
       { url: '/api-gist-id', method: 'GET', authorization: 'Bearer github-token-for-test' },
     ]);
 
     const storedState = await readFile(statePath, 'utf8');
     assert.equal(storedState.includes(CACHED_SECRET), true);
+    assert.equal(storedState.includes('github-token-for-test'), false);
   } finally {
     await server.close();
     await rm(directory, { force: true, recursive: true });
@@ -115,6 +117,7 @@ test('remote setup discovers an agentcfg gist with request token and stores only
     assert.equal(setup.config?.apiKey.value, CACHED_SECRET);
     assert.equal(setup.remote?.revision, 'setup-revision');
     assert.equal(responseJson.includes(CACHED_SECRET), true);
+    assert.equal(responseJson.includes('request-token'), false);
     assert.equal(storedState.includes('request-token'), false);
     assert.equal(JSON.parse(storedState).gist.id, 'remote-gist-id');
     assert.equal('token' in JSON.parse(storedState), false);
@@ -207,7 +210,9 @@ test('remote save creates gist, returns provider API key, and updates existing g
     assert.equal(created.state.gist.id, 'created-gist-id');
     assert.equal(created.config.apiKey.value, 'new-remote-secret');
     assert.equal(JSON.stringify(created).includes('new-remote-secret'), true);
+    assert.equal(JSON.stringify(created).includes('save-token'), false);
 
+    // Blank provider keys preserve the existing remote API key instead of erasing it.
     const updated = await saveRemoteConfigRuntime(
       { statePath, githubToken: 'save-token', config: blankSecretConfig },
       { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
@@ -219,6 +224,7 @@ test('remote save creates gist, returns provider API key, and updates existing g
     assert.equal(updated.state.gist.id, 'created-gist-id');
     assert.equal(updated.config.apiKey.value, 'new-remote-secret');
     assert.equal(JSON.stringify(updated).includes('new-remote-secret'), true);
+    assert.equal(JSON.stringify(updated).includes('save-token'), false);
     assert.equal(storedState.includes('save-token'), false);
     assert.equal(createBody.public, false);
     assert.equal(createBody.description, 'agentcfg remote config');

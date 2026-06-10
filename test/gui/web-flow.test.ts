@@ -188,7 +188,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
       const stateAfterSave = await readFile(statePath, 'utf8');
-      assert.equal(stateAfterSave.includes(GITHUB_TOKEN), false);
+      assert.equal(stateAfterSave.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after remote save/load');
       assert.equal(JSON.parse(stateAfterSave).gist.id, 'gui-gist-id');
 
       await cdp.clickButton('拉取远端');
@@ -213,6 +213,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const stateApi = await requestText(webServer.url, `/api/state?statePath=${encodeURIComponent(statePath)}`);
       assert.equal(stateApi.includes(CACHED_SECRET), true, 'state API response did not include provider API key');
       assertNoGitHubToken(stateApi, 'state API response');
+      const stateAfterTokenClear = await readFile(statePath, 'utf8');
+      assert.equal(stateAfterTokenClear.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after token clear');
 
       await cdp.clickButton('配置文件');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
@@ -253,6 +255,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const planApi = await postJsonText(webServer.url, '/api/apply/plan', { statePath, agent: 'opencode', configPath: nativePath });
       assert.equal(planApi.includes('gui-editor-secret'), true, 'dry-run API response did not include current config content');
       assert.equal(planApi.includes(CACHED_SECRET), true, 'dry-run API response did not include expected config content');
+      assertNoGitHubToken(planApi, 'dry-run API response');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
       await cdp.clickButton('配置文件');

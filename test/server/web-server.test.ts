@@ -167,6 +167,7 @@ test('web server remote config endpoints use body token, show provider API keys,
     assert.equal(setup.status, 200);
     assert.equal(setup.body.ok, true);
     assert.equal(JSON.stringify(setup.body).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(setup.body).includes('server-token'), false);
     if (setup.body.ok !== true) throw new Error('Expected remote setup success');
     assert.equal(setup.body.data.state.gist.id, 'server-remote-gist');
     assert.equal(setup.body.data.config.apiKey.value, CACHED_SECRET);
@@ -175,6 +176,7 @@ test('web server remote config endpoints use body token, show provider API keys,
     assert.equal(load.status, 200);
     assert.equal(load.body.ok, true);
     assert.equal(JSON.stringify(load.body).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(load.body).includes('server-token'), false);
 
     const save = await requestJson(server.url, '/api/remote/save', {
       githubToken: 'server-token',
@@ -192,6 +194,7 @@ test('web server remote config endpoints use body token, show provider API keys,
     assert.equal(save.status, 200);
     assert.equal(save.body.ok, true);
     assert.equal(JSON.stringify(save.body).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(save.body).includes('server-token'), false);
     assert.equal(storedState.includes('server-token'), false);
     assert.equal(JSON.parse(storedState).gist.id, 'server-remote-gist');
     assert.equal(patchBody.files['agentcfg.yaml'].content.includes(CACHED_SECRET), true);
