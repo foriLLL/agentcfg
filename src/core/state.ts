@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { atomicWriteFile } from './atomic-write';
+import { isNodeErrorWithCode } from './node-errors';
 import { validateAgentConfig, type AgentConfigInput, type CanonicalAgentConfig } from './schema';
 
 export const STATE_SCHEMA_VERSION = 1;
@@ -282,13 +283,4 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

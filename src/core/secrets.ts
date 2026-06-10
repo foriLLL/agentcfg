@@ -1,6 +1,7 @@
 import { readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { atomicWriteFile } from './atomic-write';
+import { isNodeErrorWithCode } from './node-errors';
 import { resolveStatePath } from './state';
 
 export type AgentCfgSecrets = {
@@ -54,8 +55,4 @@ export async function clearSavedGitHubToken(statePath?: string): Promise<void> {
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === code;
 }

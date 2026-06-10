@@ -20,6 +20,7 @@ import {
   STATE_SCHEMA_VERSION,
   storeGistIdentity,
   clearSavedGitHubToken,
+  isNodeErrorWithCode,
   updatePulledConfig,
   updateGistAgentConfig,
   validateAgentConfig,
@@ -573,8 +574,4 @@ function toRuntimeApiError(error: unknown): RuntimeApiError {
 
 function isAgentConfigValidationError(error: unknown): error is AgentConfigValidationError {
   return error instanceof Error && error.name === 'AgentConfigValidationError';
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === code;
 }

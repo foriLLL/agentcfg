@@ -7,6 +7,7 @@ import { renderOpenClawConfigObject } from '../adapters/openclaw';
 import { renderOpenCodeConfigObject } from '../adapters/opencode';
 import { atomicWriteFile, type AtomicWriteFileOptions, type AtomicWriteFileResult } from './atomic-write';
 import { diffManagedSnapshots, type ManagedDiffChange, type ManagedDiffSnapshot } from './diff';
+import { isNodeErrorWithCode } from './node-errors';
 import {
   detectNativeConfigFormat,
   parseNativeConfig,
@@ -468,15 +469,6 @@ async function preflightWriteTarget(path: string): Promise<void> {
     }
     throw error;
   }
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }
 
 function formatError(error: unknown): string {

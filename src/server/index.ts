@@ -31,7 +31,7 @@ import {
   type SaveRemoteConfigRuntimeResponse,
   type SetupRemoteConfigRuntimeResponse,
 } from '../api';
-import { readLastUsedStatePath, rememberLastUsedStatePath, resolveStatePath } from '../core';
+import { isNodeErrorWithCode, readLastUsedStatePath, rememberLastUsedStatePath, resolveStatePath } from '../core';
 
 export type JsonSuccess<T> = {
   ok: true;
@@ -522,10 +522,6 @@ function closeServer(server: Server): Promise<void> {
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === code;
 }
 
 class InvalidJsonError extends Error {

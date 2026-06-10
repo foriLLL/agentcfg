@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { request as requestHttp } from 'node:http';
 import { request as requestHttps } from 'node:https';
 import { promisify } from 'node:util';
+import { isNodeErrorWithCode } from './node-errors';
 
 export const GIST_AGENTCFG_FILE = 'agentcfg.yaml';
 export const DEFAULT_GIST_API_BASE_URL = 'https://api.github.com/gists';
@@ -410,13 +411,4 @@ function formatGistValidationErrors(errors: unknown): string | undefined {
     })
     .filter((message): message is string => message !== undefined && message.trim() !== '');
   return messages.length === 0 ? undefined : `Errors: ${messages.join('; ')}`;
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

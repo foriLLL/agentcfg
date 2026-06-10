@@ -1,6 +1,7 @@
 import { access, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { createTimestampedBackup, type BackupOptions, type BackupResult } from './backup';
+import { isNodeErrorWithCode } from './node-errors';
 
 export type AtomicWriteFileOptions = BackupOptions & {
   mode?: number;
@@ -80,13 +81,4 @@ async function fileExists(path: string): Promise<boolean> {
     }
     throw error;
   }
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

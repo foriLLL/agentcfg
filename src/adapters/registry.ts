@@ -5,6 +5,7 @@ import {
   DiffError,
   diffManagedSnapshots,
   parseNativeConfig,
+  isNodeErrorWithCode,
   type AgentDiffResult,
   type CanonicalAgentConfig,
   type ManagedDiffSnapshot,
@@ -292,13 +293,4 @@ function isNativeObject(value: NativeConfigValue | undefined): value is NativeCo
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
-  );
 }
