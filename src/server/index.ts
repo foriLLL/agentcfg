@@ -67,6 +67,8 @@ export type AgentCfgWebServer = {
 
 type JsonRecord = Record<string, unknown>;
 
+type RuntimeDispatchOptions = Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>;
+
 type ApiHandlerResult =
   | GetRuntimeStateResponse
   | InitRuntimeResponse
@@ -152,7 +154,7 @@ async function handleApiRequest(
   request: IncomingMessage,
   response: ServerResponse,
   requestUrl: URL,
-  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+  options: RuntimeDispatchOptions,
 ): Promise<void> {
   try {
     const data = await dispatchApiRequest(request, requestUrl, options);
@@ -197,7 +199,7 @@ async function handleApiRequest(
 async function dispatchApiRequest(
   request: IncomingMessage,
   requestUrl: URL,
-  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+  options: RuntimeDispatchOptions,
 ): Promise<ApiHandlerResult> {
   if (requestUrl.pathname === '/api/state') {
     assertMethod(request, ['GET']);
@@ -207,76 +209,47 @@ async function dispatchApiRequest(
 
   if (requestUrl.pathname === '/api/init') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return initRuntime(await withDefaultStatePath(body, options) as { gistId: string; statePath?: string });
+    return initRuntime((await readRuntimeRequest(request, options)) as { gistId: string; statePath?: string });
   }
 
   if (requestUrl.pathname === '/api/pull') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return pullRuntime(await withDefaultStatePath(body, options), {
-      gistOptions: {
-        apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
-        env: options.env,
-      },
-    });
+    return pullRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/remote/setup') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return setupRemoteConfigRuntime(await withDefaultStatePath(body, options), {
-      gistOptions: {
-        apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
-        env: options.env,
-      },
-    });
+    return setupRemoteConfigRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/remote/load') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return loadRemoteConfigRuntime(await withDefaultStatePath(body, options), {
-      gistOptions: {
-        apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
-        env: options.env,
-      },
-    });
+    return loadRemoteConfigRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/remote/save') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return saveRemoteConfigRuntime(await withDefaultStatePath(body, options), {
-      gistOptions: {
-        apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
-        env: options.env,
-      },
-    });
+    return saveRemoteConfigRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/github-token/clear') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return clearSavedGitHubTokenRuntime(await withDefaultStatePath(body, options));
+    return clearSavedGitHubTokenRuntime(await readRuntimeRequest(request, options));
   }
 
   if (requestUrl.pathname === '/api/diff') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return diffRuntime(await withDefaultStatePath(body, options));
+    return diffRuntime(await readRuntimeRequest(request, options));
   }
 
   if (requestUrl.pathname === '/api/apply/plan') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return planApplyRuntime(await withDefaultStatePath(body, options));
+    return planApplyRuntime(await readRuntimeRequest(request, options));
   }
 
   if (requestUrl.pathname === '/api/apply') {
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return applyRuntime(await withDefaultStatePath(body, options));
+    return applyRuntime(await readRuntimeRequest(request, options));
   }
 
   if (requestUrl.pathname === '/api/config/file') {
@@ -291,11 +264,23 @@ async function dispatchApiRequest(
       });
     }
     assertMethod(request, ['POST']);
-    const body = await readJsonObject(request);
-    return saveConfigFileRuntime(await withDefaultStatePath(body, options));
+    return saveConfigFileRuntime(await readRuntimeRequest(request, options));
   }
 
   throw new NotFoundError(`No API endpoint found for ${requestUrl.pathname}`);
+}
+
+async function readRuntimeRequest(request: IncomingMessage, options: RuntimeDispatchOptions): Promise<JsonRecord & RuntimeRequest> {
+  return withDefaultStatePath(await readJsonObject(request), options);
+}
+
+function gistRuntimeOptions(options: RuntimeDispatchOptions): { gistOptions: { apiBaseUrl: string | undefined; env: NodeJS.ProcessEnv } } {
+  return {
+    gistOptions: {
+      apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
+      env: options.env,
+    },
+  };
 }
 
 function stringOrUndefined(value: string | null): string | undefined {
@@ -304,7 +289,7 @@ function stringOrUndefined(value: string | null): string | undefined {
 
 async function withDefaultStatePath<T extends JsonRecord>(
   body: T,
-  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+  options: RuntimeDispatchOptions,
 ): Promise<T & RuntimeRequest> {
   if (typeof body.statePath === 'string') {
     return body as T & RuntimeRequest;
@@ -319,7 +304,7 @@ async function withDefaultStatePath<T extends JsonRecord>(
 
 async function resolveDefaultStatePath(
   requestStatePath: string | undefined,
-  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+  options: RuntimeDispatchOptions,
 ): Promise<string | undefined> {
   if (requestStatePath !== undefined) {
     return requestStatePath;
@@ -332,11 +317,12 @@ async function resolveDefaultStatePath(
 
 async function rememberRuntimeStatePath(
   data: ApiHandlerResult,
-  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+  options: RuntimeDispatchOptions,
 ): Promise<void> {
   if (!('state' in data) || data.state.statePath === resolveStatePath()) {
     return;
   }
+  // Test and embedded servers pin explicit state files; do not promote them into the user's last-state marker.
   if (options.statePath !== undefined && data.state.statePath === resolveStatePath(options.statePath)) {
     return;
   }
