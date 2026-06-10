@@ -44,6 +44,7 @@ import {
   formatStatus,
   statusLabel,
   statusTone,
+  type Step,
 } from './view-model';
 
 type Notice = {
