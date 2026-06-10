@@ -1,9 +1,8 @@
 import type { AdapterName } from '../adapters';
 import type { ApplyAgentResult } from '../core/apply';
 import type { ManagedDiffField } from '../core/diff';
-import type { MaskedAgentConfig } from '../core/mask';
 import type { NativeConfigFormat } from '../core/native-io';
-import type { AgentConfigInput } from '../core/schema';
+import type { AgentConfigInput, CanonicalAgentConfig } from '../core/schema';
 import type { RemoteRevisionMetadata } from '../core/state';
 
 export type RuntimeApiErrorCode =
@@ -36,13 +35,13 @@ export type RuntimeStateSummary = {
   cache: {
     present: boolean;
     updatedAt?: string;
-    config?: MaskedAgentConfig;
+    config?: CanonicalAgentConfig;
   };
   conflict: {
     present: boolean;
     baseRevision?: string;
     baseETag?: string;
-    baseConfig?: MaskedAgentConfig;
+    baseConfig?: CanonicalAgentConfig;
   };
 };
 
@@ -67,7 +66,7 @@ export type PullRuntimeRequest = RuntimeRequest & {
 
 export type PullRuntimeResponse = {
   state: RuntimeStateSummary;
-  config: MaskedAgentConfig;
+  config: CanonicalAgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 
@@ -86,7 +85,7 @@ export type SetupRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest;
 
 export type SetupRemoteConfigRuntimeResponse = {
   state: RuntimeStateSummary;
-  config?: MaskedAgentConfig;
+  config?: CanonicalAgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 
@@ -94,7 +93,7 @@ export type LoadRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest;
 
 export type LoadRemoteConfigRuntimeResponse = {
   state: RuntimeStateSummary;
-  config: MaskedAgentConfig;
+  config: CanonicalAgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 
@@ -104,7 +103,7 @@ export type SaveRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest & {
 
 export type SaveRemoteConfigRuntimeResponse = {
   state: RuntimeStateSummary;
-  config: MaskedAgentConfig;
+  config: CanonicalAgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 

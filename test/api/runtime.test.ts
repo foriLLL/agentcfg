@@ -18,7 +18,6 @@ import {
   saveRemoteConfigRuntime,
   setupRemoteConfigRuntime,
 } from '../../src/api';
-import { MASKED_SECRET } from '../../src/core';
 import { buildGistBody, startFakeGistServer } from '../helpers/fake-gist';
 
 const CACHED_SECRET = ['sk', 'api', 'cached'].join('-');
@@ -45,7 +44,7 @@ const VALID_AGENTCFG_YAML = [
   '',
 ].join('\n');
 
-test('runtime state init and pull responses mask cached config secrets', async () => {
+test('runtime state init and pull responses show provider API keys', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-pull-'));
   const statePath = join(directory, 'state.json');
   const server = await startFakeGistServer({
@@ -73,11 +72,11 @@ test('runtime state init and pull responses mask cached config secrets', async (
     );
     const responseJson = JSON.stringify(pulled);
 
-    assert.equal(pulled.config.apiKey.value, MASKED_SECRET);
-    assert.equal(pulled.state.cache.config?.apiKey.value, MASKED_SECRET);
-    assert.equal(pulled.state.conflict.baseConfig?.apiKey.value, MASKED_SECRET);
+    assert.equal(pulled.config.apiKey.value, CACHED_SECRET);
+    assert.equal(pulled.state.cache.config?.apiKey.value, CACHED_SECRET);
+    assert.equal(pulled.state.conflict.baseConfig?.apiKey.value, CACHED_SECRET);
     assert.equal(pulled.remote?.revision, 'api-revision');
-    assert.equal(responseJson.includes(CACHED_SECRET), false);
+    assert.equal(responseJson.includes(CACHED_SECRET), true);
     assert.deepEqual(server.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
       { url: '/api-gist-id', method: 'GET', authorization: 'Bearer github-token-for-test' },
     ]);
@@ -113,9 +112,9 @@ test('remote setup discovers an agentcfg gist with request token and stores only
     const storedState = await readFile(statePath, 'utf8');
 
     assert.equal(setup.state.gist.id, 'remote-gist-id');
-    assert.equal(setup.config?.apiKey.value, MASKED_SECRET);
+    assert.equal(setup.config?.apiKey.value, CACHED_SECRET);
     assert.equal(setup.remote?.revision, 'setup-revision');
-    assert.equal(responseJson.includes(CACHED_SECRET), false);
+    assert.equal(responseJson.includes(CACHED_SECRET), true);
     assert.equal(storedState.includes('request-token'), false);
     assert.equal(JSON.parse(storedState).gist.id, 'remote-gist-id');
     assert.equal('token' in JSON.parse(storedState), false);
@@ -183,7 +182,7 @@ test('remote operations can remember, reuse, and clear a local GitHub token with
   }
 });
 
-test('remote save creates gist, masks response, and updates existing gist while preserving blank api key', async () => {
+test('remote save creates gist, returns provider API key, and updates existing gist while preserving blank api key', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-remote-save-'));
   const statePath = join(directory, 'state.json');
   const editedConfig = {
@@ -206,8 +205,8 @@ test('remote save creates gist, masks response, and updates existing gist while 
       { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
     );
     assert.equal(created.state.gist.id, 'created-gist-id');
-    assert.equal(created.config.apiKey.value, MASKED_SECRET);
-    assert.equal(JSON.stringify(created).includes('new-remote-secret'), false);
+    assert.equal(created.config.apiKey.value, 'new-remote-secret');
+    assert.equal(JSON.stringify(created).includes('new-remote-secret'), true);
 
     const updated = await saveRemoteConfigRuntime(
       { statePath, githubToken: 'save-token', config: blankSecretConfig },
@@ -218,8 +217,8 @@ test('remote save creates gist, masks response, and updates existing gist while 
     const patchBody = JSON.parse(server.requests[2]?.body ?? '{}');
 
     assert.equal(updated.state.gist.id, 'created-gist-id');
-    assert.equal(updated.config.apiKey.value, MASKED_SECRET);
-    assert.equal(JSON.stringify(updated).includes('new-remote-secret'), false);
+    assert.equal(updated.config.apiKey.value, 'new-remote-secret');
+    assert.equal(JSON.stringify(updated).includes('new-remote-secret'), true);
     assert.equal(storedState.includes('save-token'), false);
     assert.equal(createBody.public, false);
     assert.equal(createBody.description, 'agentcfg remote config');
@@ -297,7 +296,7 @@ test('remote save surfaces GitHub 403 create details without leaking token', asy
   }
 });
 
-test('runtime diff and apply payloads mask secret changes and require explicit confirmation', async () => {
+test('runtime diff and apply payloads show provider API keys and require explicit confirmation', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-apply-'));
   const statePath = join(directory, 'state.json');
   const nativePath = join(directory, 'opencode.jsonc');
@@ -310,12 +309,12 @@ test('runtime diff and apply payloads mask secret changes and require explicit c
     const apiKeyDiff = diff.results[0]?.changes.find((change) => change.field === 'apiKey');
     assert.deepEqual(apiKeyDiff, {
       field: 'apiKey',
-      current: MASKED_SECRET,
-      expected: MASKED_SECRET,
+      current: NATIVE_SECRET,
+      expected: CACHED_SECRET,
       secret: true,
     });
-    assert.equal(JSON.stringify(diff).includes(CACHED_SECRET), false);
-    assert.equal(JSON.stringify(diff).includes(NATIVE_SECRET), false);
+    assert.equal(JSON.stringify(diff).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(diff).includes(NATIVE_SECRET), true);
 
     const plan = await planApplyRuntime({ statePath, agent: 'opencode', configPath: nativePath });
     assert.equal(plan.results[0]?.status, 'would-change');
@@ -325,8 +324,8 @@ test('runtime diff and apply payloads mask secret changes and require explicit c
     assert.equal(plan.plans[0]?.filePreviews[0]?.kind, 'native');
     assert.equal(plan.plans[0]?.filePreviews[0]?.currentContent?.includes(NATIVE_SECRET), true);
     assert.equal(plan.plans[0]?.filePreviews[0]?.expectedContent.includes(CACHED_SECRET), true);
-    assert.equal(JSON.stringify(plan.results).includes(CACHED_SECRET), false);
-    assert.equal(JSON.stringify(plan.results).includes(NATIVE_SECRET), false);
+    assert.equal(JSON.stringify(plan.results).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(plan.results).includes(NATIVE_SECRET), true);
 
     await assert.rejects(
       applyRuntime({ statePath, agent: 'opencode', configPath: nativePath, confirm: 'yes' }),
@@ -336,8 +335,8 @@ test('runtime diff and apply payloads mask secret changes and require explicit c
 
     const applied = await applyRuntime({ statePath, agent: 'opencode', configPath: nativePath, confirm: 'APPLY' });
     assert.equal(applied.results[0]?.status, 'applied');
-    assert.equal(JSON.stringify(applied).includes(CACHED_SECRET), false);
-    assert.equal(JSON.stringify(applied).includes(NATIVE_SECRET), false);
+    assert.equal(JSON.stringify(applied).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(applied).includes(NATIVE_SECRET), true);
     assert.equal((await readFile(nativePath, 'utf8')).includes(CACHED_SECRET), true);
   } finally {
     await rm(directory, { force: true, recursive: true });

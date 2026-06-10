@@ -1,11 +1,11 @@
-export type MaskedAgentConfig = {
+export type AgentConfig = {
   schemaVersion: 1;
   provider: string;
   model: string;
   baseURL: string;
-  apiKey?: {
+  apiKey: {
     type: 'plain';
-    value?: string;
+    value: string;
   };
 };
 
@@ -40,13 +40,13 @@ export type RuntimeStateSummary = {
   cache: {
     present: boolean;
     updatedAt?: string;
-    config?: MaskedAgentConfig;
+    config?: AgentConfig;
   };
   conflict: {
     present: boolean;
     baseRevision?: string;
     baseETag?: string;
-    baseConfig?: MaskedAgentConfig;
+    baseConfig?: AgentConfig;
   };
 };
 
@@ -149,12 +149,12 @@ type RuntimeStateResponse = {
 };
 
 type PullRuntimeResponse = RuntimeStateResponse & {
-  config: MaskedAgentConfig;
+  config: AgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 
 type RemoteConfigRuntimeResponse = RuntimeStateResponse & {
-  config?: MaskedAgentConfig;
+  config?: AgentConfig;
   remote?: RemoteRevisionMetadata;
 };
 
@@ -204,15 +204,15 @@ export async function setupRemoteConfigRuntime(request: GitHubTokenRuntimeReques
   });
 }
 
-export async function loadRemoteConfigRuntime(request: GitHubTokenRuntimeRequest): Promise<RemoteConfigRuntimeResponse & { config: MaskedAgentConfig }> {
-  return requestJson<RemoteConfigRuntimeResponse & { config: MaskedAgentConfig }>('/api/remote/load', {
+export async function loadRemoteConfigRuntime(request: GitHubTokenRuntimeRequest): Promise<RemoteConfigRuntimeResponse & { config: AgentConfig }> {
+  return requestJson<RemoteConfigRuntimeResponse & { config: AgentConfig }>('/api/remote/load', {
     method: 'POST',
     body: JSON.stringify(compactRequest(request)),
   });
 }
 
-export async function saveRemoteConfigRuntime(request: GitHubTokenRuntimeRequest & { config: EditableAgentConfig }): Promise<RemoteConfigRuntimeResponse & { config: MaskedAgentConfig }> {
-  return requestJson<RemoteConfigRuntimeResponse & { config: MaskedAgentConfig }>('/api/remote/save', {
+export async function saveRemoteConfigRuntime(request: GitHubTokenRuntimeRequest & { config: EditableAgentConfig }): Promise<RemoteConfigRuntimeResponse & { config: AgentConfig }> {
+  return requestJson<RemoteConfigRuntimeResponse & { config: AgentConfig }>('/api/remote/save', {
     method: 'POST',
     body: JSON.stringify(compactRequest(request)),
   });

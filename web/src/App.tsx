@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { AGENTCFG_SCHEMA_DOCS } from '../../src/core/schema-docs';
+import { FileDiffViewer } from './FileDiffViewer';
 import {
   RuntimeClientError,
   type EditableAgentConfig,
@@ -14,6 +16,7 @@ import {
   saveConfigFileRuntime,
   saveRemoteConfigRuntime,
   setupRemoteConfigRuntime,
+  type AgentConfig,
   type AgentDiffResult,
   type AgentName,
   type ApplyAgentResult,
@@ -23,7 +26,6 @@ import {
   type DiffRuntimeResponse,
   type ManagedDiffChange,
   type ManagedField,
-  type MaskedAgentConfig,
   type PlanApplyRuntimeResponse,
   type RuntimeStateSummary,
   type RuntimeTargetRequest,
@@ -73,11 +75,14 @@ const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
   },
 };
 
+const SAVED_GITHUB_TOKEN_MASK = '************';
+
 function App() {
   const [runtimeState, setRuntimeState] = useState<RuntimeStateSummary | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [githubToken, setGithubToken] = useState('');
+  const [isEditingGitHubToken, setIsEditingGitHubToken] = useState(false);
   const [rememberGitHubToken, setRememberGitHubToken] = useState(false);
   const [gistId, setGistId] = useState('');
   const [statePath, setStatePath] = useState('');
@@ -114,7 +119,7 @@ function App() {
         if (!active) {
           return;
         }
-        setRuntimeState(state);
+        commitRuntimeState(state);
         setLoadState('ready');
         setGistId(state.gist.id ?? '');
       })
@@ -154,8 +159,11 @@ function App() {
   const configBusy = isLoadingConfig || isSavingConfig;
   const canLoadConfig = configAgent !== null && !configBusy;
   const canSaveConfig = configAgent !== null && configFile !== null && configDraft !== configFile.content && !configBusy;
+  const isGitHubTokenLocked = hasSavedGitHubToken && !isEditingGitHubToken;
+  const isReplacingSavedGitHubToken = hasSavedGitHubToken && isEditingGitHubToken;
+  const githubTokenInputValue = isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : githubToken;
+  const shouldRememberGitHubToken = isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken;
   const remoteYamlPreview = useMemo(() => buildRemoteYamlPreview(remoteDraft), [remoteDraft]);
-  const remoteSchemaPreview = useMemo(() => buildRemoteSchemaPreview(remoteDraft), [remoteDraft]);
 
   useEffect(() => {
     setConfirmationText('');
@@ -167,9 +175,19 @@ function App() {
     setConfigStatus(configAgent === null ? '请选择 Codex、OpenCode 或 OpenClaw 后再加载配置文件。' : '尚未加载配置文件。');
   }, [configAgent, configPath, requestStatePath]);
 
+  function commitRuntimeState(state: RuntimeStateSummary): void {
+    setRuntimeState(state);
+    setStatePath(state.statePath);
+    if (state.secrets?.hasGitHubToken === true) {
+      setGithubToken('');
+      setRememberGitHubToken(false);
+      setIsEditingGitHubToken(false);
+    }
+  }
+
   async function refreshState(nextStatePath?: string): Promise<void> {
     const { state } = await getRuntimeState(nextStatePath);
-    setRuntimeState(state);
+    commitRuntimeState(state);
     setGistId(state.gist.id ?? gistId);
     setLoadState('ready');
   }
@@ -180,13 +198,8 @@ function App() {
     const nextStatePath = statePath.trim();
     const nextGithubToken = githubToken.trim();
 
-    if (nextGithubToken !== '') {
+    if (nextGithubToken !== '' || nextGistId === '') {
       await handleRemoteSetup(nextGithubToken, nextStatePath);
-      return;
-    }
-
-    if (hasSavedGitHubToken) {
-      await handleRemoteSetup('', nextStatePath);
       return;
     }
 
@@ -203,7 +216,7 @@ function App() {
     setNotice(null);
     try {
       const { state } = await initRuntime({ gistId: nextGistId, statePath: nextStatePath });
-      setRuntimeState(state);
+      commitRuntimeState(state);
       await refreshState(nextStatePath);
       setNotice({
         tone: 'success',
@@ -222,7 +235,7 @@ function App() {
     setNotice(null);
     try {
       const { state } = await pullRuntime(githubTokenRequest(requestStatePath));
-      setRuntimeState(state);
+      commitRuntimeState(state);
       setDiffResponse(null);
       setPlanResponse(null);
       setPlanKey(null);
@@ -230,7 +243,7 @@ function App() {
       setNotice({
         tone: 'success',
         title: '已拉取远端配置',
-        copy: '控制台现在显示最新的本地缓存与脱敏代理配置，API 已隐藏密钥。',
+        copy: '控制台现在显示最新的本地缓存与完整代理配置，包括 API Key。',
       });
     } catch (error) {
       setNotice({ tone: 'error', title: '拉取需要处理', copy: formatError(error) });
@@ -240,20 +253,15 @@ function App() {
   }
 
   async function handleRemoteSetup(nextGithubToken = githubToken.trim(), nextStatePath = statePath.trim()): Promise<void> {
-    if (nextGithubToken === '' && !hasSavedGitHubToken) {
-      setNotice({ tone: 'error', title: '需要 GitHub Token', copy: '请输入带 Gist 权限的 GitHub Token，或先保存一个本地 Token。' });
-      return;
-    }
-
     setIsSettingRemote(true);
     setNotice(null);
     try {
       const response = await setupRemoteConfigRuntime(githubTokenRequest(nextStatePath, nextGithubToken));
-      setRuntimeState(response.state);
+      commitRuntimeState(response.state);
       setGistId(response.state.gist.id ?? '');
       if (response.config !== undefined) {
-        setRemoteDraft(maskedConfigToDraft(response.config, ''));
-        setRemoteStatus('已发现并加载远端配置。API Key 已隐藏；如果不想修改密钥，请保持为空。');
+        setRemoteDraft(configToDraft(response.config));
+        setRemoteStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
       } else {
         setRemoteDraft(EMPTY_REMOTE_CONFIG);
         setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
@@ -269,18 +277,14 @@ function App() {
 
   async function handleLoadRemoteConfig(): Promise<void> {
     const nextGithubToken = githubToken.trim();
-    if (nextGithubToken === '' && !hasSavedGitHubToken) {
-      setNotice({ tone: 'error', title: '需要 GitHub Token', copy: '加载远端配置需要 GitHub Token，或先保存一个本地 Token。' });
-      return;
-    }
 
     setIsLoadingRemote(true);
     setNotice(null);
     try {
       const response = await loadRemoteConfigRuntime(githubTokenRequest(requestStatePath, nextGithubToken));
-      setRuntimeState(response.state);
-      setRemoteDraft(maskedConfigToDraft(response.config, ''));
-      setRemoteStatus('远端配置已加载。API Key 已隐藏；保持为空会在保存时沿用远端现有密钥。');
+      commitRuntimeState(response.state);
+      setRemoteDraft(configToDraft(response.config));
+      setRemoteStatus('远端配置已加载。API Key 直接显示；保存前请确认表单就是最终写入值。');
       setNotice({ tone: 'success', title: '远端配置已加载', copy: '你可以直接修改 provider、model、Base URL，或填写新的 API Key。' });
     } catch (error) {
       setNotice({ tone: 'error', title: '加载远端配置失败', copy: formatError(error) });
@@ -291,8 +295,8 @@ function App() {
 
   async function handleSaveRemoteConfig(): Promise<void> {
     const nextGithubToken = githubToken.trim();
-    if (nextGithubToken === '' && !hasSavedGitHubToken) {
-      setNotice({ tone: 'error', title: '需要 GitHub Token', copy: '保存远端配置需要 GitHub Token，或先保存一个本地 Token。' });
+    if (remoteDraft.apiKey.value.trim() === '') {
+      setNotice({ tone: 'error', title: '需要 API Key', copy: '请填写最终要写入 agentcfg.yaml 的 API Key；Web 页面不再隐藏或沿用不可见密钥。' });
       return;
     }
 
@@ -300,10 +304,10 @@ function App() {
     setNotice(null);
     try {
       const response = await saveRemoteConfigRuntime({ ...githubTokenRequest(requestStatePath, nextGithubToken), config: remoteDraft });
-      setRuntimeState(response.state);
+      commitRuntimeState(response.state);
       setGistId(response.state.gist.id ?? gistId);
-      setRemoteDraft(maskedConfigToDraft(response.config, ''));
-      setRemoteStatus('远端配置已保存，API Key 已隐藏。再次保存时，API Key 留空会沿用现有密钥。');
+      setRemoteDraft(configToDraft(response.config));
+      setRemoteStatus('远端配置已保存。表单和预览已回填最终写入的完整值。');
       setDiffResponse(null);
       setPlanResponse(null);
       setPlanKey(null);
@@ -321,8 +325,10 @@ function App() {
     setNotice(null);
     try {
       const { state } = await clearSavedGitHubTokenRuntime({ statePath: requestStatePath });
-      setRuntimeState(state);
+      commitRuntimeState(state);
+      setGithubToken('');
       setRememberGitHubToken(false);
+      setIsEditingGitHubToken(false);
       setNotice({ tone: 'success', title: '已清除本地 Token', copy: 'secrets.json 中保存的 GitHub Token 已删除；后续远端操作需要重新输入 Token。' });
     } catch (error) {
       setNotice({ tone: 'error', title: '清除 Token 失败', copy: formatError(error) });
@@ -335,8 +341,20 @@ function App() {
     return {
       statePath: nextStatePath,
       githubToken: nextGithubToken,
-      rememberGitHubToken: rememberGitHubToken && nextGithubToken !== '',
+      ...(shouldRememberGitHubToken && nextGithubToken !== '' ? { rememberGitHubToken: true } : {}),
     };
+  }
+
+  function handleEditSavedGitHubToken(): void {
+    setGithubToken('');
+    setRememberGitHubToken(false);
+    setIsEditingGitHubToken(true);
+  }
+
+  function handleCancelGitHubTokenEdit(): void {
+    setGithubToken('');
+    setRememberGitHubToken(false);
+    setIsEditingGitHubToken(false);
   }
 
   function updateRemoteDraft(field: ManagedField, value: string): void {
@@ -361,7 +379,7 @@ function App() {
       setDiffResponse(await diffRuntime(targetRequest));
       setPlanResponse(null);
       setPlanKey(null);
-      setNotice({ tone: 'success', title: 'Diff 已就绪', copy: '托管字段已按代理分组，密钥信息保持脱敏。' });
+      setNotice({ tone: 'success', title: 'Diff 已就绪', copy: '托管字段已按代理分组，API Key 按真实值显示。' });
     } catch (error) {
       setDiffResponse(null);
       setPlanResponse(null);
@@ -492,15 +510,8 @@ function App() {
   );
 
   return (
-    <main className="app-shell">
-      <section className="desktop-window" aria-labelledby="page-title">
+    <main className="app-shell" aria-labelledby="page-title">
         <header className="app-header">
-          <div className="window-controls" aria-hidden="true">
-            <span className="window-control window-control--close" />
-            <span className="window-control window-control--minimize" />
-            <span className="window-control window-control--zoom" />
-          </div>
-
           <div className="app-title-area">
             <p className="eyebrow">本地控制台</p>
             <h1 id="page-title">agentcfg</h1>
@@ -515,7 +526,7 @@ function App() {
             <TabButton id="status-tab" active={activeTab === 'status'} controls="status-panel" onClick={() => setActiveTab('status')}>状态</TabButton>
           </nav>
 
-          <div className="header-actions" aria-label="窗口操作">
+          <div className="header-actions" aria-label="状态与同步操作">
             <StatusBadge tone={statusTone(runtimeState)}>
               {loadState === 'loading' ? '正在加载会话' : statusLabel(runtimeState)}
             </StatusBadge>
@@ -548,11 +559,11 @@ function App() {
                       id="github-token"
                       name="github-token"
                       type="password"
-                      value={githubToken}
+                      value={githubTokenInputValue}
                       onChange={(event) => setGithubToken(event.target.value)}
-                      placeholder="粘贴带 gist 权限的 token"
+                      placeholder={isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token'}
                       autoComplete="off"
-                      disabled={isSubmittingInit || isSettingRemote}
+                      disabled={isGitHubTokenLocked || isSubmittingInit || isSettingRemote}
                     />
                   </label>
                   <label htmlFor="gist-id">
@@ -584,22 +595,34 @@ function App() {
                       id="remember-github-token"
                       name="remember-github-token"
                       type="checkbox"
-                      checked={rememberGitHubToken}
+                      checked={isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken}
                       onChange={(event) => setRememberGitHubToken(event.target.checked)}
-                      disabled={isSubmittingInit || isSettingRemote || githubToken.trim() === ''}
+                      disabled={isGitHubTokenLocked || isReplacingSavedGitHubToken || isSubmittingInit || isSettingRemote || githubToken.trim() === ''}
                     />
-                    <span>本地明文保存 Token</span>
+                    <span>{isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token'}</span>
                   </label>
                   <div className="saved-token-control" role="status" aria-live="polite">
-                    <span>{hasSavedGitHubToken ? '已保存 GitHub Token，可不重新输入。' : '尚未保存 GitHub Token。'}</span>
-                    <button
-                      className="secondary-action secondary-action--compact"
-                      type="button"
-                      onClick={handleClearSavedGitHubToken}
-                      disabled={!hasSavedGitHubToken || isClearingGitHubToken}
-                    >
-                      {isClearingGitHubToken ? '正在清除...' : '清除保存的 Token'}
-                    </button>
+                    <span>{hasSavedGitHubToken ? (isEditingGitHubToken ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。' : '已保存 GitHub Token，输入框已锁定为固定掩码。') : '尚未保存 GitHub Token。'}</span>
+                    <div className="saved-token-actions" aria-label="保存的 GitHub Token 操作">
+                      {hasSavedGitHubToken && !isEditingGitHubToken && (
+                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleEditSavedGitHubToken} disabled={isBusy}>
+                          编辑保存的 Token
+                        </button>
+                      )}
+                      {hasSavedGitHubToken && isEditingGitHubToken && (
+                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleCancelGitHubTokenEdit} disabled={isBusy}>
+                          取消编辑
+                        </button>
+                      )}
+                      <button
+                        className="secondary-action secondary-action--compact"
+                        type="button"
+                        onClick={handleClearSavedGitHubToken}
+                        disabled={!hasSavedGitHubToken || isClearingGitHubToken}
+                      >
+                        {isClearingGitHubToken ? '正在清除...' : '清除保存的 Token'}
+                      </button>
+                    </div>
                   </div>
                   <button className="primary-action" type="submit" disabled={isSubmittingInit || isSettingRemote}>
                     {isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub'}
@@ -668,7 +691,7 @@ function App() {
                     </label>
                     <label htmlFor="remote-api-key">
                       API Key
-                      <input id="remote-api-key" type="password" value={remoteDraft.apiKey.value} onChange={(event) => updateRemoteDraft('apiKey', event.target.value)} placeholder="留空则保存时沿用远端现有密钥" autoComplete="off" disabled={isSavingRemote} />
+                      <input id="remote-api-key" type="text" value={remoteDraft.apiKey.value} onChange={(event) => updateRemoteDraft('apiKey', event.target.value)} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
                     </label>
                     <div className="remote-actions">
                       <button className="secondary-action" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
@@ -692,7 +715,7 @@ function App() {
                         <p className="eyebrow">Schema 参考</p>
                         <h3>当前字段说明</h3>
                       </div>
-                      <pre id="remote-schema-preview" className="remote-preview-block" aria-label="agentcfg.yaml schema 参考"><code>{remoteSchemaPreview}</code></pre>
+                      <SchemaReference />
                     </section>
                   </aside>
                 </div>
@@ -701,7 +724,7 @@ function App() {
           )}
 
           {activeTab === 'config' && (
-            <section className="dashboard-grid" id="config-panel" role="tabpanel" aria-labelledby="config-tab">
+            <section className="dashboard-grid dashboard-grid--config" id="config-panel" role="tabpanel" aria-labelledby="config-tab">
               {noticeNode}
               {loadErrorNode}
               <article className="card config-editor-card">
@@ -748,29 +771,31 @@ function App() {
                       <span>当前目标</span>
                       <strong>{configAgent === null ? '请选择单个代理' : agentLabel(configAgent)}</strong>
                     </div>
-                  </div>
-                  <div className="review-actions" aria-label="配置文件操作">
-                    <button className="secondary-action" type="button" onClick={handleLoadConfigFile} disabled={!canLoadConfig}>
-                      {isLoadingConfig ? '正在加载...' : '加载配置'}
-                    </button>
-                    <button className="primary-action" type="button" onClick={handleSaveConfigFile} disabled={!canSaveConfig}>
-                      {isSavingConfig ? '正在保存...' : '保存配置'}
-                    </button>
+                    <div className="review-actions" aria-label="配置文件操作">
+                      <button className="secondary-action" type="button" onClick={handleLoadConfigFile} disabled={!canLoadConfig}>
+                        {isLoadingConfig ? '正在加载...' : '加载配置'}
+                      </button>
+                      <button className="primary-action" type="button" onClick={handleSaveConfigFile} disabled={!canSaveConfig}>
+                        {isSavingConfig ? '正在保存...' : '保存配置'}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="config-editor-meta" role="status" aria-live="polite">
                   <span>{configStatus}</span>
                   {configFile !== null && <strong>{configFile.path}</strong>}
                 </div>
-                <textarea
-                  id="config-editor"
-                  className="config-editor-textarea"
-                  value={configDraft}
-                  onChange={(event) => setConfigDraft(event.target.value)}
-                  placeholder="加载配置后可在此编辑原始文件内容。"
-                  spellCheck={false}
-                  wrap="off"
-                />
+                <div className="config-editor-body">
+                  <textarea
+                    id="config-editor"
+                    className="config-editor-textarea"
+                    value={configDraft}
+                    onChange={(event) => setConfigDraft(event.target.value)}
+                    placeholder="加载配置后可在此编辑原始文件内容。"
+                    spellCheck={false}
+                    wrap="off"
+                  />
+                </div>
               </article>
             </section>
           )}
@@ -913,11 +938,11 @@ function App() {
                 <div className="section-heading section-heading--split">
                   <div>
                     <p className="eyebrow">缓存</p>
-                    <h2>脱敏配置摘要</h2>
+                    <h2>完整配置摘要</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.cache.config ? 'ready' : 'pending'}>{runtimeState?.cache.config ? '已脱敏' : '为空'}</StatusBadge>
+                  <StatusBadge tone={runtimeState?.cache.config ? 'ready' : 'pending'}>{runtimeState?.cache.config ? '显示完整值' : '为空'}</StatusBadge>
                 </div>
-                {runtimeState?.cache.config ? <ConfigSummary config={runtimeState.cache.config} /> : <EmptyCopy title="暂无缓存配置" copy="从已连接的 Gist 拉取后，可在此预览安全脱敏的运行时值。" />}
+                {runtimeState?.cache.config ? <ConfigSummary config={runtimeState.cache.config} /> : <EmptyCopy title="暂无缓存配置" copy="从已连接的 Gist 拉取后，可在此预览完整运行时值。" />}
               </article>
               <article className="card conflict-card">
                 <div className="section-heading section-heading--split">
@@ -938,7 +963,6 @@ function App() {
             </section>
           )}
         </section>
-      </section>
     </main>
   );
 }
@@ -973,13 +997,13 @@ function EmptyCopy({ title, copy }: { title: string; copy: string }) {
   );
 }
 
-function ConfigSummary({ config }: { config: MaskedAgentConfig }) {
+function ConfigSummary({ config }: { config: AgentConfig }) {
   return (
     <dl className="detail-list config-summary">
       <Detail label="提供方" value={config.provider} />
       <Detail label="模型" value={config.model} />
       <Detail label="Base URL" value={config.baseURL} />
-      <Detail label="API 密钥" value={config.apiKey === undefined ? '未返回' : 'API 已隐藏密钥'} />
+      <Detail label="API 密钥" value={config.apiKey.value} />
     </dl>
   );
 }
@@ -1130,21 +1154,32 @@ function FilePreviewList({ previews }: { previews: ApplyFilePreview[] }) {
             </div>
             {preview.mode !== undefined && <span>{formatFileMode(preview.mode)}</span>}
           </div>
-          <div className="file-preview-columns">
-            <FileContentBlock title="当前内容" content={preview.currentContent} empty="文件当前不存在，应用后会创建。" />
-            <FileContentBlock title="应用后内容" content={preview.expectedContent} empty="应用后内容为空。" />
-          </div>
+          <FileDiffViewer path={preview.path} currentContent={preview.currentContent ?? ''} expectedContent={preview.expectedContent} />
         </article>
       ))}
     </div>
   );
 }
 
-function FileContentBlock({ content, empty, title }: { content: string | undefined; empty: string; title: string }) {
+function SchemaReference() {
   return (
-    <section className="file-content-block">
-      <strong>{title}</strong>
-      <pre><code>{content === undefined || content === '' ? empty : content}</code></pre>
+    <section id="remote-schema-preview" className="schema-docs" aria-label="agentcfg.yaml schema 参考">
+      <p className="schema-docs__intro">agentcfg.yaml canonical fields. This reference documents the schema only and never mirrors current form values.</p>
+      <dl className="schema-docs__list">
+        {AGENTCFG_SCHEMA_DOCS.map((field) => (
+          <div className="schema-docs__field" key={field.path}>
+            <dt>
+              <code>{field.path}</code>
+              <span>{field.required ? 'required' : 'optional'}</span>
+            </dt>
+            <dd>
+              <strong>{field.label}</strong>
+              <span>Type: {field.type}</span>
+              <p>{field.description}</p>
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -1153,12 +1188,12 @@ function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
   return [
     {
       title: '连接状态',
-      copy: state?.gist.present ? '此桌面会话已知道要使用的私有 Gist。' : '保存 CLI 使用的私有 Gist ID。',
+      copy: state?.gist.present ? '此本地会话已知道要使用的私有 Gist。' : '保存 CLI 使用的私有 Gist ID。',
       state: state?.gist.present ? 'ready' : 'pending',
     },
     {
       title: '拉取缓存',
-      copy: state?.cache.present ? '远端配置已在本地缓存，并显示为脱敏值。' : '从 Gist 拉取以填充控制台缓存。',
+      copy: state?.cache.present ? '远端配置已在本地缓存，并显示为完整值。' : '从 Gist 拉取以填充控制台缓存。',
       state: state?.cache.present ? 'ready' : 'pending',
     },
     {
@@ -1208,7 +1243,7 @@ function formatDate(value: string | undefined): string {
   }).format(date);
 }
 
-function maskedConfigToDraft(config: MaskedAgentConfig, apiKeyValue: string): EditableAgentConfig {
+function configToDraft(config: AgentConfig): EditableAgentConfig {
   return {
     schemaVersion: config.schemaVersion,
     provider: config.provider,
@@ -1216,14 +1251,12 @@ function maskedConfigToDraft(config: MaskedAgentConfig, apiKeyValue: string): Ed
     baseURL: config.baseURL,
     apiKey: {
       type: 'plain',
-      value: apiKeyValue,
+      value: config.apiKey.value,
     },
   };
 }
 
 function buildRemoteYamlPreview(config: EditableAgentConfig): string {
-  const apiKeyPreview = config.apiKey.value.trim() === '' ? '留空，保存时沿用远端现有密钥' : '已填写，保存时写入';
-
   return [
     `schemaVersion: ${config.schemaVersion}`,
     `provider: ${yamlScalar(config.provider)}`,
@@ -1231,21 +1264,7 @@ function buildRemoteYamlPreview(config: EditableAgentConfig): string {
     `baseURL: ${yamlScalar(config.baseURL)}`,
     'apiKey:',
     `  type: ${yamlScalar(config.apiKey.type)}`,
-    `  value: ${yamlScalar(apiKeyPreview)}`,
-    '',
-  ].join('\n');
-}
-
-function buildRemoteSchemaPreview(config: EditableAgentConfig): string {
-  return [
-    'agentcfg.yaml schema/reference',
-    `schemaVersion: number  # 当前 ${config.schemaVersion}`,
-    `provider: string       # 当前 ${config.provider || '未填写'}`,
-    `model: string          # 当前 ${config.model || '未填写'}`,
-    `baseURL: string        # 当前 ${config.baseURL || '未填写'}`,
-    'apiKey:',
-    `  type: plain          # 当前 ${config.apiKey.type}`,
-    `  value: string        # ${config.apiKey.value.trim() === '' ? '留空沿用远端现有密钥' : '保存时写入新密钥，不在预览显示'}`,
+    `  value: ${yamlScalar(config.apiKey.value)}`,
     '',
   ].join('\n');
 }
@@ -1272,9 +1291,6 @@ function formatManagedValue(change: ManagedDiffChange | undefined, side: 'curren
     return '无变化';
   }
   const value = side === 'current' ? change.current : change.expected;
-  if (change.secret) {
-    return value === undefined ? '缺少密钥' : '密钥已脱敏';
-  }
   return value ?? '未设置';
 }
 

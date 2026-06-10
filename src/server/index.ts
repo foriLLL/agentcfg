@@ -31,6 +31,7 @@ import {
   type SaveRemoteConfigRuntimeResponse,
   type SetupRemoteConfigRuntimeResponse,
 } from '../api';
+import { readLastUsedStatePath, rememberLastUsedStatePath, resolveStatePath } from '../core';
 
 export type JsonSuccess<T> = {
   ok: true;
@@ -83,6 +84,7 @@ type ApiHandlerResult =
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8787;
 const MAX_JSON_BYTES = 1024 * 1024;
+const LAST_STATE_PATH_FILE_ENV = 'AGENTCFG_LAST_STATE_PATH_FILE';
 
 export async function startWebServer(options: AgentCfgWebServerOptions = {}): Promise<AgentCfgWebServer> {
   const host = options.host ?? DEFAULT_HOST;
@@ -154,6 +156,7 @@ async function handleApiRequest(
 ): Promise<void> {
   try {
     const data = await dispatchApiRequest(request, requestUrl, options);
+    await rememberRuntimeStatePath(data, options);
     sendJson(response, 200, { ok: true, data });
   } catch (error) {
     if (error instanceof InvalidJsonError) {
@@ -198,19 +201,20 @@ async function dispatchApiRequest(
 ): Promise<ApiHandlerResult> {
   if (requestUrl.pathname === '/api/state') {
     assertMethod(request, ['GET']);
-    return getRuntimeState({ statePath: requestUrl.searchParams.get('statePath') ?? options.statePath });
+    const statePath = requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined;
+    return getRuntimeState({ statePath: await resolveDefaultStatePath(statePath, options) });
   }
 
   if (requestUrl.pathname === '/api/init') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return initRuntime(withDefaultStatePath(body, options.statePath) as { gistId: string; statePath?: string });
+    return initRuntime(await withDefaultStatePath(body, options) as { gistId: string; statePath?: string });
   }
 
   if (requestUrl.pathname === '/api/pull') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return pullRuntime(withDefaultStatePath(body, options.statePath), {
+    return pullRuntime(await withDefaultStatePath(body, options), {
       gistOptions: {
         apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
         env: options.env,
@@ -221,7 +225,7 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/remote/setup') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return setupRemoteConfigRuntime(withDefaultStatePath(body, options.statePath), {
+    return setupRemoteConfigRuntime(await withDefaultStatePath(body, options), {
       gistOptions: {
         apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
         env: options.env,
@@ -232,7 +236,7 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/remote/load') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return loadRemoteConfigRuntime(withDefaultStatePath(body, options.statePath), {
+    return loadRemoteConfigRuntime(await withDefaultStatePath(body, options), {
       gistOptions: {
         apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
         env: options.env,
@@ -243,7 +247,7 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/remote/save') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return saveRemoteConfigRuntime(withDefaultStatePath(body, options.statePath), {
+    return saveRemoteConfigRuntime(await withDefaultStatePath(body, options), {
       gistOptions: {
         apiBaseUrl: options.env.AGENTCFG_GIST_API_BASE_URL,
         env: options.env,
@@ -254,38 +258,41 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/github-token/clear') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return clearSavedGitHubTokenRuntime(withDefaultStatePath(body, options.statePath));
+    return clearSavedGitHubTokenRuntime(await withDefaultStatePath(body, options));
   }
 
   if (requestUrl.pathname === '/api/diff') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return diffRuntime(withDefaultStatePath(body, options.statePath));
+    return diffRuntime(await withDefaultStatePath(body, options));
   }
 
   if (requestUrl.pathname === '/api/apply/plan') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return planApplyRuntime(withDefaultStatePath(body, options.statePath));
+    return planApplyRuntime(await withDefaultStatePath(body, options));
   }
 
   if (requestUrl.pathname === '/api/apply') {
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return applyRuntime(withDefaultStatePath(body, options.statePath));
+    return applyRuntime(await withDefaultStatePath(body, options));
   }
 
   if (requestUrl.pathname === '/api/config/file') {
     if (request.method === 'GET') {
       return getConfigFileRuntime({
-        statePath: requestUrl.searchParams.get('statePath') ?? options.statePath,
+        statePath: await resolveDefaultStatePath(
+          requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
+          options,
+        ),
         agent: stringOrUndefined(requestUrl.searchParams.get('agent')),
         configPath: stringOrUndefined(requestUrl.searchParams.get('configPath')),
       });
     }
     assertMethod(request, ['POST']);
     const body = await readJsonObject(request);
-    return saveConfigFileRuntime(withDefaultStatePath(body, options.statePath));
+    return saveConfigFileRuntime(await withDefaultStatePath(body, options));
   }
 
   throw new NotFoundError(`No API endpoint found for ${requestUrl.pathname}`);
@@ -295,14 +302,46 @@ function stringOrUndefined(value: string | null): string | undefined {
   return value === null || value.trim() === '' ? undefined : value;
 }
 
-function withDefaultStatePath<T extends JsonRecord>(body: T, statePath: string | undefined): T & RuntimeRequest {
+async function withDefaultStatePath<T extends JsonRecord>(
+  body: T,
+  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+): Promise<T & RuntimeRequest> {
   if (typeof body.statePath === 'string') {
     return body as T & RuntimeRequest;
   }
   if (body.statePath !== undefined) {
     throw new RuntimeApiError('invalid-request', 'statePath must be a string when provided.');
   }
+
+  const statePath = await resolveDefaultStatePath(undefined, options);
   return statePath === undefined ? (body as T & RuntimeRequest) : ({ ...body, statePath } as T & RuntimeRequest);
+}
+
+async function resolveDefaultStatePath(
+  requestStatePath: string | undefined,
+  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+): Promise<string | undefined> {
+  if (requestStatePath !== undefined) {
+    return requestStatePath;
+  }
+  if (options.statePath !== undefined) {
+    return options.statePath;
+  }
+  return readLastUsedStatePath(options.env[LAST_STATE_PATH_FILE_ENV]);
+}
+
+async function rememberRuntimeStatePath(
+  data: ApiHandlerResult,
+  options: Required<Pick<AgentCfgWebServerOptions, 'env'>> & Pick<AgentCfgWebServerOptions, 'statePath'>,
+): Promise<void> {
+  if (!('state' in data) || data.state.statePath === resolveStatePath()) {
+    return;
+  }
+  if (options.statePath !== undefined && data.state.statePath === resolveStatePath(options.statePath)) {
+    return;
+  }
+
+  await rememberLastUsedStatePath(data.state.statePath, options.env[LAST_STATE_PATH_FILE_ENV]);
 }
 
 async function readJsonObject(request: IncomingMessage): Promise<JsonRecord> {

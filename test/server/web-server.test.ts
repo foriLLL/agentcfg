@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { startWebServer, type JsonEnvelope } from '../../src/server';
-import { MASKED_SECRET, resolveSecretsPath } from '../../src/core';
+import { resolveSecretsPath } from '../../src/core';
 import { buildGistBody, startFakeGistServer } from '../helpers/fake-gist';
 
 const CACHED_SECRET = ['server', 'cached', 'secret'].join('-');
@@ -20,7 +20,7 @@ const CANONICAL_CONFIG = {
   },
 } as const;
 
-test('web server exposes JSON runtime endpoints with masked secret responses', async () => {
+test('web server exposes JSON runtime endpoints with visible provider API keys', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-api-'));
   const statePath = join(directory, 'state.json');
   const nativePath = join(directory, 'opencode.jsonc');
@@ -48,14 +48,14 @@ test('web server exposes JSON runtime endpoints with masked secret responses', a
     const diffJson = JSON.stringify(diff.body);
     assert.equal(diff.status, 200);
     assert.equal(diff.body.ok, true);
-    assert.equal(diffJson.includes(CACHED_SECRET), false);
-    assert.equal(diffJson.includes(NATIVE_SECRET), false);
+    assert.equal(diffJson.includes(CACHED_SECRET), true);
+    assert.equal(diffJson.includes(NATIVE_SECRET), true);
     if (diff.body.ok !== true) throw new Error('Expected diff success');
     const apiKeyDiff = diff.body.data.results[0]?.changes.find((change: { field: string }) => change.field === 'apiKey');
     assert.deepEqual(apiKeyDiff, {
       field: 'apiKey',
-      current: MASKED_SECRET,
-      expected: MASKED_SECRET,
+      current: NATIVE_SECRET,
+      expected: CACHED_SECRET,
       secret: true,
     });
 
@@ -65,8 +65,8 @@ test('web server exposes JSON runtime endpoints with masked secret responses', a
     if (plan.body.ok !== true) throw new Error('Expected plan success');
     assert.equal(plan.body.data.plans[0]?.filePreviews[0]?.currentContent?.includes(NATIVE_SECRET), true);
     assert.equal(plan.body.data.plans[0]?.filePreviews[0]?.expectedContent.includes(CACHED_SECRET), true);
-    assert.equal(JSON.stringify(plan.body.data.results).includes(CACHED_SECRET), false);
-    assert.equal(JSON.stringify(plan.body.data.results).includes(NATIVE_SECRET), false);
+    assert.equal(JSON.stringify(plan.body.data.results).includes(CACHED_SECRET), true);
+    assert.equal(JSON.stringify(plan.body.data.results).includes(NATIVE_SECRET), true);
 
     const rejectedApply = await requestJson(server.url, '/api/apply', {
       agent: 'opencode',
@@ -86,8 +86,8 @@ test('web server exposes JSON runtime endpoints with masked secret responses', a
     const appliedJson = JSON.stringify(applied.body);
     assert.equal(applied.status, 200);
     assert.equal(applied.body.ok, true);
-    assert.equal(appliedJson.includes(CACHED_SECRET), false);
-    assert.equal(appliedJson.includes(NATIVE_SECRET), false);
+    assert.equal(appliedJson.includes(CACHED_SECRET), true);
+    assert.equal(appliedJson.includes(NATIVE_SECRET), true);
     assert.equal((await readFile(nativePath, 'utf8')).includes(CACHED_SECRET), true);
 
     await writeFile(nativePath, opencodeNativeJson(NATIVE_SECRET));
@@ -141,7 +141,7 @@ test('web server returns structured errors for invalid JSON and missing API endp
   }
 });
 
-test('web server remote config endpoints use body token, mask secrets, and never store token', async () => {
+test('web server remote config endpoints use body token, show provider API keys, and never store token', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-remote-'));
   const statePath = join(directory, 'state.json');
   const gistServer = await startFakeGistServer([
@@ -166,15 +166,15 @@ test('web server remote config endpoints use body token, mask secrets, and never
     const setup = await requestJson(server.url, '/api/remote/setup', { githubToken: 'server-token' });
     assert.equal(setup.status, 200);
     assert.equal(setup.body.ok, true);
-    assert.equal(JSON.stringify(setup.body).includes(CACHED_SECRET), false);
+    assert.equal(JSON.stringify(setup.body).includes(CACHED_SECRET), true);
     if (setup.body.ok !== true) throw new Error('Expected remote setup success');
     assert.equal(setup.body.data.state.gist.id, 'server-remote-gist');
-    assert.equal(setup.body.data.config.apiKey.value, MASKED_SECRET);
+    assert.equal(setup.body.data.config.apiKey.value, CACHED_SECRET);
 
     const load = await requestJson(server.url, '/api/remote/load', { githubToken: 'server-token' });
     assert.equal(load.status, 200);
     assert.equal(load.body.ok, true);
-    assert.equal(JSON.stringify(load.body).includes(CACHED_SECRET), false);
+    assert.equal(JSON.stringify(load.body).includes(CACHED_SECRET), true);
 
     const save = await requestJson(server.url, '/api/remote/save', {
       githubToken: 'server-token',
@@ -191,7 +191,7 @@ test('web server remote config endpoints use body token, mask secrets, and never
 
     assert.equal(save.status, 200);
     assert.equal(save.body.ok, true);
-    assert.equal(JSON.stringify(save.body).includes(CACHED_SECRET), false);
+    assert.equal(JSON.stringify(save.body).includes(CACHED_SECRET), true);
     assert.equal(storedState.includes('server-token'), false);
     assert.equal(JSON.parse(storedState).gist.id, 'server-remote-gist');
     assert.equal(patchBody.files['agentcfg.yaml'].content.includes(CACHED_SECRET), true);

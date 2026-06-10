@@ -8,8 +8,6 @@ import {
   discoverAgentConfigGist,
   fetchGistAgentConfig,
   GistError,
-  maskConfig,
-  MASKED_SECRET,
   NativeConfigParseError,
   parseNativeConfig,
   parseCanonicalAgentConfig,
@@ -130,7 +128,7 @@ export async function pullRuntime(
 
     return {
       state: await summarizeState(state, request.statePath),
-      config: maskConfig(config),
+      config,
       remote: state.remote,
     };
   } catch (error) {
@@ -157,7 +155,7 @@ export async function setupRemoteConfigRuntime(
       const config = parseCanonicalAgentConfig(fetched.content);
       const state = await updatePulledConfig(request.statePath, config, fetched.metadata);
       await rememberGitHubTokenIfRequested(request, token);
-      return { state: await summarizeState(state, request.statePath), config: maskConfig(config), remote: state.remote };
+      return { state: await summarizeState(state, request.statePath), config, remote: state.remote };
     } catch (error) {
       if (isAgentConfigValidationError(error)) {
         await rememberGitHubTokenIfRequested(request, token);
@@ -185,7 +183,7 @@ export async function loadRemoteConfigRuntime(
     const config = parseCanonicalAgentConfig(fetched.content);
     const state = await updatePulledConfig(request.statePath, config, fetched.metadata);
     await rememberGitHubTokenIfRequested(request, token);
-    return { state: await summarizeState(state, request.statePath), config: maskConfig(config), remote: state.remote };
+    return { state: await summarizeState(state, request.statePath), config, remote: state.remote };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
@@ -212,7 +210,7 @@ export async function saveRemoteConfigRuntime(
     const state = await writeRemoteConfigState(request.statePath, saved.id, config, saved.metadata);
 
     await rememberGitHubTokenIfRequested(request, token);
-    return { state: await summarizeState(state, request.statePath), config: maskConfig(config), remote: state.remote };
+    return { state: await summarizeState(state, request.statePath), config, remote: state.remote };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
@@ -247,7 +245,7 @@ export async function diffRuntime(request: DiffRuntimeRequest): Promise<DiffRunt
       );
     }
 
-    return { results: maskDiffResults(results) };
+    return { results: results.map((result) => ({ agent: result.agent as AdapterName, changes: result.changes })) };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
@@ -258,7 +256,7 @@ export async function planApplyRuntime(request: PlanApplyRuntimeRequest): Promis
     const plans = await buildApplyPlans(request, 'apply');
     return {
       plans: await summarizePlans(plans),
-      results: maskApplyResults(plansToResults(plans, 'would-change')),
+      results: plansToResults(plans, 'would-change'),
     };
   } catch (error) {
     throw toRuntimeApiError(error);
@@ -275,7 +273,7 @@ export async function applyRuntime(
     }
 
     const plans = await buildApplyPlans(request, 'apply');
-    return { results: maskApplyResults(await applyPlan(plans, options.applyWriteOptions)) };
+    return { results: await applyPlan(plans, options.applyWriteOptions) };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
@@ -350,13 +348,13 @@ async function summarizeState(state: AgentCfgState, statePath?: string): Promise
     cache: {
       present: state.cache !== undefined,
       updatedAt: state.cache?.updatedAt,
-      config: state.cache === undefined ? undefined : maskConfig(state.cache.config),
+      config: state.cache?.config,
     },
     conflict: {
       present: state.conflict !== undefined,
       baseRevision: state.conflict?.baseRevision,
       baseETag: state.conflict?.baseETag,
-      baseConfig: state.conflict === undefined ? undefined : maskConfig(state.conflict.baseConfig),
+      baseConfig: state.conflict?.baseConfig,
     },
   };
 }
@@ -475,7 +473,7 @@ async function buildApplyPlans(request: PlanApplyRuntimeRequest, action: 'apply'
   } catch (error) {
     if (error instanceof ApplyValidationError) {
       throw new RuntimeApiError('apply-error', 'Apply validation failed; no files were written.', {
-        results: maskApplyResults(error.results),
+        results: error.results,
       });
     }
     throw error;
@@ -515,7 +513,7 @@ async function summarizePlans(plans: ApplyAgentPlan[]): Promise<ApiApplyPlanSumm
     agent: plan.agent,
     configPath: plan.configPath,
     envPath: plan.envPath,
-    changes: maskChanges(plan.changes),
+    changes: plan.changes,
     operationCount: plan.operations.length,
     operationPaths: plan.operations.map((operation) => operation.path),
     filePreviews: await Promise.all(plan.operations.map(operationToFilePreview)),
@@ -543,32 +541,6 @@ async function readOptionalFile(path: string): Promise<string | undefined> {
   }
 }
 
-function maskDiffResults(results: AgentDiffResult[]): ApiAgentDiffResult[] {
-  return results.map((result) => ({
-    agent: result.agent as AdapterName,
-    changes: maskChanges(result.changes),
-  }));
-}
-
-function maskApplyResults(results: ApplyAgentResult[]): ApiApplyAgentResult[] {
-  return results.map((result) => ({
-    ...result,
-    changes: maskChanges(result.changes),
-  }));
-}
-
-function maskChanges(changes: ManagedDiffChange[]): ManagedDiffChange[] {
-  return changes.map((change) => ({
-    ...change,
-    current: change.secret ? maskOptionalValue(change.current) : change.current,
-    expected: change.secret ? maskOptionalValue(change.expected) : change.expected,
-  }));
-}
-
-function maskOptionalValue(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : MASKED_SECRET;
-}
-
 function toRuntimeApiError(error: unknown): RuntimeApiError {
   if (error instanceof RuntimeApiError) {
     return error;
@@ -590,7 +562,7 @@ function toRuntimeApiError(error: unknown): RuntimeApiError {
   }
   if (error instanceof ApplyValidationError) {
     return new RuntimeApiError('apply-error', 'Apply validation failed; no files were written.', {
-      results: maskApplyResults(error.results),
+      results: error.results,
     });
   }
   if (error instanceof Error) {

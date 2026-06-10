@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { atomicWriteFile } from './atomic-write';
 import { validateAgentConfig, type AgentConfigInput, type CanonicalAgentConfig } from './schema';
 
 export const STATE_SCHEMA_VERSION = 1;
 export const DEFAULT_STATE_PATH = join(homedir(), '.agentcfg', 'state.json');
+export const DEFAULT_LAST_STATE_PATH_PATH = join(dirname(DEFAULT_STATE_PATH), 'last-state-path.json');
 
 export type GistIdentity = {
   id: string;
@@ -50,15 +51,56 @@ export function resolveStatePath(statePath?: string): string {
     return DEFAULT_STATE_PATH;
   }
 
-  if (statePath === '~') {
+  return resolveUserPath(statePath);
+}
+
+export function resolveLastStatePathPath(lastStatePathPath?: string): string {
+  if (lastStatePathPath === undefined || lastStatePathPath.trim() === '') {
+    return DEFAULT_LAST_STATE_PATH_PATH;
+  }
+
+  return resolveUserPath(lastStatePathPath);
+}
+
+export async function readLastUsedStatePath(lastStatePathPath?: string): Promise<string | undefined> {
+  const resolvedPath = resolveLastStatePathPath(lastStatePathPath);
+
+  try {
+    const parsed = JSON.parse(await readFile(resolvedPath, 'utf8')) as unknown;
+    if (!isRecord(parsed) || !isNonEmptyString(parsed.statePath)) {
+      throw new StateError(`Invalid agentcfg last state path at ${resolvedPath}: statePath must be a non-empty string`);
+    }
+    return resolveStatePath(parsed.statePath);
+  } catch (error) {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export async function rememberLastUsedStatePath(statePath: string | undefined, lastStatePathPath?: string): Promise<void> {
+  if (statePath === undefined || statePath.trim() === '') {
+    return;
+  }
+
+  const resolvedStatePath = resolveStatePath(statePath);
+  await atomicWriteFile(resolveLastStatePathPath(lastStatePathPath), `${JSON.stringify({ statePath: resolvedStatePath }, null, 2)}\n`, {
+    createBackup: false,
+    mode: 0o600,
+  });
+}
+
+function resolveUserPath(path: string): string {
+  if (path === '~') {
     return homedir();
   }
 
-  if (statePath.startsWith('~/')) {
-    return join(homedir(), statePath.slice(2));
+  if (path.startsWith('~/')) {
+    return join(homedir(), path.slice(2));
   }
 
-  return isAbsolute(statePath) ? statePath : resolve(process.cwd(), statePath);
+  return isAbsolute(path) ? path : resolve(process.cwd(), path);
 }
 
 export async function readLocalState(statePath?: string): Promise<AgentCfgState> {

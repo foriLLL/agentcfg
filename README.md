@@ -60,7 +60,7 @@ The Web UI can optionally remember the GitHub Token for Gist operations. When en
 
 agentcfg includes a local Web UI for init, pull, diff review, dry-run planning, and confirmed apply flows.
 
-The UI shows the current state, cached config, and remote Gist metadata, then keeps the secret hidden while surfacing the managed fields that matter.
+The UI shows the current state, cached config, remote Gist metadata, and provider API keys exactly as the local runtime API will write them. Treat the Web UI as trusted-local only.
 
 The apply screen uses strong confirmation. You must run a dry-run first, pick the target agents, and type `APPLY` before the UI sends a write request.
 
@@ -107,11 +107,11 @@ Use these options when you need a different bind or state file:
 - `Pull` fetches `agentcfg.yaml` and refreshes the cache.
 - The dashboard shows state, cache, and remote metadata.
 - `Config file` lets you choose Codex, OpenCode, or OpenClaw and inspect the raw native config file before editing or applying changes.
-- `Diff` shows masked managed-field changes for one agent or all agents.
+- `Diff` shows managed-field changes for one agent or all agents, including provider API key values.
 - `Dry-run` shows the plan without writing files, including each planned file's current content and post-apply content.
 - `Apply` requires typed `APPLY`, validates again, writes backups, and shows the backup paths and result summary.
 
-Diff/apply summaries keep API keys masked. The remote form preview also avoids showing typed API keys. The raw config editor and dry-run file previews intentionally show file contents as they exist or will be written, so they may include API keys.
+The Web UI and local runtime API show provider API keys directly in the remote form, cache summary, diff/apply summaries, and file previews so the values on screen match the final values that will be written. Saved GitHub Tokens are different: runtime API responses only expose whether a token is saved, never the saved token value.
 
 ## Setup
 

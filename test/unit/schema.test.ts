@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import {
+  AGENTCFG_SCHEMA_DOCS,
   AgentConfigValidationError,
   parseAgentConfigYaml,
   parseCanonicalAgentConfig,
@@ -129,4 +130,31 @@ test('rejects invalid apiKey object shapes', () => {
       }),
     /apiKey is required and must be a non-empty string or \{ type: "plain", value: string \}/,
   );
+});
+
+test('documents every canonical agentcfg.yaml schema field', () => {
+  const fieldPaths = AGENTCFG_SCHEMA_DOCS.map((field) => field.path);
+
+  assert.deepEqual(fieldPaths, [
+    'schemaVersion',
+    'provider',
+    'model',
+    'baseURL',
+    'apiKey',
+    'apiKey.type',
+    'apiKey.value',
+  ]);
+  assert.equal(new Set(fieldPaths).size, fieldPaths.length);
+
+  for (const field of AGENTCFG_SCHEMA_DOCS) {
+    assert.equal(field.required, true, `${field.path} should document required status`);
+    assert.equal(field.type.trim().length > 0, true, `${field.path} should document a type`);
+    assert.equal(field.description.trim().length > 0, true, `${field.path} should document a description`);
+  }
+
+  const apiKeyTypeDoc = AGENTCFG_SCHEMA_DOCS.find((field) => field.path === 'apiKey.type');
+  assert.equal(apiKeyTypeDoc?.type, 'plain');
+  assert.match(apiKeyTypeDoc?.description ?? '', /plaintext provider API key/);
+  assert.match(apiKeyTypeDoc?.description ?? '', /stored in agentcfg\.yaml/);
+  assert.match(apiKeyTypeDoc?.description ?? '', /written verbatim to target agent configs/);
 });

@@ -11,5 +11,6 @@ export * from './mask';
 export * from './gist';
 export * from './native-io';
 export * from './schema';
+export * from './schema-docs';
 export * from './secrets';
 export * from './state';
