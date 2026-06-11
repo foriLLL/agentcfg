@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -376,6 +376,77 @@ test('runtime config editor reads and atomically saves native config files', asy
       (error: unknown) => error instanceof RuntimeApiError && error.code === 'validation-error',
     );
     assert.equal(await readFile(nativePath, 'utf8'), edited);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime config editor reports missing default native config clearly', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-missing-config-'));
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+
+  try {
+    await assert.rejects(
+      getConfigFileRuntime({ agent: 'opencode' }),
+      (error: unknown) => {
+        assert.equal(error instanceof RuntimeApiError, true);
+        if (!(error instanceof RuntimeApiError)) return false;
+        assert.equal(error.code, 'invalid-request');
+        assert.match(error.message, /Missing opencode native config/);
+        assert.doesNotMatch(error.message, /ENOENT/);
+        return true;
+      },
+    );
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime config editor resolves default OpenCode json candidate', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-default-opencode-'));
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+
+  try {
+    const configDirectory = join(directory, '.config', 'opencode');
+    const nativePath = join(configDirectory, 'opencode.json');
+    const original = opencodeNativeJson(NATIVE_SECRET);
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(nativePath, original);
+
+    const loaded = await getConfigFileRuntime({ agent: 'opencode' });
+    assert.equal(loaded.path, nativePath);
+    assert.equal(loaded.format, 'json');
+    assert.equal(loaded.content, original);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime config editor resolves explicit OpenCode candidate aliases', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-opencode-alias-'));
+  const nativePath = join(directory, 'opencode.json');
+  const requestedAliasPath = join(directory, 'opencode.jsonc');
+  const original = opencodeNativeJson(NATIVE_SECRET);
+
+  try {
+    await writeFile(nativePath, original);
+
+    const loaded = await getConfigFileRuntime({ agent: 'opencode', configPath: requestedAliasPath });
+    assert.equal(loaded.path, nativePath);
+    assert.equal(loaded.format, 'json');
+    assert.equal(loaded.content, original);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

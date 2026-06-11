@@ -283,11 +283,16 @@ export async function applyRuntime(
 export async function getConfigFileRuntime(request: ConfigFileRuntimeRequest): Promise<ConfigFileRuntimeResponse> {
   try {
     const agent = requireSingleAgent(request.agent);
-    const configPath = await resolveAdapterConfigPath(agent, {
-      configPath: request.configPath,
-      fixturesRoot: request.fixturesRoot,
+    const configPath = await resolveConfigEditorPath(agent, request);
+    const fileStat = await stat(configPath).catch((error: unknown) => {
+      if (isNodeErrorWithCode(error, 'ENOENT')) {
+        throw new RuntimeApiError(
+          'invalid-request',
+          `Missing ${agent} native config at ${configPath}. Enter an existing config path or create the file before loading.`,
+        );
+      }
+      throw error;
     });
-    const fileStat = await stat(configPath);
     const format = detectNativeConfigFormat(configPath);
 
     return {
@@ -309,10 +314,7 @@ export async function saveConfigFileRuntime(request: SaveConfigFileRuntimeReques
       throw new RuntimeApiError('invalid-request', 'content must be a string.');
     }
 
-    const configPath = await resolveAdapterConfigPath(agent, {
-      configPath: request.configPath,
-      fixturesRoot: request.fixturesRoot,
-    });
+    const configPath = await resolveConfigEditorPath(agent, request);
     const format = detectNativeConfigFormat(configPath);
     parseNativeConfig(request.content, format);
     const existingStat = await stat(configPath).catch(() => undefined);
@@ -358,6 +360,20 @@ async function summarizeState(state: AgentCfgState, statePath?: string): Promise
       baseConfig: state.conflict?.baseConfig,
     },
   };
+}
+
+async function resolveConfigEditorPath(agent: AdapterName, request: ConfigFileRuntimeRequest): Promise<string> {
+  try {
+    return await resolveAdapterConfigPath(agent, {
+      configPath: request.configPath,
+      fixturesRoot: request.fixturesRoot,
+    });
+  } catch (error) {
+    if (error instanceof DiffError) {
+      throw new RuntimeApiError('invalid-request', error.message);
+    }
+    throw error;
+  }
 }
 
 async function resolveGitHubToken(request: { githubToken?: string; statePath?: string }): Promise<string | undefined> {

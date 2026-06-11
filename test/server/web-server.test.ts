@@ -119,8 +119,10 @@ test('web server exposes JSON runtime endpoints with visible provider API keys',
 test('web server returns structured errors for invalid JSON and missing API endpoints', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-errors-'));
   const server = await startWebServer({ host: '127.0.0.1', port: 0, assetsDir: join(directory, 'missing-assets') });
+  const previousHome = process.env.HOME;
 
   try {
+    process.env.HOME = directory;
     const invalidJsonResponse = await fetch(`${server.url}/api/init`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -135,7 +137,33 @@ test('web server returns structured errors for invalid JSON and missing API endp
     assert.equal(missing.status, 404);
     assert.equal(missing.body.ok, false);
     assert.equal(missing.body.ok === false ? missing.body.error.code : '', 'not-found');
+
+    const missingConfig = await requestJson(server.url, '/api/config/file?agent=opencode');
+    assert.equal(missingConfig.status, 400);
+    assert.equal(missingConfig.body.ok, false);
+    assert.equal(missingConfig.body.ok === false ? missingConfig.body.error.code : '', 'invalid-request');
+    const missingConfigMessage = missingConfig.body.ok === false ? missingConfig.body.error.message : '';
+    assert.match(missingConfigMessage, /Missing opencode native config/);
+    assert.doesNotMatch(missingConfigMessage, /ENOENT/);
+
+    const defaultConfigDirectory = join(directory, '.config', 'opencode');
+    const defaultConfigPath = join(defaultConfigDirectory, 'opencode.json');
+    await mkdir(defaultConfigDirectory, { recursive: true });
+    await writeFile(defaultConfigPath, opencodeNativeJson(NATIVE_SECRET));
+
+    const defaultConfig = await requestJson(server.url, '/api/config/file?agent=opencode');
+    assert.equal(defaultConfig.status, 200);
+    assert.equal(defaultConfig.body.ok, true);
+    if (defaultConfig.body.ok !== true) throw new Error('Expected default OpenCode config read success');
+    assert.equal(defaultConfig.body.data.path, defaultConfigPath);
+    assert.equal(defaultConfig.body.data.format, 'json');
+    assert.equal(defaultConfig.body.data.content.includes(NATIVE_SECRET), true);
   } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
     await server.close();
     await rm(directory, { force: true, recursive: true });
   }

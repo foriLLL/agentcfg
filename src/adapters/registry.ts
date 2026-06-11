@@ -1,6 +1,6 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
   DiffError,
   diffManagedSnapshots,
@@ -131,13 +131,42 @@ async function resolveNativePath(
     return { configPath: await resolveCandidateInDirectory(adapter, join(options.fixturesRoot, adapter.name)) };
   }
 
-  return { configPath: adapter.defaultConfigPath() };
+  return resolveDefaultPath(adapter);
+}
+
+async function resolveDefaultPath(adapter: AdapterRegistryEntry): Promise<NativePathResolution> {
+  const configPath = adapter.defaultConfigPath();
+  const stats = await stat(configPath).catch((error: unknown) => {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      return undefined;
+    }
+    throw error;
+  });
+
+  if (stats?.isDirectory()) {
+    return { configPath: await resolveCandidateInDirectory(adapter, configPath) };
+  }
+  if (stats !== undefined) {
+    return { configPath };
+  }
+
+  return { configPath: await resolveCandidateInDirectory(adapter, dirname(configPath)) };
 }
 
 async function resolveConfiguredPath(adapter: AdapterRegistryEntry, configPath: string): Promise<string> {
   const stats = await stat(configPath).catch((error: unknown) => {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      if (isConfigFileCandidate(adapter, configPath)) {
+        return undefined;
+      }
+      throw new DiffError(`Missing ${adapter.name} native config path: ${configPath}`);
+    }
     throw new DiffError(`Missing ${adapter.name} native config path: ${configPath} (${formatError(error)})`);
   });
+
+  if (stats === undefined) {
+    return resolveCandidateInDirectory(adapter, dirname(configPath));
+  }
 
   if (stats.isDirectory()) {
     return resolveCandidateInDirectory(adapter, configPath);
@@ -148,6 +177,9 @@ async function resolveConfiguredPath(adapter: AdapterRegistryEntry, configPath: 
 
 async function resolveCandidateInDirectory(adapter: AdapterRegistryEntry, directory: string): Promise<string> {
   const entries = await readdir(directory).catch((error: unknown) => {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      throw new DiffError(`Missing ${adapter.name} native config directory: ${directory}`);
+    }
     throw new DiffError(`Missing ${adapter.name} native config directory: ${directory} (${formatError(error)})`);
   });
   const matches = adapter.configFileCandidates.filter((candidate) => entries.includes(candidate));
@@ -161,6 +193,10 @@ async function resolveCandidateInDirectory(adapter: AdapterRegistryEntry, direct
   }
 
   return join(directory, matches[0]);
+}
+
+function isConfigFileCandidate(adapter: AdapterRegistryEntry, configPath: string): boolean {
+  return adapter.configFileCandidates.includes(basename(configPath));
 }
 
 async function readNativeText(configPath: string, agent: AdapterName): Promise<string> {
