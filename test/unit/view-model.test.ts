@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { parse as parseYaml } from 'yaml';
 import test from 'node:test';
-import { buildRemoteYamlPreview } from '../../web/src/view-model';
-import type { EditableAgentConfig } from '../../web/src/api';
+import { buildRemoteYamlPreview, statusLabel, statusTone } from '../../web/src/view-model';
+import type { EditableAgentConfig, RuntimeStateSummary } from '../../web/src/api';
 
 test('buildRemoteYamlPreview serializes the complete nested remote config', () => {
   const config: EditableAgentConfig = {
@@ -68,4 +68,28 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
   assert.match(preview, /maxTokens: 32768/);
   assert.match(preview, /"gpt-4\.1": \{\}/);
   assert.match(preview, /"claude-3-haiku": \{\}/);
+});
+
+test('status copy treats stored remote baseline metadata as cache-ready state', () => {
+  const state: RuntimeStateSummary = {
+    statePath: '/tmp/agentcfg-state.json',
+    schemaVersion: 1,
+    gist: {
+      present: true,
+      id: 'gist-id',
+    },
+    cache: {
+      present: true,
+      updatedAt: '2026-06-14T00:00:00.000Z',
+    },
+    conflict: {
+      present: true,
+      baseRevision: 'remote-revision',
+      baseETag: 'remote-etag',
+    },
+  };
+
+  assert.equal(statusTone(state), 'ready');
+  assert.equal(statusLabel(state), '缓存已就绪');
+  assert.notEqual(statusLabel(state), '需要检查冲突');
 });

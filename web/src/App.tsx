@@ -895,7 +895,7 @@ function App() {
                 <dl className="detail-list">
                   <Detail label="状态路径" value={runtimeState?.statePath ?? '正在解析本地状态...'} />
                   <Detail label="来源" value={runtimeState?.gist.present ? `Gist ${runtimeState.gist.id}` : '未初始化'} />
-                  <Detail label="安全" value={runtimeState?.conflict.present ? '需要检查冲突' : '未标记冲突'} />
+                  <Detail label="远端基线" value={runtimeState?.conflict.present ? '已保存用于后续比对' : '尚未保存'} />
                 </dl>
               </article>
             </section>
@@ -1299,16 +1299,16 @@ function App() {
               <article className="card conflict-card">
                 <div className="section-heading section-heading--split">
                   <div>
-                    <p className="eyebrow">冲突</p>
-                    <h2>远端基线冲突检查</h2>
+                    <p className="eyebrow">基线</p>
+                    <h2>远端基线元数据</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.conflict.present ? 'warning' : 'ready'}>
-                    {runtimeState?.conflict.present ? '待审阅' : '清晰'}
+                  <StatusBadge tone={runtimeState?.conflict.present ? 'ready' : 'pending'}>
+                    {runtimeState?.conflict.present ? '已保存' : '未保存'}
                   </StatusBadge>
                 </div>
                 <dl className="detail-list">
-                  <Detail label="冲突状态" value={runtimeState?.conflict.present ? '已存储远端基线，需先审阅' : '当前无冲突'} />
-                  <Detail label="页面含义" value={runtimeState?.conflict.present ? '顶部“需要检查冲突”表示本机保存了远端基线，请先核对差异再继续。' : '顶部不会显示“需要检查冲突”，当前没有待审阅的远端基线。'} />
+                  <Detail label="基线状态" value={runtimeState?.conflict.present ? '已保存远端基线元数据' : '尚未保存远端基线'} />
+                  <Detail label="页面含义" value={runtimeState?.conflict.present ? '这是上次拉取或保存时记录的远端版本，用于以后与本地缓存比对。' : '拉取或保存远端配置后，会在这里记录版本基线供后续比较。'} />
                   <Detail label="Base revision" value={runtimeState?.conflict.baseRevision ?? '无'} />
                   <Detail label="Base ETag" value={runtimeState?.conflict.baseETag ?? '无'} />
                 </dl>

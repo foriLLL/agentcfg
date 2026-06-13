@@ -40,9 +40,6 @@ export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
 }
 
 export function statusTone(state: RuntimeStateSummary | null): 'ready' | 'pending' | 'warning' {
-  if (state?.conflict.present) {
-    return 'warning';
-  }
   if (state?.cache.present) {
     return 'ready';
   }
@@ -50,9 +47,6 @@ export function statusTone(state: RuntimeStateSummary | null): 'ready' | 'pendin
 }
 
 export function statusLabel(state: RuntimeStateSummary | null): string {
-  if (state?.conflict.present) {
-    return '需要检查冲突';
-  }
   if (state?.cache.present) {
     return '缓存已就绪';
   }
