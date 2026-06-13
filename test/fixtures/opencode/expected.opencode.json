@@ -21,11 +21,16 @@
     "openai": {
       "options": {
         "baseURL": "https://api.openai.com/v1",
-        "apiKey": "sk-test-redacted"
+        "apiKey": "sk-test-visible-openai"
       },
       "models": {
         "gpt-4.1-mini": {
-          "reasoning": true
+          "reasoning": true,
+          "limit": {
+            "context": 1047576,
+            "input": 1047576,
+            "output": 32768
+          }
         }
       },
       "name": "openai"

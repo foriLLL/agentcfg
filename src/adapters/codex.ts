@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import {
   NativeConfigParseError,
   NativeConfigSerializeError,
+  getSelectedProviderConfig,
   parseNativeConfig,
   serializeNativeConfig,
   type CanonicalAgentConfig,
@@ -39,21 +40,22 @@ export function renderCodexConfig(
   config: CanonicalAgentConfig,
   existingConfig: string | NativeConfigObject = {},
 ): RenderCodexConfigResult {
+  const selected = getSelectedProviderConfig(config);
   const nativeConfig = cloneNativeConfigObject(parseExistingCodexToml(existingConfig));
-  const providerConfig = ensureProviderConfig(nativeConfig, config.provider);
-  const envKey = codexEnvKeyForProvider(config.provider);
+  const providerConfig = ensureProviderConfig(nativeConfig, selected.providerId);
+  const envKey = codexEnvKeyForProvider(selected.providerId);
 
-  nativeConfig.model = config.model;
-  nativeConfig.model_provider = config.provider;
-  providerConfig.name ??= config.provider;
-  providerConfig.base_url = config.baseURL;
+  nativeConfig.model = selected.modelId;
+  nativeConfig.model_provider = selected.providerId;
+  providerConfig.name ??= selected.providerId;
+  providerConfig.base_url = selected.provider.baseURL;
   providerConfig.env_key = envKey;
 
   return {
     toml: serializeNativeConfig(nativeConfig, 'toml'),
     envFile: {
       path: resolveCodexEnvPath(),
-      content: `${envKey}=${config.apiKey.value}\n`,
+      content: `${envKey}=${selected.provider.apiKey.value}\n`,
       mode: 0o600,
       envKey,
     },

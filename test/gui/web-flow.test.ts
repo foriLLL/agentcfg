@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { startWebServer } from '../../src/server';
+import type { AgentCfgWebServer } from '../../src/server';
 import { buildGistBody, startFakeGistServer } from '../helpers/fake-gist';
 
 const CHROME_PATH = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -15,12 +15,23 @@ const GITHUB_TOKEN = 'gui-github-token';
 const SAVED_GITHUB_TOKEN_MASK = '************';
 const VALID_AGENTCFG_YAML = [
   'schemaVersion: 1',
-  'provider: openai',
-  'model: gpt-4.1-mini',
-  'baseURL: https://api.openai.com/v1',
-  'apiKey:',
-  '  type: plain',
-  `  value: ${CACHED_SECRET}`,
+  'defaults:',
+  '  provider: openai',
+  '  model: gpt-4.1-mini',
+  'providers:',
+  '  openai:',
+  '    baseURL: https://api.openai.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  `      value: ${CACHED_SECRET}`,
+  '    modelDiscovery:',
+  '      path: /models',
+  '    models:',
+  '      gpt-4.1-mini:',
+  '        variant: chat',
+  '        contextWindow: 1047576',
+  '        contextTokens: 1040000',
+  '        maxTokens: 32768',
   '',
 ].join('\n');
 
@@ -28,35 +39,53 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-flow-'));
   const statePath = join(directory, 'state.json');
   const nativePath = join(directory, 'opencode.jsonc');
+  const codexDirectory = join(directory, 'codex');
+  const codexNativePath = join(codexDirectory, 'input.config.toml');
+  const codexEnvDirectory = join(directory, '.agentcfg', 'env');
+  const codexEnvPath = join(codexEnvDirectory, 'codex.env');
+  const defaultOpenCodeDirectory = join(directory, '.config', 'opencode');
+  const defaultOpenCodePath = join(defaultOpenCodeDirectory, 'opencode.json');
   const browserProfile = join(directory, 'chrome-profile');
   const lastStatePathFile = join(directory, 'last-state-path.json');
   const chromePort = await getFreePort();
-  const fakeGist = await startFakeGistServer([
-    { status: 200, body: [] },
-    { status: 201, etag: 'W/"gui-create-etag"', body: { id: 'gui-gist-id', ...buildGistBody('', 'gui-created-revision') } },
-    { status: 200, etag: 'W/"gui-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-load-revision') },
-    { status: 200, etag: 'W/"gui-reload-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-reload-load-revision') },
-    { status: 200, etag: 'W/"gui-port-change-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-port-change-load-revision') },
-    { status: 200, etag: 'W/"gui-pull-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-revision') },
-  ]);
-  const webServer = await startWebServer({
-    host: '127.0.0.1',
-    port: 0,
-    statePath,
-    assetsDir: resolve(process.cwd(), 'web', 'dist'),
-    env: {
-      ...process.env,
-      AGENTCFG_GIST_API_BASE_URL: fakeGist.apiBaseUrl,
-      AGENTCFG_LAST_STATE_PATH_FILE: lastStatePathFile,
-      GITHUB_TOKEN: '',
-    },
-  });
-  const chrome = launchChrome(chromePort, browserProfile);
+  const previousHome = process.env.HOME;
+  let fakeGist: Awaited<ReturnType<typeof startFakeGistServer>> | undefined;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
   let restartedWebServer: { close(): Promise<void>; url: string } | undefined;
 
   try {
+    process.env.HOME = directory;
+    const { startWebServer } = await import('../../src/server');
+    fakeGist = await startFakeGistServer([
+      { status: 200, body: [] },
+      { status: 201, etag: 'W/"gui-create-etag"', body: { id: 'gui-gist-id', ...buildGistBody('', 'gui-created-revision') } },
+      { status: 200, etag: 'W/"gui-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-load-revision') },
+      { status: 200, etag: 'W/"gui-reload-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-reload-load-revision') },
+      { status: 200, etag: 'W/"gui-port-change-load-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-port-change-load-revision') },
+      { status: 200, etag: 'W/"gui-pull-etag"', body: buildGistBody(VALID_AGENTCFG_YAML, 'gui-revision') },
+    ]);
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: {
+        ...process.env,
+        AGENTCFG_GIST_API_BASE_URL: fakeGist.apiBaseUrl,
+        AGENTCFG_LAST_STATE_PATH_FILE: lastStatePathFile,
+        GITHUB_TOKEN: '',
+      },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    await mkdir(defaultOpenCodeDirectory, { recursive: true });
+    await mkdir(codexDirectory, { recursive: true });
+    await mkdir(codexEnvDirectory, { recursive: true });
+    await writeFile(defaultOpenCodePath, opencodeNativeJson(NATIVE_SECRET));
     await writeFile(nativePath, opencodeNativeJson(NATIVE_SECRET));
-    const cdp = await openCdpPage(chromePort, webServer.url);
+    await writeFile(codexNativePath, codexNativeToml());
+    await writeFile(codexEnvPath, `AGENTCFG_OPENAI_API_KEY=${CACHED_SECRET}\n`);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
 
     try {
       await cdp.send('Page.enable');
@@ -89,28 +118,132 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertSelectorVisible(cdp, '#remote-model');
       await assertSelectorVisible(cdp, '#remote-base-url');
       await assertSelectorVisible(cdp, '#remote-api-key');
+      await assertSelectorVisible(cdp, '#remote-model-discovery-path');
+      await assertSelectorVisible(cdp, '#remote-model-variant');
+      await assertSelectorVisible(cdp, '#remote-model-context-window');
+      await assertSelectorVisible(cdp, '#remote-model-context-tokens');
+      await assertSelectorVisible(cdp, '#remote-model-max-tokens');
+      await assertSelectorVisible(cdp, '#remote-default-provider');
+      await assertSelectorVisible(cdp, '#remote-default-model');
       await assertSelectorVisible(cdp, '#remote-yaml-preview');
       await assertSelectorVisible(cdp, '#remote-schema-preview');
       await assertRemotePreviewLayout(cdp);
       assert.match(await cdp.textContent('#remote-yaml-preview'), /agentcfg.yaml|schemaVersion/);
       const initialSchemaDocs = await cdp.textContent('#remote-schema-preview');
       assert.match(initialSchemaDocs, /schemaVersion/);
-      assert.match(initialSchemaDocs, /apiKey\.type/);
-      assert.match(initialSchemaDocs, /apiKey\.value/);
+      assert.match(initialSchemaDocs, /defaults\.provider/);
+      assert.match(initialSchemaDocs, /providers\.<provider>\.apiKey\.type/);
+      assert.match(initialSchemaDocs, /providers\.<provider>\.apiKey\.value/);
+      assert.match(initialSchemaDocs, /providers\.<provider>\.modelDiscovery\.path/);
+      assert.match(initialSchemaDocs, /providers\.<provider>\.models\.<model>\.contextWindow/);
       assert.match(initialSchemaDocs, /plain/);
       assert.match(initialSchemaDocs, /plaintext provider API key stored in agentcfg\.yaml and written verbatim to target agent configs/);
       assert.equal(initialSchemaDocs.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
+      await assertSchemaReferenceTree(cdp);
       await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.setInputValue('#remote-model', 'gpt-4.1-mini');
       await cdp.setInputValue('#remote-base-url', 'https://api.openai.com/v1');
       await cdp.setInputValue('#remote-api-key', CACHED_SECRET);
+      await cdp.setInputValue('#remote-model-discovery-path', '/models');
+      await cdp.setInputValue('#remote-model-variant', 'chat');
+      await cdp.setInputValue('#remote-model-context-window', '1047576');
+      await cdp.setInputValue('#remote-model-context-tokens', '1040000');
+      await cdp.setInputValue('#remote-model-max-tokens', '32768');
+      await cdp.clickButton('添加 Provider');
+      await cdp.setInputValue('#remote-provider', 'anthropic');
+      await cdp.setInputValue('#remote-base-url', 'https://api.anthropic.com/v1');
+      await cdp.setInputValue('#remote-api-key', 'sk-gui-visible-anthropic');
+      await cdp.setInputValue('#remote-model', 'claude-3-5-sonnet-latest');
+      await cdp.setInputValue('#remote-model-context-window', '200000');
+      await cdp.setInputValue('#remote-model-context-tokens', '180000');
+      await cdp.setInputValue('#remote-model-max-tokens', '8192');
+      await cdp.clickButton('添加 Model');
+      await cdp.setInputValue('#remote-model', 'claude-3-haiku');
+      await cdp.setInputValue('#remote-model', 'claude-3-5-sonnet-latest');
+      await cdp.waitForText('Model ID 已存在');
+      await cdp.waitForFunction('document.querySelector("#remote-model") instanceof HTMLInputElement && document.querySelector("#remote-model").value === "claude-3-haiku"');
+      const yamlPreviewAfterDuplicateModel = await cdp.textContent('#remote-yaml-preview');
+      assert.match(yamlPreviewAfterDuplicateModel, /claude-3-5-sonnet-latest/);
+      assert.match(yamlPreviewAfterDuplicateModel, /"claude-3-haiku": \{\}/);
+      assert.match(yamlPreviewAfterDuplicateModel, /contextWindow: 200000/);
+      await cdp.setInputValue('#remote-provider', 'openai');
+      await cdp.waitForText('Provider ID 已存在');
+      await cdp.waitForFunction('document.querySelector("#remote-provider") instanceof HTMLInputElement && document.querySelector("#remote-provider").value === "anthropic"');
+      const yamlPreviewAfterDuplicateProvider = await cdp.textContent('#remote-yaml-preview');
+      assert.match(yamlPreviewAfterDuplicateProvider, /openai/);
+      assert.match(yamlPreviewAfterDuplicateProvider, /anthropic/);
+      assert.equal(yamlPreviewAfterDuplicateProvider.includes(CACHED_SECRET), true, 'duplicate provider rename dropped the existing openai API key');
+      assert.equal(yamlPreviewAfterDuplicateProvider.includes('sk-gui-visible-anthropic'), true, 'duplicate provider rename dropped the current anthropic API key');
+      await cdp.selectValue('#remote-default-provider', 'openai');
+      await cdp.selectValue('#remote-default-model', 'gpt-4.1-mini');
       const yamlPreviewWithSecretInput = await cdp.textContent('#remote-yaml-preview');
+      assert.match(yamlPreviewWithSecretInput, /defaults:/);
+      assert.match(yamlPreviewWithSecretInput, /providers:/);
+      assert.match(yamlPreviewWithSecretInput, /openai/);
+      assert.match(yamlPreviewWithSecretInput, /anthropic/);
+      assert.match(yamlPreviewWithSecretInput, /models:/);
+      assert.match(yamlPreviewWithSecretInput, /gpt-4\.1-mini/);
+      assert.match(yamlPreviewWithSecretInput, /claude-3-5-sonnet-latest/);
+      assert.match(yamlPreviewWithSecretInput, /"claude-3-haiku": \{\}/);
+      assert.match(yamlPreviewWithSecretInput, /contextWindow: 200000/);
       assert.equal(yamlPreviewWithSecretInput.includes(CACHED_SECRET), true, 'raw YAML preview did not show the edited API key');
+      assert.equal(yamlPreviewWithSecretInput.includes('sk-gui-visible-anthropic'), true, 'raw YAML preview did not show the non-selected provider API key');
       const schemaDocsWithSecretInput = await cdp.textContent('#remote-schema-preview');
       assert.equal(schemaDocsWithSecretInput.includes(CACHED_SECRET), false, 'schema docs exposed the edited provider API key');
       assert.doesNotMatch(schemaDocsWithSecretInput, /当前/);
       await cdp.clickButton('保存远端配置');
       await cdp.waitForText('远端配置已保存');
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/save'), {
+        statePath,
+        config: {
+          schemaVersion: 1,
+          defaults: {
+            provider: 'openai',
+            model: 'gpt-4.1-mini',
+          },
+          providers: {
+            openai: {
+              baseURL: 'https://api.openai.com/v1',
+              apiKey: {
+                type: 'plain',
+                value: CACHED_SECRET,
+              },
+              modelDiscovery: {
+                path: '/models',
+              },
+              models: {
+                'gpt-4.1-mini': {
+                  variant: 'chat',
+                  contextWindow: 1047576,
+                  contextTokens: 1040000,
+                  maxTokens: 32768,
+                },
+              },
+            },
+            anthropic: {
+              baseURL: 'https://api.anthropic.com/v1',
+              apiKey: {
+                type: 'plain',
+                value: 'sk-gui-visible-anthropic',
+              },
+              models: {
+                'claude-3-5-sonnet-latest': {
+                  contextWindow: 200000,
+                  contextTokens: 180000,
+                  maxTokens: 8192,
+                },
+                'claude-3-haiku': {},
+              },
+            },
+          },
+        },
+      });
+      const remoteSaveBody = await lastRecordedJsonBody(cdp, '/api/remote/save');
+      const remoteSaveConfig = remoteSaveBody.config as Record<string, unknown>;
+      assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'provider'), false, 'remote save payload reintroduced flat provider');
+      assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'model'), false, 'remote save payload reintroduced flat model');
+      assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'baseURL'), false, 'remote save payload reintroduced flat baseURL');
+      assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'apiKey'), false, 'remote save payload reintroduced flat apiKey');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the saved value after save');
       assert.equal((await cdp.bodyText()).includes(CACHED_SECRET), true, 'post-save DOM did not show provider API key');
       await assertDomHasNoGitHubToken(cdp, 'post-remote-save DOM');
@@ -149,17 +282,16 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-reload DOM');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-reload browser storage');
       assert.equal((await firstRecordedFetchUrl(cdp, '/api/state')), '/api/state');
-      await cdp.installFetchRecorder();
       await cdp.clickButton('远端配置');
-      await cdp.clickButton('加载远端配置');
-      await cdp.waitForText('远端配置已加载');
-      assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after reload and load');
-      await assertDomHasNoGitHubToken(cdp, 'post-reload-remote-load DOM');
+      await cdp.waitForText('远端配置已自动刷新');
+      assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after reload');
+      await assertDomHasNoGitHubToken(cdp, 'post-reload-remote-auto-refresh DOM');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
       restartedWebServer = await startWebServer({
         host: '127.0.0.1',
         port: 0,
+        statePath,
         assetsDir: resolve(process.cwd(), 'web', 'dist'),
         env: {
           ...process.env,
@@ -181,10 +313,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await firstRecordedFetchUrl(cdp, '/api/state'), '/api/state');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-port-change browser storage');
       await cdp.clickButton('远端配置');
-      await cdp.clickButton('加载远端配置');
-      await cdp.waitForText('远端配置已加载');
-      assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after port-change navigation');
-      await assertDomHasNoGitHubToken(cdp, 'post-port-change-remote-load DOM');
+      await cdp.waitForText('远端配置已自动刷新');
+      assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after port-change navigation');
+      await assertDomHasNoGitHubToken(cdp, 'post-port-change-remote-auto-refresh DOM');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
       const stateAfterSave = await readFile(statePath, 'utf8');
@@ -217,6 +348,22 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(stateAfterTokenClear.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after token clear');
 
       await cdp.clickButton('配置文件');
+      await cdp.waitForText('OpenCode');
+      await cdp.waitForText('Claude Code');
+      await cdp.waitForFunction(`(() => {
+        const codex = document.querySelector('input[name="config-target-mode"][value="codex"]');
+        const opencode = document.querySelector('input[name="config-target-mode"][value="opencode"]');
+        const claude = document.querySelector('input[name="config-target-mode"][value="claude"]');
+        return codex instanceof HTMLInputElement
+          && opencode instanceof HTMLInputElement
+          && claude instanceof HTMLInputElement
+          && codex.disabled
+          && !opencode.disabled
+          && claude.disabled;
+      })()`);
+      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="codex"]'), true, 'Codex config target was not disabled when its config was missing');
+      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="opencode"]'), false, 'OpenCode config target was disabled even though its config existed');
+      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
       await assertConfigEditorLayout(cdp);
       await cdp.setInputValue('#config-path-editor', nativePath);
@@ -285,16 +432,84 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const nativeAfterApply = await readFile(nativePath, 'utf8');
       assert.equal(nativeAfterApply.includes(CACHED_SECRET), true);
       assert.equal(nativeAfterApply.includes(NATIVE_SECRET), false);
+
+      const codexDiffApi = JSON.parse(await postJsonText(webServer.url, '/api/diff', { statePath, agent: 'codex', configPath: codexNativePath })) as CodexNoticeApiEnvelope;
+      assert.equal(codexDiffApi.ok, true, 'Codex diff API response failed');
+      assert.deepEqual(codexDiffApi.data.results[0]?.changes, [], 'Codex diff notices affected change rows');
+      assertCodexNoticePayload(codexDiffApi.data.results[0]?.notices, 'Codex diff API notices');
+      const codexPlanApi = JSON.parse(await postJsonText(webServer.url, '/api/apply/plan', { statePath, agent: 'codex', configPath: codexNativePath })) as CodexNoticeApiEnvelope;
+      assert.equal(codexPlanApi.ok, true, 'Codex plan API response failed');
+      assert.equal(codexPlanApi.data.plans?.[0]?.operationCount, 0, 'Codex plan notices affected operation count');
+      assert.equal(codexPlanApi.data.results[0]?.status, 'unchanged', 'Codex plan notices affected status');
+      assertCodexNoticePayload(codexPlanApi.data.plans?.[0]?.notices, 'Codex plan API notices');
+      assertCodexNoticePayload(codexPlanApi.data.results[0]?.notices, 'Codex dry-run result API notices');
+      const codexApplyApi = JSON.parse(await postJsonText(webServer.url, '/api/apply', { statePath, agent: 'codex', configPath: codexNativePath, confirm: 'APPLY' })) as CodexNoticeApiEnvelope;
+      assert.equal(codexApplyApi.ok, true, 'Codex apply API response failed');
+      assert.equal(codexApplyApi.data.results[0]?.status, 'unchanged', 'Codex apply notices affected status');
+      assertCodexNoticePayload(codexApplyApi.data.results[0]?.notices, 'Codex apply API notices');
+      assertNoGitHubToken(JSON.stringify(codexDiffApi), 'Codex diff API response');
+      assertNoGitHubToken(JSON.stringify(codexPlanApi), 'Codex dry-run API response');
+      assertNoGitHubToken(JSON.stringify(codexApplyApi), 'Codex apply API response');
+
+      await cdp.clickSelector('input[name="target-mode"][value="codex"]');
+      await cdp.setInputValue('#config-path', codexNativePath);
+      await cdp.waitForFunction(`(() => {
+        const target = document.querySelector('input[name="target-mode"][value="codex"]');
+        const pathInput = document.querySelector('#config-path');
+        return target instanceof HTMLInputElement
+          && target.checked
+          && pathInput instanceof HTMLInputElement
+          && pathInput.value === ${JSON.stringify(codexNativePath)};
+      })()`);
+      const diffRequestCountBeforeCodex = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/diff').length;
+      assert.equal(await cdp.clickButton('运行 diff'), true, 'Codex diff button was not clickable');
+      await cdp.waitForFunction(`(() => {
+        const requests = window.__agentcfgFetchBodies ?? [];
+        return requests.filter((request) => request.url === '/api/diff').length > ${diffRequestCountBeforeCodex};
+      })()`);
+      assert.equal((await lastRecordedJsonBody(cdp, '/api/diff')).agent, 'codex', 'Codex UI diff did not target Codex');
+      await cdp.waitForText('Limit Context');
+      await cdp.waitForText('Limit Input');
+      await cdp.waitForText('Limit Output');
+      await cdp.waitForText('unsupported-native-mapping');
+      await cdp.waitForText('Codex has no official native mapping for contextWindow');
+      assert.equal((await cdp.bodyText()).includes('未变化'), true, 'Codex notice-only diff did not remain unchanged');
+      await assertDomHasNoGitHubToken(cdp, 'post-Codex-diff DOM');
+
+      assert.equal(await cdp.clickButton('执行 dry-run'), true, 'Codex dry-run button was not clickable');
+      await cdp.waitForText('Dry-run 完成');
+      await cdp.waitForText('0 项操作');
+      await cdp.waitForText('Codex has no official native mapping for contextTokens');
+      assert.equal((await cdp.bodyText()).includes('不会更改任何文件。'), true, 'Codex notice-only dry-run did not keep zero operations');
+      await assertDomHasNoGitHubToken(cdp, 'post-Codex-dry-run DOM');
+
+      await cdp.setInputValue('#apply-confirmation', 'APPLY');
+      assert.equal(await cdp.clickButton('应用所选目标'), true, 'Codex apply button was not clickable');
+      await cdp.waitForText('应用完成');
+      await cdp.waitForText('Codex has no official native mapping for maxTokens');
+      assert.equal((await cdp.bodyText()).includes('无变化'), true, 'Codex notice-only apply did not remain unchanged');
+      await cdp.waitForFunction('document.querySelectorAll(".managed-notice-list").length >= 3');
+      await assertDomHasNoGitHubToken(cdp, 'post-Codex-apply DOM');
+      assert.equal(await readFile(codexNativePath, 'utf8'), codexNativeToml(), 'Codex apply wrote unsupported metadata to native config');
+      assert.equal(await readFile(codexEnvPath, 'utf8'), `AGENTCFG_OPENAI_API_KEY=${CACHED_SECRET}\n`, 'Codex apply rewrote unchanged env config');
+
       await assertNoFixtureRootInUiRequests(cdp);
     } finally {
       await cdp.close();
     }
   } finally {
-    chrome.kill('SIGTERM');
-    await waitForProcessExit(chrome);
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
     await restartedWebServer?.close();
-    await webServer.close();
-    await fakeGist.close();
+    await webServer?.close();
+    await fakeGist?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
     await rm(directory, { force: true, recursive: true });
   }
 });
@@ -316,6 +531,27 @@ type CdpWebSocket = {
 type PendingCdpCommand = {
   resolve(value: unknown): void;
   reject(error: Error): void;
+};
+
+type CodexNoticeApiEnvelope = {
+  ok: true;
+  data: {
+    results: Array<{
+      changes?: unknown[];
+      notices?: CodexNotice[];
+      status?: string;
+    }>;
+    plans?: Array<{
+      notices?: CodexNotice[];
+      operationCount?: number;
+    }>;
+  };
+};
+
+type CodexNotice = {
+  field: string;
+  code: string;
+  message: string;
 };
 
 class CdpPage {
@@ -415,6 +651,18 @@ class CdpPage {
     })()`);
   }
 
+  selectValue(selector: string, value: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const select = document.querySelector(${JSON.stringify(selector)});
+      if (!(select instanceof HTMLSelectElement)) return false;
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      descriptor?.set?.call(select, ${JSON.stringify(value)});
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+  }
+
   submitForm(selector: string): Promise<boolean> {
     return this.evaluate<boolean>(`(() => {
       const form = document.querySelector(${JSON.stringify(selector)});
@@ -448,6 +696,13 @@ class CdpPage {
       const buttons = Array.from(document.querySelectorAll('button'));
       const button = buttons.find((candidate) => candidate.textContent?.includes(${JSON.stringify(text)}));
       return button instanceof HTMLButtonElement && button.disabled;
+    })()`);
+  }
+
+  inputDisabled(selector: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const input = document.querySelector(${JSON.stringify(selector)});
+      return input instanceof HTMLInputElement && input.disabled;
     })()`);
   }
 
@@ -529,7 +784,14 @@ function connectWebSocket(url: string): Promise<CdpWebSocket> {
   });
 }
 
-function launchChrome(port: number, userDataDir: string): ChildProcessWithoutNullStreams {
+function launchChrome(port: number, userDataDir: string, home: string | undefined = process.env.HOME): ChildProcessWithoutNullStreams {
+  const env = { ...process.env };
+  if (home === undefined) {
+    delete env.HOME;
+  } else {
+    env.HOME = home;
+  }
+
   return spawn(CHROME_PATH, [
     '--headless=new',
     '--disable-background-networking',
@@ -540,7 +802,7 @@ function launchChrome(port: number, userDataDir: string): ChildProcessWithoutNul
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-  ]);
+  ], { env });
 }
 
 async function waitForProcessExit(childProcess: ChildProcessWithoutNullStreams): Promise<void> {
@@ -590,7 +852,7 @@ async function getFreePort(): Promise<number> {
 }
 
 async function requestText(baseUrl: string, path: string): Promise<string> {
-  const response = await fetch(`${baseUrl}${path}`);
+  const response = await fetch(`${baseUrl}${path}`, { signal: AbortSignal.timeout(10000) });
   assert.equal(response.ok, true);
   return response.text();
 }
@@ -600,6 +862,7 @@ async function postJsonText(baseUrl: string, path: string, body: Record<string, 
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000),
   });
   assert.equal(response.ok, true);
   return response.text();
@@ -714,6 +977,59 @@ async function assertRemotePreviewLayout(cdp: CdpPage): Promise<void> {
   assert.equal(preview.schemaHeight > 0, true, 'remote schema preview was not visible');
   assert.equal(preview.contained, true, `remote preview block visibly overflowed its card: ${preview.details.join(', ')}`);
   assert.equal(preview.overflowReady, true, 'remote preview block was not configured for internal scrolling');
+}
+
+async function assertSchemaReferenceTree(cdp: CdpPage): Promise<void> {
+  const tree = await cdp.evaluate<{
+    treePresent: boolean;
+    flatFieldCount: number;
+    paths: string[];
+    providerContainsApiKey: boolean;
+    modelContainsContextWindow: boolean;
+    providerOpenedAfterSummaryClick: boolean;
+    metadataText: string;
+  }>(`(() => {
+    const preview = document.querySelector('#remote-schema-preview');
+    const nodes = Array.from(preview?.querySelectorAll('details.schema-docs__node') ?? []);
+    const pathFor = (node) => node instanceof HTMLElement ? node.dataset.schemaPath ?? '' : '';
+    const byPath = (path) => nodes.find((node) => pathFor(node) === path);
+    const providerNode = byPath('providers.<provider>');
+    if (providerNode instanceof HTMLDetailsElement) {
+      providerNode.open = false;
+      providerNode.querySelector('summary')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+    return {
+      treePresent: preview?.querySelector('.schema-docs__tree') !== null,
+      flatFieldCount: preview?.querySelectorAll('.schema-docs__field').length ?? 0,
+      paths: nodes.map(pathFor),
+      providerContainsApiKey: byPath('providers.<provider>.apiKey')?.parentElement?.closest('details[data-schema-path="providers.<provider>"]') !== null,
+      modelContainsContextWindow: byPath('providers.<provider>.models.<model>.contextWindow')?.parentElement?.closest('details[data-schema-path="providers.<provider>.models.<model>"]') !== null,
+      providerOpenedAfterSummaryClick: providerNode instanceof HTMLDetailsElement && providerNode.open,
+      metadataText: preview?.textContent ?? '',
+    };
+  })()`);
+
+  assert.equal(tree.treePresent, true, 'schema reference did not render a tree root');
+  assert.equal(tree.flatFieldCount, 0, 'schema reference still rendered one flat card per field');
+  for (const path of [
+    'schemaVersion',
+    'defaults',
+    'defaults.provider',
+    'providers',
+    'providers.<provider>',
+    'providers.<provider>.apiKey',
+    'providers.<provider>.apiKey.type',
+    'providers.<provider>.models.<model>',
+    'providers.<provider>.models.<model>.contextWindow',
+  ]) {
+    assert.ok(tree.paths.includes(path), `missing schema tree node: ${path}`);
+  }
+  assert.equal(tree.providerContainsApiKey, true, 'provider API key node was not nested under provider config');
+  assert.equal(tree.modelContainsContextWindow, true, 'contextWindow node was not nested under model config');
+  assert.equal(tree.providerOpenedAfterSummaryClick, true, 'schema tree provider node did not expand from its summary');
+  assert.match(tree.metadataText, /required/);
+  assert.match(tree.metadataText, /optional/);
+  assert.match(tree.metadataText, /Type:/);
 }
 
 async function assertConfigEditorLayout(cdp: CdpPage, label = 'desktop', expectTabViewportScroll = false): Promise<void> {
@@ -919,12 +1235,39 @@ async function lastRecordedJsonBody(cdp: CdpPage, url: string): Promise<Record<s
   return JSON.parse(body ?? '{}') as Record<string, unknown>;
 }
 
+function assertCodexNoticePayload(notices: CodexNotice[] | undefined, label: string): void {
+  assert.deepEqual(
+    notices?.map((notice) => [notice.field, notice.code]),
+    [
+      ['contextWindow', 'unsupported-native-mapping'],
+      ['contextTokens', 'unsupported-native-mapping'],
+      ['maxTokens', 'unsupported-native-mapping'],
+    ],
+    label,
+  );
+  for (const field of ['contextWindow', 'contextTokens', 'maxTokens']) {
+    assert.equal(notices?.some((notice) => notice.field === field && notice.message.includes(field)), true, `${label} missing ${field} message`);
+  }
+}
+
 function assertNoGitHubToken(text: string, label: string): void {
   assert.equal(text.includes(GITHUB_TOKEN), false, `${label} exposed the GitHub Token`);
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+function codexNativeToml(): string {
+  return [
+    'model = "gpt-4.1-mini"',
+    'model_provider = "openai"',
+    '',
+    '[model_providers.openai]',
+    'base_url = "https://api.openai.com/v1"',
+    'env_key = "AGENTCFG_OPENAI_API_KEY"',
+    '',
+  ].join('\n');
 }
 
 function opencodeNativeJson(apiKey: string): string {

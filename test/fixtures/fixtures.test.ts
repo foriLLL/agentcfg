@@ -15,12 +15,21 @@ test('Codex fixture renders expected TOML and env payload', () => {
   const fixtureDirectory = resolve(process.cwd(), 'test/fixtures/codex');
   const canonicalConfig: CanonicalAgentConfig = {
     schemaVersion: 1,
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    baseURL: 'https://api.openai.com/v1',
-    apiKey: {
-      type: 'plain',
-      value: 'sk-test-redacted',
+    defaults: {
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+    },
+    providers: {
+      openai: {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: 'sk-test-redacted',
+        },
+        models: {
+          'gpt-4.1-mini': {},
+        },
+      },
     },
   };
 

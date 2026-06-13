@@ -17,7 +17,7 @@ export type Step = {
   state: StepState;
 };
 
-export const MANAGED_FIELDS: ManagedField[] = ['provider', 'model', 'baseURL', 'apiKey'];
+export const MANAGED_FIELDS: ManagedField[] = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'];
 
 export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
   return [
@@ -81,27 +81,43 @@ export function formatDate(value: string | undefined): string {
 export function configToDraft(config: AgentConfig): EditableAgentConfig {
   return {
     schemaVersion: config.schemaVersion,
-    provider: config.provider,
-    model: config.model,
-    baseURL: config.baseURL,
-    apiKey: {
-      type: 'plain',
-      value: config.apiKey.value,
-    },
+    defaults: { ...config.defaults },
+    providers: cloneProviders(config.providers),
   };
 }
 
 export function buildRemoteYamlPreview(config: EditableAgentConfig): string {
-  return [
+  const lines = [
     `schemaVersion: ${config.schemaVersion}`,
-    `provider: ${yamlScalar(config.provider)}`,
-    `model: ${yamlScalar(config.model)}`,
-    `baseURL: ${yamlScalar(config.baseURL)}`,
-    'apiKey:',
-    `  type: ${yamlScalar(config.apiKey.type)}`,
-    `  value: ${yamlScalar(config.apiKey.value)}`,
-    '',
-  ].join('\n');
+    'defaults:',
+    `  provider: ${yamlScalar(config.defaults.provider)}`,
+    `  model: ${yamlScalar(config.defaults.model)}`,
+    'providers:',
+  ];
+
+  for (const [providerId, provider] of Object.entries(config.providers)) {
+    lines.push(
+      `  ${yamlScalar(providerId)}:`,
+      `    baseURL: ${yamlScalar(provider.baseURL)}`,
+      '    apiKey:',
+      `      type: ${yamlScalar(provider.apiKey.type)}`,
+      `      value: ${yamlScalar(provider.apiKey.value)}`,
+    );
+
+    if (provider.modelDiscovery !== undefined) {
+      lines.push('    modelDiscovery:', `      path: ${yamlScalar(provider.modelDiscovery.path)}`);
+    }
+
+    lines.push('    models:');
+
+    for (const [modelId, model] of Object.entries(provider.models)) {
+      lines.push(`      ${yamlScalar(modelId)}:${modelLines(model)}`);
+    }
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
 }
 
 export function formatError(error: unknown): string {
@@ -161,10 +177,22 @@ export function fieldLabel(field: ManagedField): string {
   if (field === 'model') {
     return '模型';
   }
+  if (field === 'contextWindow') {
+    return 'Limit Context';
+  }
+  if (field === 'contextTokens') {
+    return 'Limit Input';
+  }
+  if (field === 'maxTokens') {
+    return 'Limit Output';
+  }
   return field;
 }
 
 export function agentLabel(agent: AgentName): string {
+  if (agent === 'claude') {
+    return 'Claude Code';
+  }
   if (agent === 'opencode') {
     return 'OpenCode';
   }
@@ -187,6 +215,59 @@ function yamlScalar(value: string): string {
     return '""';
   }
   return JSON.stringify(value);
+}
+
+function cloneProviders(providers: AgentConfig['providers']): EditableAgentConfig['providers'] {
+  const draftProviders: EditableAgentConfig['providers'] = {};
+
+  for (const [providerId, provider] of Object.entries(providers)) {
+    const models: EditableAgentConfig['providers'][string]['models'] = {};
+
+    for (const [modelId, model] of Object.entries(provider.models)) {
+      models[modelId] = { ...model };
+    }
+
+    draftProviders[providerId] = {
+      baseURL: provider.baseURL,
+      apiKey: {
+        type: 'plain',
+        value: provider.apiKey.value,
+      },
+      models,
+    };
+
+    if (provider.modelDiscovery !== undefined) {
+      draftProviders[providerId].modelDiscovery = { path: provider.modelDiscovery.path };
+    }
+  }
+
+  return draftProviders;
+}
+
+function modelLines(model: EditableAgentConfig['providers'][string]['models'][string]): string {
+  const lines: string[] = [];
+
+  if (model.variant !== undefined) {
+    lines.push(`        variant: ${yamlScalar(model.variant)}`);
+  }
+
+  if (model.contextWindow !== undefined) {
+    lines.push(`        contextWindow: ${model.contextWindow}`);
+  }
+
+  if (model.contextTokens !== undefined) {
+    lines.push(`        contextTokens: ${model.contextTokens}`);
+  }
+
+  if (model.maxTokens !== undefined) {
+    lines.push(`        maxTokens: ${model.maxTokens}`);
+  }
+
+  if (lines.length === 0) {
+    return ' {}';
+  }
+
+  return `\n${lines.join('\n')}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

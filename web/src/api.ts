@@ -1,23 +1,37 @@
 export type AgentConfig = {
   schemaVersion: 1;
-  provider: string;
-  model: string;
-  baseURL: string;
-  apiKey: {
-    type: 'plain';
-    value: string;
-  };
+  defaults: AgentConfigDefaults;
+  providers: Record<string, ProviderConfig>;
 };
 
 export type EditableAgentConfig = {
   schemaVersion: 1;
+  defaults: AgentConfigDefaults;
+  providers: Record<string, ProviderConfig>;
+};
+
+export type AgentConfigDefaults = {
   provider: string;
   model: string;
+};
+
+export type ProviderConfig = {
   baseURL: string;
   apiKey: {
     type: 'plain';
     value: string;
   };
+  modelDiscovery?: {
+    path: string;
+  };
+  models: Record<string, ModelConfig>;
+};
+
+export type ModelConfig = {
+  variant?: string;
+  contextWindow?: number;
+  contextTokens?: number;
+  maxTokens?: number;
 };
 
 export type RemoteRevisionMetadata = {
@@ -50,9 +64,9 @@ export type RuntimeStateSummary = {
   };
 };
 
-export type AgentName = 'codex' | 'opencode' | 'openclaw';
+export type AgentName = 'codex' | 'opencode' | 'openclaw' | 'claude';
 
-export type ManagedField = 'provider' | 'model' | 'baseURL' | 'apiKey';
+export type ManagedField = 'provider' | 'model' | 'baseURL' | 'apiKey' | 'contextWindow' | 'contextTokens' | 'maxTokens';
 
 export type ManagedDiffChange = {
   field: ManagedField;
@@ -61,9 +75,16 @@ export type ManagedDiffChange = {
   secret: boolean;
 };
 
+export type ManagedDiffNotice = {
+  field: ManagedField;
+  code: 'unsupported-native-mapping';
+  message: string;
+};
+
 export type AgentDiffResult = {
   agent: AgentName;
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
 };
 
 export type RuntimeTargetRequest = {
@@ -86,6 +107,7 @@ export type ApplyAgentResult = {
   envPath?: string;
   status: ApplyAgentStatus;
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
   backups: string[];
   error?: string;
 };
@@ -95,6 +117,7 @@ export type ApplyPlanSummary = {
   configPath: string;
   envPath?: string;
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
   operationCount: number;
   operationPaths: string[];
   filePreviews: ApplyFilePreview[];
@@ -124,6 +147,20 @@ export type ConfigFileRuntimeResponse = {
   content: string;
   updatedAt?: string;
   backupPath?: string;
+};
+
+export type ConfigAvailabilityEntry = {
+  agent: AgentName;
+  available: boolean;
+  status: 'available' | 'missing' | 'ambiguous';
+  path?: string;
+  format?: 'json' | 'jsonc' | 'json5' | 'toml';
+  updatedAt?: string;
+  reason?: string;
+};
+
+export type ConfigAvailabilityRuntimeResponse = {
+  agents: ConfigAvailabilityEntry[];
 };
 
 export type RuntimeErrorBody = {
@@ -255,6 +292,15 @@ export async function getConfigFileRuntime(request: { statePath?: string; agent:
     params.set('configPath', request.configPath);
   }
   return requestJson<ConfigFileRuntimeResponse>(`/api/config/file?${params.toString()}`);
+}
+
+export async function getConfigAvailabilityRuntime(request: { statePath?: string } = {}): Promise<ConfigAvailabilityRuntimeResponse> {
+  const params = new URLSearchParams();
+  if (request.statePath !== undefined && request.statePath.trim() !== '') {
+    params.set('statePath', request.statePath);
+  }
+  const query = params.toString();
+  return requestJson<ConfigAvailabilityRuntimeResponse>(`/api/config/availability${query === '' ? '' : `?${query}`}`);
 }
 
 export async function saveConfigFileRuntime(request: { statePath?: string; agent: AgentName; configPath?: string; content: string }): Promise<ConfigFileRuntimeResponse> {

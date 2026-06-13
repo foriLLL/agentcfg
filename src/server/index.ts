@@ -7,6 +7,8 @@ import {
   applyRuntime,
   clearSavedGitHubTokenRuntime,
   diffRuntime,
+  discoverProviderModelsRuntime,
+  getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
   initRuntime,
@@ -18,8 +20,10 @@ import {
   setupRemoteConfigRuntime,
   type ApplyRuntimeResponse,
   type ClearSavedGitHubTokenRuntimeResponse,
+  type ConfigAvailabilityRuntimeResponse,
   type ConfigFileRuntimeResponse,
   type DiffRuntimeResponse,
+  type DiscoverProviderModelsRuntimeResponse,
   type GetRuntimeStateResponse,
   type InitRuntimeResponse,
   type LoadRemoteConfigRuntimeResponse,
@@ -77,6 +81,8 @@ type ApiHandlerResult =
   | LoadRemoteConfigRuntimeResponse
   | SaveRemoteConfigRuntimeResponse
   | ClearSavedGitHubTokenRuntimeResponse
+  | DiscoverProviderModelsRuntimeResponse
+  | ConfigAvailabilityRuntimeResponse
   | DiffRuntimeResponse
   | PlanApplyRuntimeResponse
   | ApplyRuntimeResponse
@@ -237,23 +243,31 @@ async function dispatchApiRequest(
     return clearSavedGitHubTokenRuntime(await readRuntimeRequest(request, options));
   }
 
+  if (requestUrl.pathname === '/api/provider/models') {
+    assertMethod(request, ['POST']);
+    return discoverProviderModelsRuntime(await readRuntimeRequest(request, options));
+  }
+
   if (requestUrl.pathname === '/api/diff') {
     assertMethod(request, ['POST']);
-    return diffRuntime(await readRuntimeRequest(request, options));
+    return diffRuntime(rejectFixturesRoot(await readRuntimeRequest(request, options)));
   }
 
   if (requestUrl.pathname === '/api/apply/plan') {
     assertMethod(request, ['POST']);
-    return planApplyRuntime(await readRuntimeRequest(request, options));
+    return planApplyRuntime(rejectFixturesRoot(await readRuntimeRequest(request, options)));
   }
 
   if (requestUrl.pathname === '/api/apply') {
     assertMethod(request, ['POST']);
-    return applyRuntime(await readRuntimeRequest(request, options));
+    return applyRuntime(rejectFixturesRoot(await readRuntimeRequest(request, options)));
   }
 
   if (requestUrl.pathname === '/api/config/file') {
     if (request.method === 'GET') {
+      if (requestUrl.searchParams.has('fixturesRoot')) {
+        throw new RuntimeApiError('invalid-request', 'fixturesRoot is not accepted by the web API.');
+      }
       return getConfigFileRuntime({
         statePath: await resolveDefaultStatePath(
           requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
@@ -264,7 +278,21 @@ async function dispatchApiRequest(
       });
     }
     assertMethod(request, ['POST']);
-    return saveConfigFileRuntime(await readRuntimeRequest(request, options));
+    return saveConfigFileRuntime(rejectFixturesRoot(await readRuntimeRequest(request, options)));
+  }
+
+  if (requestUrl.pathname === '/api/config/availability') {
+    assertMethod(request, ['GET']);
+    if (requestUrl.searchParams.has('fixturesRoot')) {
+      throw new RuntimeApiError('invalid-request', 'fixturesRoot is not accepted by the web API.');
+    }
+    return getConfigAvailabilityRuntime({
+      statePath: await resolveDefaultStatePath(
+        requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
+        options,
+      ),
+      configPath: stringOrUndefined(requestUrl.searchParams.get('configPath')),
+    });
   }
 
   throw new NotFoundError(`No API endpoint found for ${requestUrl.pathname}`);
@@ -285,6 +313,13 @@ function gistRuntimeOptions(options: RuntimeDispatchOptions): { gistOptions: { a
 
 function stringOrUndefined(value: string | null): string | undefined {
   return value === null || value.trim() === '' ? undefined : value;
+}
+
+function rejectFixturesRoot<T extends JsonRecord>(request: T): T {
+  if (request.fixturesRoot !== undefined) {
+    throw new RuntimeApiError('invalid-request', 'fixturesRoot is not accepted by the web API.');
+  }
+  return request;
 }
 
 async function withDefaultStatePath<T extends JsonRecord>(
@@ -463,6 +498,9 @@ function sendText(response: ServerResponse, statusCode: number, message: string)
 
 function statusForRuntimeError(error: RuntimeApiError): number {
   if (error.code === 'gist-error') {
+    return 502;
+  }
+  if (error.code === 'provider-error') {
     return 502;
   }
   return 400;

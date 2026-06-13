@@ -9,11 +9,14 @@ if (!configPath || !canonicalPath) {
 
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const canonical = JSON.parse(fs.readFileSync(canonicalPath, 'utf8'));
-const provider = config.provider?.[canonical.provider];
+const providerId = canonical.defaults.provider;
+const modelId = canonical.defaults.model;
+const providerConfig = canonical.providers[providerId];
+const provider = config.provider?.[providerId];
 
-assert.equal(config.model, `${canonical.provider}/${canonical.model}`);
-assert.equal(provider?.name, canonical.provider);
-assert.equal(provider?.options?.baseURL, canonical.baseURL);
-assert.equal(provider?.options?.apiKey, canonical.apiKey.value);
+assert.equal(config.model, `${providerId}/${modelId}`);
+assert.equal(provider?.name, providerId);
+assert.equal(provider?.options?.baseURL, providerConfig.baseURL);
+assert.equal(provider?.options?.apiKey, providerConfig.apiKey.value);
 assert.equal(config.theme, 'system');
 assert.deepEqual(config.tools, { bash: true });

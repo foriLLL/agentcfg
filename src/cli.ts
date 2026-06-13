@@ -170,7 +170,7 @@ function parseDiffArgs(args: string[]): ParsedDiffArgs {
     if (arg === '--agent') {
       const agent = readOptionValue(args, index, '--agent');
       if (!isAdapterName(agent)) {
-        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, or openclaw`);
+        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, openclaw, or claude`);
       }
       parsed.agent = agent;
       index += 1;
@@ -209,7 +209,7 @@ function parseApplyArgs(args: string[]): ParsedApplyArgs {
     if (arg === '--agent') {
       const agent = readOptionValue(args, index, '--agent');
       if (!isAdapterName(agent)) {
-        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, or openclaw`);
+        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, openclaw, or claude`);
       }
       parsed.agent = agent;
       index += 1;

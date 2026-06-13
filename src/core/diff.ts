@@ -1,4 +1,4 @@
-export const MANAGED_DIFF_FIELDS = ['provider', 'model', 'baseURL', 'apiKey'] as const;
+export const MANAGED_DIFF_FIELDS = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'] as const;
 
 export type ManagedDiffField = (typeof MANAGED_DIFF_FIELDS)[number];
 
@@ -11,9 +11,16 @@ export type ManagedDiffChange = {
   secret: boolean;
 };
 
+export type ManagedDiffNotice = {
+  field: ManagedDiffField;
+  code: 'unsupported-native-mapping';
+  message: string;
+};
+
 export type AgentDiffResult = {
   agent: string;
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
 };
 
 export class DiffError extends Error {
@@ -42,6 +49,28 @@ export function diffManagedSnapshots(current: ManagedDiffSnapshot, expected: Man
   return changes;
 }
 
+export function unsupportedCodexManagedFieldNotices(model: {
+  contextWindow?: number;
+  contextTokens?: number;
+  maxTokens?: number;
+}): ManagedDiffNotice[] {
+  const notices: ManagedDiffNotice[] = [];
+
+  for (const field of ['contextWindow', 'contextTokens', 'maxTokens'] as const) {
+    if (model[field] === undefined) {
+      continue;
+    }
+
+    notices.push({
+      field,
+      code: 'unsupported-native-mapping',
+      message: `Codex has no official native mapping for ${field}; agentcfg will not write this canonical model field.`,
+    });
+  }
+
+  return notices;
+}
+
 export function formatAgentDiffResults(results: AgentDiffResult[]): string {
   if (results.length === 0) {
     return 'No agents selected.';
@@ -51,19 +80,24 @@ export function formatAgentDiffResults(results: AgentDiffResult[]): string {
 }
 
 function formatAgentDiffResult(result: AgentDiffResult): string {
+  const lines = [`Agent: ${result.agent}`];
+
   if (result.changes.length === 0) {
-    return [`Agent: ${result.agent}`, '  No managed diffs.'].join('\n');
+    lines.push('  No managed diffs.');
+  } else {
+    lines.push(
+      ...result.changes.map((change) => {
+        return `  ${change.field}: ${formatDiffValue(change.current, change.secret)} -> ${formatDiffValue(
+          change.expected,
+          change.secret,
+        )}`;
+      }),
+    );
   }
 
-  return [
-    `Agent: ${result.agent}`,
-    ...result.changes.map((change) => {
-      return `  ${change.field}: ${formatDiffValue(change.current, change.secret)} -> ${formatDiffValue(
-        change.expected,
-        change.secret,
-      )}`;
-    }),
-  ].join('\n');
+  lines.push(...result.notices.map((notice) => `  Notice: ${notice.message}`));
+
+  return lines.join('\n');
 }
 
 function formatDiffValue(value: string | undefined, secret: boolean): string {

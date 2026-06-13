@@ -9,12 +9,17 @@ import test from 'node:test';
 const CLI_PATH = resolve(process.cwd(), 'dist/cli.js');
 const VALID_AGENTCFG_YAML = [
   'schemaVersion: 1',
-  'provider: openai',
-  'model: gpt-4.1-mini',
-  'baseURL: https://api.openai.com/v1',
-  'apiKey:',
-  '  type: plain',
-  '  value: test-secret-value',
+  'defaults:',
+  '  provider: openai',
+  '  model: gpt-4.1-mini',
+  'providers:',
+  '  openai:',
+  '    baseURL: https://api.openai.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  '      value: test-secret-value',
+  '    models:',
+  '      gpt-4.1-mini: {}',
   '',
 ].join('\n');
 
@@ -82,12 +87,13 @@ test('pull fetches agentcfg.yaml, validates it, masks output, and caches metadat
     const state = JSON.parse(await readFile(statePath, 'utf8')) as Record<string, unknown>;
     const cache = state.cache as Record<string, unknown>;
     const config = cache.config as Record<string, unknown>;
-    const apiKey = config.apiKey as Record<string, unknown>;
+    const providers = config.providers as Record<string, Record<string, unknown>>;
+    const openai = providers.openai;
+    const apiKey = openai.apiKey as Record<string, unknown>;
     const remote = state.remote as Record<string, unknown>;
     const conflict = state.conflict as Record<string, unknown>;
 
-    assert.equal(config.provider, 'openai');
-    assert.equal(config.model, 'gpt-4.1-mini');
+    assert.deepEqual(config.defaults, { provider: 'openai', model: 'gpt-4.1-mini' });
     assert.deepEqual(apiKey, { type: 'plain', value: 'test-secret-value' });
     assert.equal(remote.revision, 'test-revision');
     assert.equal(remote.etag, 'W/"test-etag"');

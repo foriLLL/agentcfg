@@ -10,12 +10,38 @@ const CACHED_SECRET = ['sk', 'test', 'redacted'].join('-');
 const NATIVE_SECRET = ['native', 'secret', 'value'].join('-');
 const CANONICAL_CONFIG = {
   schemaVersion: 1,
-  provider: 'openai',
-  model: 'gpt-4.1-mini',
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: {
-    type: 'plain',
-    value: CACHED_SECRET,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      models: {
+        'gpt-4.1-mini': {},
+      },
+    },
+  },
+};
+
+const METADATA_CONFIG = {
+  ...CANONICAL_CONFIG,
+  providers: {
+    openai: {
+      ...CANONICAL_CONFIG.providers.openai,
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'chat',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+        },
+      },
+    },
   },
 };
 
@@ -83,6 +109,107 @@ test('diff reports managed changes, masks api keys, and writes no files', async 
   }
 });
 
+test('diff reports OpenCode metadata-only drift without mutating files', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-opencode-metadata-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'opencode.jsonc');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await writeFile(
+      nativePath,
+      `${JSON.stringify(
+        {
+          theme: 'system',
+          model: 'openai/gpt-4.1-mini',
+          provider: {
+            openai: {
+              options: {
+                baseURL: 'https://api.openai.com/v1',
+                apiKey: CACHED_SECRET,
+              },
+              models: {
+                'gpt-4.1-mini': {
+                  reasoning: true,
+                  limit: {
+                    context: 4096,
+                    input: 4096,
+                    output: 1024,
+                  },
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const before = await readFile(nativePath, 'utf8');
+
+    const result = await runCli(['diff', '--agent', 'opencode', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Agent: opencode/);
+    assert.match(result.stdout, /contextWindow: 4096 -> 1047576/);
+    assert.match(result.stdout, /contextTokens: 4096 -> 1047576/);
+    assert.match(result.stdout, /maxTokens: 1024 -> 32768/);
+    assert.doesNotMatch(result.stdout, /apiKey/);
+    assert.equal(await readFile(nativePath, 'utf8'), before);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('diff reports OpenClaw metadata-only drift without mutating files', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-openclaw-metadata-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'openclaw.json5');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await writeFile(
+      nativePath,
+      `${JSON.stringify(
+        {
+          agents: { defaults: { model: { primary: 'openai/gpt-4.1-mini' } } },
+          models: {
+            providers: {
+              openai: {
+                baseUrl: 'https://api.openai.com/v1',
+                apiKey: CACHED_SECRET,
+                models: [
+                  {
+                    id: 'gpt-4.1-mini',
+                    contextWindow: 4096,
+                    contextTokens: 4096,
+                    maxTokens: 1024,
+                  },
+                ],
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const before = await readFile(nativePath, 'utf8');
+
+    const result = await runCli(['diff', '--agent', 'openclaw', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Agent: openclaw/);
+    assert.match(result.stdout, /contextWindow: 4096 -> 1047576/);
+    assert.match(result.stdout, /contextTokens: 4096 -> 1047576/);
+    assert.match(result.stdout, /maxTokens: 1024 -> 32768/);
+    assert.doesNotMatch(result.stdout, /apiKey/);
+    assert.equal(await readFile(nativePath, 'utf8'), before);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('diff supports fixtures root for all adapters without mutating state or native fixtures', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-all-'));
   const homeDirectory = join(directory, 'home');
@@ -93,13 +220,14 @@ test('diff supports fixtures root for all adapters without mutating state or nat
     await writeState(statePath, CANONICAL_CONFIG);
     await mkdir(join(homeDirectory, '.agentcfg', 'env'), { recursive: true });
     await writeFile(join(homeDirectory, '.agentcfg', 'env', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
-    await writeNativeFixtures(fixturesRoot, CANONICAL_CONFIG.apiKey.value);
+    await writeNativeFixtures(fixturesRoot, CANONICAL_CONFIG.providers.openai.apiKey.value);
     const before = await snapshotFiles([
       statePath,
       join(fixturesRoot, 'codex', 'input.config.toml'),
       join(fixturesRoot, 'codex', 'codex.env'),
       join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
       join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
+      join(fixturesRoot, 'claude', 'input.settings.json'),
     ]);
 
     const result = await runCli(['diff', '--all-agents', '--state', statePath, '--fixtures-root', fixturesRoot], {
@@ -110,6 +238,7 @@ test('diff supports fixtures root for all adapters without mutating state or nat
     assert.match(result.stdout, /Agent: codex\n  No managed diffs\./);
     assert.match(result.stdout, /Agent: opencode\n  No managed diffs\./);
     assert.match(result.stdout, /Agent: openclaw\n  No managed diffs\./);
+    assert.match(result.stdout, /Agent: claude\n  No managed diffs\./);
     assert.equal(result.stdout.includes(CACHED_SECRET), false);
     assert.deepEqual(await snapshotFiles(Object.keys(before)), before);
   } finally {
@@ -130,7 +259,7 @@ test('Codex diff default path reads agentcfg env directory instead of codex conf
     await mkdir(join(homeDirectory, '.agentcfg', 'env'), { recursive: true });
     await writeFile(codexConfigPath, codexNativeToml());
     await writeFile(join(homeDirectory, '.codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
-    await writeFile(agentcfgEnvPath, `AGENTCFG_OPENAI_API_KEY=${CANONICAL_CONFIG.apiKey.value}\n`);
+    await writeFile(agentcfgEnvPath, `AGENTCFG_OPENAI_API_KEY=${CANONICAL_CONFIG.providers.openai.apiKey.value}\n`);
 
     const before = await snapshotFiles([statePath, codexConfigPath, join(homeDirectory, '.codex', 'codex.env'), agentcfgEnvPath]);
     const result = await runCli(['diff', '--agent', 'codex', '--state', statePath], { HOME: homeDirectory });
@@ -139,6 +268,34 @@ test('Codex diff default path reads agentcfg env directory instead of codex conf
     assert.match(result.stdout, /Agent: codex\n  No managed diffs\./);
     assert.equal(result.stdout.includes(NATIVE_SECRET), false);
     assert.equal(result.stdout.includes(CACHED_SECRET), false);
+    assert.deepEqual(await snapshotFiles(Object.keys(before)), before);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('Codex diff reports unsupported selected model metadata as notices without changes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-codex-notices-'));
+  const statePath = join(directory, 'state.json');
+  const fixturesRoot = join(directory, 'fixtures');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await writeNativeFixtures(fixturesRoot, METADATA_CONFIG.providers.openai.apiKey.value);
+    const nativePath = join(fixturesRoot, 'codex', 'input.config.toml');
+    const envPath = join(fixturesRoot, 'codex', 'codex.env');
+    const before = await snapshotFiles([statePath, nativePath, envPath]);
+
+    const result = await runCli(['diff', '--agent', 'codex', '--state', statePath, '--fixtures-root', fixturesRoot]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Agent: codex\n  No managed diffs\./);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for contextWindow/);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for contextTokens/);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for maxTokens/);
+    assert.doesNotMatch(result.stdout, /contextWindow: .* -> /);
+    assert.doesNotMatch(result.stdout, /contextTokens: .* -> /);
+    assert.doesNotMatch(result.stdout, /maxTokens: .* -> /);
     assert.deepEqual(await snapshotFiles(Object.keys(before)), before);
   } finally {
     await rm(directory, { force: true, recursive: true });
@@ -157,13 +314,14 @@ test('Codex diff fails closed when the env file exists but is unreadable', async
 
   try {
     await writeState(statePath, CANONICAL_CONFIG);
-    await writeNativeFixtures(fixturesRoot, CANONICAL_CONFIG.apiKey.value);
+    await writeNativeFixtures(fixturesRoot, CANONICAL_CONFIG.providers.openai.apiKey.value);
     const before = await snapshotFiles([
       statePath,
       join(fixturesRoot, 'codex', 'input.config.toml'),
       envPath,
       join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
       join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
+      join(fixturesRoot, 'claude', 'input.settings.json'),
     ]);
     await chmod(envPath, 0o000);
 
@@ -211,7 +369,7 @@ test('diff exits non-zero for missing cache, invalid cache, ambiguous path, and 
     assert.notEqual(ambiguous.status, 0);
     assert.match(ambiguous.stderr, /Ambiguous opencode native config/);
 
-    const unsupportedPath = join(directory, 'unsupported.opencode.jsonc');
+    const unsupportedPath = join(directory, 'opencode.jsonc');
     await writeFile(unsupportedPath, '{ "model": 42 }\n');
     const unsupported = await runCli(['diff', '--agent', 'opencode', '--state', statePath, '--config-path', unsupportedPath]);
     assert.notEqual(unsupported.status, 0);
@@ -242,6 +400,7 @@ async function writeNativeFixtures(fixturesRoot: string, apiKey: string): Promis
   await mkdir(join(fixturesRoot, 'codex'), { recursive: true });
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
 
   await writeFile(
     join(fixturesRoot, 'codex', 'input.config.toml'),
@@ -279,6 +438,16 @@ async function writeNativeFixtures(fixturesRoot: string, apiKey: string): Promis
             apiKey,
           },
         },
+      },
+    })}\n`,
+  );
+  await writeFile(
+    join(fixturesRoot, 'claude', 'input.settings.json'),
+    `${JSON.stringify({
+      model: 'gpt-4.1-mini',
+      env: {
+        ANTHROPIC_API_KEY: apiKey,
+        ANTHROPIC_BASE_URL: 'https://api.openai.com/v1',
       },
     })}\n`,
   );

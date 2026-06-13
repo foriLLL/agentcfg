@@ -11,12 +11,18 @@ const TEST_SECRET = ['sk', 'test', 'redacted'].join('-');
 const NATIVE_SECRET = ['native', 'e2e', 'value'].join('-');
 const CANONICAL_YAML = [
   'schemaVersion: 1',
-  'provider: openai',
-  'model: gpt-4.1-mini',
-  'baseURL: https://api.openai.com/v1',
-  'apiKey:',
-  '  type: plain',
-  `  value: ${TEST_SECRET}`,
+  'defaults:',
+  '  provider: openai',
+  '  model: gpt-4.1-mini',
+  'providers:',
+  '  openai:',
+  '    baseURL: https://api.openai.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  `      value: ${TEST_SECRET}`,
+  '    models:',
+  '      gpt-4.1-mini: {}',
+  '      gpt-4.1: {}',
   '',
 ].join('\n');
 
@@ -31,6 +37,7 @@ type NativePaths = {
   codexEnv: string;
   opencode: string;
   openclaw: string;
+  claude: string;
 };
 
 test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', async () => {
@@ -77,6 +84,7 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(diff.stdout, /Agent: codex/);
     assert.match(diff.stdout, /Agent: opencode/);
     assert.match(diff.stdout, /Agent: openclaw/);
+    assert.match(diff.stdout, /Agent: claude/);
     assert.match(diff.stdout, /apiKey: \*\*\*MASKED\*\*\* -> \*\*\*MASKED\*\*\*/);
     assertNoSecretOutput(diff);
     assert.deepEqual(await snapshotFiles(Object.values(nativePaths)), nativeBefore);
@@ -101,16 +109,18 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(firstApply.stdout, /Agent: codex/);
     assert.match(firstApply.stdout, /Agent: opencode/);
     assert.match(firstApply.stdout, /Agent: openclaw/);
+    assert.match(firstApply.stdout, /Agent: claude/);
     assert.match(firstApply.stdout, /Status: applied/);
     assertNoSecretOutput(firstApply);
 
     await assertAppliedNativeFiles(nativePaths);
     const backupsAfterFirst = await allBackupFiles(fixturesRoot);
-    assert.equal(backupsAfterFirst.length, 4);
+    assert.equal(backupsAfterFirst.length, 5);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.codex), 'utf8'), nativeBefore[nativePaths.codex]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.codexEnv), 'utf8'), nativeBefore[nativePaths.codexEnv]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.opencode), 'utf8'), nativeBefore[nativePaths.opencode]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.openclaw), 'utf8'), nativeBefore[nativePaths.openclaw]);
+    assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.claude), 'utf8'), nativeBefore[nativePaths.claude]);
     const afterFirst = await snapshotFiles(Object.values(nativePaths));
 
     const secondApply = await runCli(
@@ -131,6 +141,7 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(cleanDiff.stdout, /Agent: codex\n  No managed diffs\./);
     assert.match(cleanDiff.stdout, /Agent: opencode\n  No managed diffs\./);
     assert.match(cleanDiff.stdout, /Agent: openclaw\n  No managed diffs\./);
+    assert.match(cleanDiff.stdout, /Agent: claude\n  No managed diffs\./);
     assertNoSecretOutput(cleanDiff);
   } finally {
     await server.close();
@@ -157,7 +168,7 @@ test('E2E pull failures preserve state and native fixtures with actionable error
     },
     {
       name: 'missing-api-key',
-      body: buildGistBody(CANONICAL_YAML.replace(/apiKey:\n  type: plain\n  value: .+\n/, ''), 'missing-key-revision'),
+      body: buildGistBody(CANONICAL_YAML.replace(/    apiKey:\n      type: plain\n      value: .+\n/, ''), 'missing-key-revision'),
       error: /apiKey is required/,
     },
     {
@@ -206,7 +217,7 @@ test('E2E second pull updates remote metadata without mutating native fixtures',
   const homeDirectory = join(directory, 'home');
   const fixturesRoot = join(directory, 'fixtures');
   const fakeBin = await writeFakeGh(directory);
-  const changedYaml = CANONICAL_YAML.replace('model: gpt-4.1-mini', 'model: gpt-4.1');
+  const changedYaml = CANONICAL_YAML.replace('  model: gpt-4.1-mini', '  model: gpt-4.1');
   const server = await startFakeGistServer([
     {
       status: 200,
@@ -257,7 +268,8 @@ test('E2E second pull updates remote metadata without mutating native fixtures',
     const config = assertRecord(cache.config, 'cache.config');
     const remote = assertRecord(state.remote, 'remote');
     const conflict = assertRecord(state.conflict, 'conflict');
-    assert.equal(config.model, 'gpt-4.1');
+    const defaults = assertRecord(config.defaults, 'cache.config.defaults');
+    assert.equal(defaults.model, 'gpt-4.1');
     assert.equal(remote.revision, 'second-revision');
     assert.equal(remote.etag, 'W/"second-etag"');
     assert.equal(conflict.baseRevision, 'second-revision');
@@ -355,14 +367,17 @@ async function writeNativeFixtures(fixturesRoot: string): Promise<NativePaths> {
     codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
+    claude: join(fixturesRoot, 'claude', 'input.settings.json'),
   };
   await mkdir(join(fixturesRoot, 'codex'), { recursive: true });
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
   await writeFile(paths.codex, codexNativeToml());
   await writeFile(paths.codexEnv, `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
   await writeFile(paths.opencode, opencodeNativeJson());
   await writeFile(paths.openclaw, openclawNativeJson());
+  await writeFile(paths.claude, claudeNativeJson());
   return paths;
 }
 
@@ -429,16 +444,34 @@ function openclawNativeJson(): string {
   )}\n`;
 }
 
+function claudeNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      theme: 'dark',
+      model: 'claude-3-5-sonnet',
+      env: {
+        KEEP_ME: 'yes',
+        ANTHROPIC_API_KEY: NATIVE_SECRET,
+        ANTHROPIC_BASE_URL: 'https://old.example.test/v1',
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 async function assertCachedState(statePath: string): Promise<void> {
   const state = JSON.parse(await readFile(statePath, 'utf8')) as Record<string, unknown>;
   assert.deepEqual(state.gist, { id: 'e2e-gist-id' });
   const cache = assertRecord(state.cache, 'cache');
   const config = assertRecord(cache.config, 'cache.config');
-  const apiKey = assertRecord(config.apiKey, 'cache.config.apiKey');
+  const defaults = assertRecord(config.defaults, 'cache.config.defaults');
+  const providers = assertRecord(config.providers, 'cache.config.providers');
+  const openai = assertRecord(providers.openai, 'cache.config.providers.openai');
+  const apiKey = assertRecord(openai.apiKey, 'cache.config.providers.openai.apiKey');
   const remote = assertRecord(state.remote, 'remote');
-  assert.equal(config.provider, 'openai');
-  assert.equal(config.model, 'gpt-4.1-mini');
-  assert.equal(config.baseURL, 'https://api.openai.com/v1');
+  assert.deepEqual(defaults, { provider: 'openai', model: 'gpt-4.1-mini' });
+  assert.equal(openai.baseURL, 'https://api.openai.com/v1');
   assert.deepEqual(apiKey, { type: 'plain', value: TEST_SECRET });
   assert.equal(remote.revision, 'e2e-revision');
   assert.equal(remote.etag, 'W/"e2e-etag"');
@@ -468,6 +501,14 @@ async function assertAppliedNativeFiles(paths: NativePaths): Promise<void> {
   assert.equal(readNestedString(openclaw, ['models', 'providers', 'openai', 'baseUrl']), 'https://api.openai.com/v1');
   assert.equal(readNestedString(openclaw, ['models', 'providers', 'openai', 'apiKey']), TEST_SECRET);
   assert.equal((await stat(paths.openclaw)).mode & 0o777, 0o600);
+
+  const claude = JSON.parse(await readFile(paths.claude, 'utf8')) as Record<string, unknown>;
+  assert.equal(claude.theme, 'dark');
+  assert.equal(claude.model, 'gpt-4.1-mini');
+  assert.equal(readNestedString(claude, ['env', 'KEEP_ME']), 'yes');
+  assert.equal(readNestedString(claude, ['env', 'ANTHROPIC_API_KEY']), TEST_SECRET);
+  assert.equal(readNestedString(claude, ['env', 'ANTHROPIC_BASE_URL']), 'https://api.openai.com/v1');
+  assert.equal((await stat(paths.claude)).mode & 0o777, 0o600);
 }
 
 async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {
@@ -479,7 +520,7 @@ async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {
 }
 
 async function allBackupFiles(fixturesRoot: string): Promise<string[]> {
-  const directories = ['codex', 'opencode', 'openclaw'].map((agent) => join(fixturesRoot, agent));
+  const directories = ['codex', 'opencode', 'openclaw', 'claude'].map((agent) => join(fixturesRoot, agent));
   const backups: string[] = [];
   for (const directory of directories) {
     for (const entry of await readdir(directory)) {

@@ -1,5 +1,18 @@
 schemaVersion: 1
-provider: openai
-model: gpt-4.1-mini
-baseURL: https://api.openai.com/v1
-apiKey: sk-test-redacted
+defaults:
+  provider: openai
+  model: gpt-4.1-mini
+providers:
+  openai:
+    baseURL: https://api.openai.com/v1
+    apiKey:
+      type: plain
+      value: sk-test-redacted
+    modelDiscovery:
+      path: /models
+    models:
+      gpt-4.1-mini:
+        variant: chat
+        contextWindow: 1047576
+        contextTokens: 1047576
+        maxTokens: 32768

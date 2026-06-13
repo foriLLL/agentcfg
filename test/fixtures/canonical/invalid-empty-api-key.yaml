@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 1
 defaults:
   provider: openai
   model: gpt-4.1-mini
@@ -6,7 +6,7 @@ providers:
   openai:
     baseURL: https://api.openai.com/v1
     apiKey:
-      type: plain
-      value: sk-test-visible-openai
+      type: env
+      value: ''
     models:
       gpt-4.1-mini: {}

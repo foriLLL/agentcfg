@@ -81,6 +81,7 @@ test('readme documents the required agentcfg MVP sections', () => {
   assert.ok(readme.includes('inspect the raw native config file before editing or applying changes.'));
   assert.ok(readme.includes("including each planned file's current content and post-apply content."));
   assert.ok(readme.includes('Saved GitHub Tokens are different'));
+  assert.ok(readme.includes('docs/testing-capability.md'));
 });
 
 test('example config parses and masks the fake API key', () => {
@@ -89,12 +90,29 @@ test('example config parses and masks the fake API key', () => {
 
   assert.deepEqual(config, {
     schemaVersion: 1,
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-    baseURL: 'https://api.openai.com/v1',
-    apiKey: {
-      type: 'plain',
-      value: 'sk-test-redacted',
+    defaults: {
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+    },
+    providers: {
+      openai: {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: 'sk-test-redacted',
+        },
+        modelDiscovery: {
+          path: '/models',
+        },
+        models: {
+          'gpt-4.1-mini': {
+            variant: 'chat',
+            contextWindow: 1047576,
+            contextTokens: 1047576,
+            maxTokens: 32768,
+          },
+        },
+      },
     },
   });
 

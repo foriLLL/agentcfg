@@ -1,11 +1,12 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { AGENTCFG_SCHEMA_DOCS } from '../../src/core/schema-docs';
+import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
 import { FileDiffViewer } from './FileDiffViewer';
 import {
   type EditableAgentConfig,
   applyRuntime,
   clearSavedGitHubTokenRuntime,
   diffRuntime,
+  getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
   initRuntime,
@@ -21,10 +22,11 @@ import {
   type ApplyAgentResult,
   type ApplyFilePreview,
   type ApplyPlanSummary,
+  type ConfigAvailabilityEntry,
   type ConfigFileRuntimeResponse,
   type DiffRuntimeResponse,
   type ManagedDiffChange,
-  type ManagedField,
+  type ManagedDiffNotice,
   type PlanApplyRuntimeResponse,
   type RuntimeStateSummary,
   type RuntimeTargetRequest,
@@ -57,27 +59,43 @@ type TargetMode = AgentName | 'all' | '';
 
 type AppTab = 'connection' | 'remote' | 'config' | 'execute' | 'status';
 
+type SchemaDocTreeNode = {
+  field: AgentConfigSchemaDoc;
+  children: SchemaDocTreeNode[];
+};
+
 const TARGET_OPTIONS: Array<{ value: Exclude<TargetMode, ''>; title: string; copy: string }> = [
   { value: 'codex', title: 'Codex', copy: '检查 ~/.codex 设置与生成的 env 文件。' },
   { value: 'opencode', title: 'OpenCode', copy: '检查一个 OpenCode JSON 或 JSONC 配置。' },
   { value: 'openclaw', title: 'OpenClaw', copy: '检查一个 OpenClaw JSON 或 JSON5 配置。' },
-  { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode 与 OpenClaw。' },
+  { value: 'claude', title: 'Claude Code', copy: '检查 Claude Code settings.json 配置。' },
+  { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode、OpenClaw 与 Claude Code。' },
 ];
 
 const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: string }> = [
   { value: 'codex', title: 'Codex', copy: '查看 Codex TOML 配置原文。' },
   { value: 'opencode', title: 'OpenCode', copy: '查看 OpenCode JSON/JSONC 配置原文。' },
   { value: 'openclaw', title: 'OpenClaw', copy: '查看 OpenClaw JSON/JSON5 配置原文。' },
+  { value: 'claude', title: 'Claude Code', copy: '查看 Claude Code settings.json 配置原文。' },
 ];
 
 const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
   schemaVersion: 1,
-  provider: 'openai',
-  model: 'gpt-4.1-mini',
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: {
-    type: 'plain',
-    value: '',
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: '',
+      },
+      models: {
+        'gpt-4.1-mini': {},
+      },
+    },
   },
 };
 
@@ -94,6 +112,8 @@ function App() {
   const [statePath, setStatePath] = useState('');
   const [configPath, setConfigPath] = useState('');
   const [remoteDraft, setRemoteDraft] = useState<EditableAgentConfig>(EMPTY_REMOTE_CONFIG);
+  const [remoteEditorProviderId, setRemoteEditorProviderId] = useState(EMPTY_REMOTE_CONFIG.defaults.provider);
+  const [remoteEditorModelId, setRemoteEditorModelId] = useState(EMPTY_REMOTE_CONFIG.defaults.model);
   const [remoteStatus, setRemoteStatus] = useState('输入 GitHub Token 后，应用会发现现有 agentcfg Gist；没有时会在保存远端配置时自动创建。');
   const [targetMode, setTargetMode] = useState<TargetMode>('');
   const [diffResponse, setDiffResponse] = useState<DiffRuntimeResponse | null>(null);
@@ -103,6 +123,7 @@ function App() {
   const [confirmationText, setConfirmationText] = useState('');
   const [activeTab, setActiveTab] = useState<AppTab>('connection');
   const [configFile, setConfigFile] = useState<ConfigFileRuntimeResponse | null>(null);
+  const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
   const [configDraft, setConfigDraft] = useState('');
   const [configStatus, setConfigStatus] = useState('尚未加载配置文件。');
   const [isSubmittingInit, setIsSubmittingInit] = useState(false);
@@ -114,6 +135,7 @@ function App() {
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [isSavingRemote, setIsSavingRemote] = useState(false);
   const [isClearingGitHubToken, setIsClearingGitHubToken] = useState(false);
+  const [isLoadingConfigAvailability, setIsLoadingConfigAvailability] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
@@ -121,13 +143,36 @@ function App() {
     let active = true;
 
     getRuntimeState()
-      .then(({ state }) => {
+      .then(async ({ state }) => {
         if (!active) {
           return;
         }
         commitRuntimeState(state);
         setLoadState('ready');
         setGistId(state.gist.id ?? '');
+
+        if (state.secrets?.hasGitHubToken === true && state.gist.present) {
+          setIsLoadingRemote(true);
+          try {
+            const response = await loadRemoteConfigRuntime({ statePath: state.statePath });
+            if (!active) {
+              return;
+            }
+            commitRuntimeState(response.state);
+            setGistId(response.state.gist.id ?? '');
+            replaceRemoteDraft(configToDraft(response.config));
+            setRemoteStatus('远端配置已自动刷新。表单显示的是当前 Gist 完整值；API Key 直接显示。');
+          } catch (error) {
+            if (!active) {
+              return;
+            }
+            setRemoteStatus(`自动刷新远端配置失败：${formatError(error)}`);
+          } finally {
+            if (active) {
+              setIsLoadingRemote(false);
+            }
+          }
+        }
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -161,15 +206,25 @@ function App() {
   const isBusy = isSubmittingInit || isPulling || isDiffing || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
-  const configAgent = targetMode === 'codex' || targetMode === 'opencode' || targetMode === 'openclaw' ? targetMode : null;
+  const configAgent = targetMode === 'codex' || targetMode === 'opencode' || targetMode === 'openclaw' || targetMode === 'claude' ? targetMode : null;
   const configBusy = isLoadingConfig || isSavingConfig;
-  const canLoadConfig = configAgent !== null && !configBusy;
+  const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
+  const isConfigAgentAvailable = configAgent === null ? false : configAvailabilityByAgent.get(configAgent)?.available === true;
+  const canLoadConfig = configAgent !== null && isConfigAgentAvailable && !configBusy;
   const canSaveConfig = configAgent !== null && configFile !== null && configDraft !== configFile.content && !configBusy;
   const isGitHubTokenLocked = hasSavedGitHubToken && !isEditingGitHubToken;
   const isReplacingSavedGitHubToken = hasSavedGitHubToken && isEditingGitHubToken;
   const githubTokenInputValue = isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : githubToken;
   const shouldRememberGitHubToken = isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken;
   const remoteYamlPreview = useMemo(() => buildRemoteYamlPreview(remoteDraft), [remoteDraft]);
+  const remoteProviderIds = Object.keys(remoteDraft.providers);
+  const selectedRemoteProviderId = remoteDraft.providers[remoteEditorProviderId] === undefined ? remoteProviderIds[0] ?? '' : remoteEditorProviderId;
+  const selectedRemoteProvider = providerDraft(remoteDraft, selectedRemoteProviderId);
+  const remoteModelIds = Object.keys(selectedRemoteProvider.models);
+  const selectedRemoteModelId = selectedRemoteProvider.models[remoteEditorModelId] === undefined ? remoteModelIds[0] ?? '' : remoteEditorModelId;
+  const selectedRemoteModel = modelDraft(selectedRemoteProvider, selectedRemoteModelId);
+  const defaultProvider = remoteDraft.providers[remoteDraft.defaults.provider] === undefined ? selectedRemoteProviderId : remoteDraft.defaults.provider;
+  const defaultProviderModelIds = Object.keys(providerDraft(remoteDraft, defaultProvider).models);
 
   useEffect(() => {
     setConfirmationText('');
@@ -178,8 +233,37 @@ function App() {
   useEffect(() => {
     setConfigFile(null);
     setConfigDraft('');
-    setConfigStatus(configAgent === null ? '请选择 Codex、OpenCode 或 OpenClaw 后再加载配置文件。' : '尚未加载配置文件。');
-  }, [configAgent, configPath, requestStatePath]);
+    setConfigStatus(configAgent === null ? '请选择 Codex、OpenCode、OpenClaw 或 Claude Code 后再加载配置文件。' : configAvailabilityByAgent.get(configAgent)?.available === false ? '此 Agent 未找到可编辑的配置文件。' : '尚未加载配置文件。');
+  }, [configAgent, configAvailabilityByAgent, configPath, requestStatePath]);
+
+  useEffect(() => {
+    if (loadState !== 'ready') {
+      return;
+    }
+
+    let active = true;
+    setIsLoadingConfigAvailability(true);
+    getConfigAvailabilityRuntime({ statePath: requestStatePath })
+      .then(({ agents }) => {
+        if (active) {
+          setConfigAvailability(agents);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setConfigAvailability([]);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingConfigAvailability(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [loadState, requestStatePath]);
 
   function commitRuntimeState(state: RuntimeStateSummary): void {
     setRuntimeState(state);
@@ -189,6 +273,16 @@ function App() {
       setRememberGitHubToken(false);
       setIsEditingGitHubToken(false);
     }
+  }
+
+  function replaceRemoteDraft(nextDraft: EditableAgentConfig): void {
+    const providerId = nextDraft.providers[nextDraft.defaults.provider] === undefined ? Object.keys(nextDraft.providers)[0] ?? '' : nextDraft.defaults.provider;
+    const provider = providerDraft(nextDraft, providerId);
+    const modelId = provider.models[nextDraft.defaults.model] === undefined ? Object.keys(provider.models)[0] ?? '' : nextDraft.defaults.model;
+
+    setRemoteDraft(nextDraft);
+    setRemoteEditorProviderId(providerId);
+    setRemoteEditorModelId(modelId);
   }
 
   async function refreshState(nextStatePath?: string): Promise<void> {
@@ -266,10 +360,10 @@ function App() {
       commitRuntimeState(response.state);
       setGistId(response.state.gist.id ?? '');
       if (response.config !== undefined) {
-        setRemoteDraft(configToDraft(response.config));
+        replaceRemoteDraft(configToDraft(response.config));
         setRemoteStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
       } else {
-        setRemoteDraft(EMPTY_REMOTE_CONFIG);
+        replaceRemoteDraft(EMPTY_REMOTE_CONFIG);
         setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
       }
       setActiveTab('remote');
@@ -289,7 +383,7 @@ function App() {
     try {
       const response = await loadRemoteConfigRuntime(githubTokenRequest(requestStatePath, nextGithubToken));
       commitRuntimeState(response.state);
-      setRemoteDraft(configToDraft(response.config));
+      replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已加载。API Key 直接显示；保存前请确认表单就是最终写入值。');
       setNotice({ tone: 'success', title: '远端配置已加载', copy: '你可以直接修改 provider、model、Base URL，或填写新的 API Key。' });
     } catch (error) {
@@ -301,8 +395,9 @@ function App() {
 
   async function handleSaveRemoteConfig(): Promise<void> {
     const nextGithubToken = githubToken.trim();
-    if (remoteDraft.apiKey.value.trim() === '') {
-      setNotice({ tone: 'error', title: '需要 API Key', copy: '请填写最终要写入 agentcfg.yaml 的 API Key；Web 页面不再隐藏或沿用不可见密钥。' });
+    const validationError = validateRemoteDraft(remoteDraft);
+    if (validationError !== null) {
+      setNotice({ tone: 'error', title: '远端配置无效', copy: validationError });
       return;
     }
 
@@ -312,7 +407,7 @@ function App() {
       const response = await saveRemoteConfigRuntime({ ...githubTokenRequest(requestStatePath, nextGithubToken), config: remoteDraft });
       commitRuntimeState(response.state);
       setGistId(response.state.gist.id ?? gistId);
-      setRemoteDraft(configToDraft(response.config));
+      replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已保存。表单和预览已回填最终写入的完整值。');
       setDiffResponse(null);
       setPlanResponse(null);
@@ -363,18 +458,159 @@ function App() {
     setIsEditingGitHubToken(false);
   }
 
-  function updateRemoteDraft(field: ManagedField, value: string): void {
+  function handleSelectRemoteProvider(providerId: string): void {
+    setRemoteEditorProviderId(providerId);
+    setRemoteEditorModelId(Object.keys(providerDraft(remoteDraft, providerId).models)[0] ?? '');
+  }
+
+  function handleAddRemoteProvider(): void {
     setRemoteDraft((currentDraft) => {
-      if (field === 'apiKey') {
-        return { ...currentDraft, apiKey: { type: 'plain', value } };
-      }
-      return { ...currentDraft, [field]: value };
+      const providerId = uniqueDraftId('provider', currentDraft.providers);
+      const modelId = 'model';
+
+      setRemoteEditorProviderId(providerId);
+      setRemoteEditorModelId(modelId);
+
+      return {
+        ...currentDraft,
+        providers: {
+          ...currentDraft.providers,
+          [providerId]: emptyProviderDraft(modelId),
+        },
+      };
     });
+  }
+
+  function handleRemoveRemoteProvider(): void {
+    setRemoteDraft((currentDraft) => {
+      const providerIds = Object.keys(currentDraft.providers);
+      if (providerIds.length <= 1 || currentDraft.providers[selectedRemoteProviderId] === undefined) {
+        return currentDraft;
+      }
+
+      const providers = { ...currentDraft.providers };
+      delete providers[selectedRemoteProviderId];
+      const nextProviderId = providerIds.find((providerId) => providerId !== selectedRemoteProviderId) ?? '';
+      const nextModelId = Object.keys(providers[nextProviderId]?.models ?? {})[0] ?? '';
+      const defaults =
+        currentDraft.defaults.provider === selectedRemoteProviderId
+          ? { provider: nextProviderId, model: nextModelId }
+          : currentDraft.defaults;
+
+      setRemoteEditorProviderId(nextProviderId);
+      setRemoteEditorModelId(nextModelId);
+
+      return { ...currentDraft, defaults, providers };
+    });
+  }
+
+  function handleRemoteProviderIdChange(providerId: string): void {
+    const previousProviderId = selectedRemoteProviderId;
+    if (providerId !== previousProviderId && remoteDraft.providers[providerId] !== undefined) {
+      setNotice({ tone: 'error', title: 'Provider ID 已存在', copy: `Provider ID "${providerId}" 已被使用。当前 Provider 保持为 "${previousProviderId}"；请填写唯一 ID 后再继续。` });
+      return;
+    }
+
+    setRemoteDraft((currentDraft) => renameProviderDraft(currentDraft, previousProviderId, providerId));
+    setRemoteEditorProviderId(providerId);
+  }
+
+  function updateRemoteProvider(updateProvider: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string]): void {
+    const providerId = selectedRemoteProviderId;
+    setRemoteDraft((currentDraft) => updateProviderDraft(currentDraft, providerId, updateProvider));
+  }
+
+  function handleSelectRemoteModel(modelId: string): void {
+    setRemoteEditorModelId(modelId);
+  }
+
+  function handleAddRemoteModel(): void {
+    const providerId = selectedRemoteProviderId;
+    setRemoteDraft((currentDraft) => {
+      const provider = providerDraft(currentDraft, providerId);
+      const modelId = uniqueDraftId('model', provider.models);
+
+      setRemoteEditorModelId(modelId);
+
+      return updateProviderDraft(currentDraft, providerId, (currentProvider) => ({
+        ...currentProvider,
+        models: {
+          ...currentProvider.models,
+          [modelId]: {},
+        },
+      }));
+    });
+  }
+
+  function handleRemoveRemoteModel(): void {
+    const providerId = selectedRemoteProviderId;
+    const modelId = selectedRemoteModelId;
+    setRemoteDraft((currentDraft) => {
+      const provider = providerDraft(currentDraft, providerId);
+      const modelIds = Object.keys(provider.models);
+      if (modelIds.length <= 1 || provider.models[modelId] === undefined) {
+        return currentDraft;
+      }
+
+      const models = { ...provider.models };
+      delete models[modelId];
+      const nextModelId = modelIds.find((candidate) => candidate !== modelId) ?? '';
+      const defaults =
+        currentDraft.defaults.provider === providerId && currentDraft.defaults.model === modelId
+          ? { ...currentDraft.defaults, model: nextModelId }
+          : currentDraft.defaults;
+
+      setRemoteEditorModelId(nextModelId);
+
+      return {
+        ...currentDraft,
+        defaults,
+        providers: {
+          ...currentDraft.providers,
+          [providerId]: { ...provider, models },
+        },
+      };
+    });
+  }
+
+  function handleRemoteModelIdChange(modelId: string): void {
+    const providerId = selectedRemoteProviderId;
+    const previousModelId = selectedRemoteModelId;
+    if (modelId !== previousModelId && selectedRemoteProvider.models[modelId] !== undefined) {
+      setNotice({ tone: 'error', title: 'Model ID 已存在', copy: `Provider "${providerId}" 中已存在 Model ID "${modelId}"。当前 Model 保持为 "${previousModelId}"；请填写唯一 ID 后再继续。` });
+      return;
+    }
+
+    setRemoteDraft((currentDraft) => renameModelDraft(currentDraft, providerId, previousModelId, modelId));
+    setRemoteEditorModelId(modelId);
+  }
+
+  function updateRemoteModel(updateModel: (model: EditableAgentConfig['providers'][string]['models'][string]) => EditableAgentConfig['providers'][string]['models'][string]): void {
+    const providerId = selectedRemoteProviderId;
+    const modelId = selectedRemoteModelId;
+    setRemoteDraft((currentDraft) => updateModelDraft(currentDraft, providerId, modelId, updateModel));
+  }
+
+  function handleDefaultRemoteProviderChange(providerId: string): void {
+    setRemoteDraft((currentDraft) => ({
+      ...currentDraft,
+      defaults: {
+        provider: providerId,
+        model: Object.keys(providerDraft(currentDraft, providerId).models)[0] ?? '',
+      },
+    }));
+  }
+
+  function handleDefaultRemoteModelChange(modelId: string): void {
+    setRemoteDraft((currentDraft) => ({
+      ...currentDraft,
+      defaults: { ...currentDraft.defaults, model: modelId },
+    }));
   }
 
   async function handleDiff(): Promise<void> {
     if (targetRequest === null) {
-      setNotice({ tone: 'error', title: '请选择目标', copy: '运行 diff 前请选择 Codex、OpenCode、OpenClaw 或全部代理。' });
+      setNotice({ tone: 'error', title: '请选择目标', copy: '运行 diff 前请选择 Codex、OpenCode、OpenClaw、Claude Code 或全部代理。' });
       return;
     }
 
@@ -537,7 +773,7 @@ function App() {
               {loadState === 'loading' ? '正在加载会话' : statusLabel(runtimeState)}
             </StatusBadge>
             <button className="primary-action primary-action--compact" type="button" onClick={handlePull} disabled={isBusy}>
-              <span aria-hidden="true">+</span>
+              <span aria-hidden="true">↓</span>
               {isPulling ? '正在拉取...' : '拉取远端'}
             </button>
           </div>
@@ -683,22 +919,124 @@ function App() {
                 </div>
                 <div className="remote-config-layout">
                   <form className="remote-config-form" onSubmit={(event) => { event.preventDefault(); void handleSaveRemoteConfig(); }}>
-                    <label htmlFor="remote-provider">
-                      Provider
-                      <input id="remote-provider" value={remoteDraft.provider} onChange={(event) => updateRemoteDraft('provider', event.target.value)} autoComplete="off" disabled={isSavingRemote} />
-                    </label>
-                    <label htmlFor="remote-model">
-                      Model
-                      <input id="remote-model" value={remoteDraft.model} onChange={(event) => updateRemoteDraft('model', event.target.value)} autoComplete="off" disabled={isSavingRemote} />
-                    </label>
-                    <label htmlFor="remote-base-url">
-                      Base URL
-                      <input id="remote-base-url" value={remoteDraft.baseURL} onChange={(event) => updateRemoteDraft('baseURL', event.target.value)} autoComplete="off" disabled={isSavingRemote} />
-                    </label>
-                    <label htmlFor="remote-api-key">
-                      API Key
-                      <input id="remote-api-key" type="text" value={remoteDraft.apiKey.value} onChange={(event) => updateRemoteDraft('apiKey', event.target.value)} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
-                    </label>
+                    <section className="remote-editor-section remote-editor-section--full" aria-label="Provider 列表">
+                      <div className="remote-subheading">
+                        <div>
+                          <p className="eyebrow">Providers</p>
+                          <h3>选择或新增 Provider</h3>
+                        </div>
+                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteProvider} disabled={isSavingRemote}>
+                          添加 Provider
+                        </button>
+                      </div>
+                      <div className="remote-entity-list" role="list" aria-label="已配置 Providers">
+                        {remoteProviderIds.map((providerId) => (
+                          <button className={`remote-entity-chip ${providerId === selectedRemoteProviderId ? 'remote-entity-chip--active' : ''}`} type="button" key={providerId} onClick={() => handleSelectRemoteProvider(providerId)} disabled={isSavingRemote}>
+                            <strong>{providerId.trim() === '' ? '未命名 Provider' : providerId}</strong>
+                            <small>{Object.keys(remoteDraft.providers[providerId]?.models ?? {}).length} models</small>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="remote-editor-section" aria-label="Provider 字段">
+                      <div className="remote-subheading">
+                        <div>
+                          <p className="eyebrow">Provider</p>
+                          <h3>Endpoint 与可见 API Key</h3>
+                        </div>
+                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteProvider} disabled={isSavingRemote || remoteProviderIds.length <= 1}>
+                          删除 Provider
+                        </button>
+                      </div>
+                      <label htmlFor="remote-provider">
+                        Provider ID
+                        <input id="remote-provider" value={selectedRemoteProviderId} onChange={(event) => handleRemoteProviderIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-base-url">
+                        Base URL
+                        <input id="remote-base-url" value={selectedRemoteProvider.baseURL} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, baseURL: event.target.value }))} autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-api-key">
+                        API Key
+                        <input id="remote-api-key" type="text" value={selectedRemoteProvider.apiKey.value} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, apiKey: { type: 'plain', value: event.target.value } }))} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-model-discovery-path">
+                        Model Discovery Path
+                        <input id="remote-model-discovery-path" value={selectedRemoteProvider.modelDiscovery?.path ?? ''} onChange={(event) => updateRemoteProvider((provider) => withModelDiscoveryPath(provider, event.target.value))} placeholder="/models（可选）" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                    </section>
+
+                    <section className="remote-editor-section" aria-label="Model 字段">
+                      <div className="remote-subheading">
+                        <div>
+                          <p className="eyebrow">Models</p>
+                          <h3>当前 Provider 的模型目录</h3>
+                        </div>
+                        <div className="remote-inline-actions">
+                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteModel} disabled={isSavingRemote}>
+                            添加 Model
+                          </button>
+                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteModel} disabled={isSavingRemote || remoteModelIds.length <= 1}>
+                            删除 Model
+                          </button>
+                        </div>
+                      </div>
+                      <div className="remote-entity-list" role="list" aria-label="当前 Provider 的 Models">
+                        {remoteModelIds.map((modelId) => (
+                          <button className={`remote-entity-chip ${modelId === selectedRemoteModelId ? 'remote-entity-chip--active' : ''}`} type="button" key={modelId} onClick={() => handleSelectRemoteModel(modelId)} disabled={isSavingRemote}>
+                            <strong>{modelId.trim() === '' ? '未命名 Model' : modelId}</strong>
+                            <small>{modelMetadataCount(selectedRemoteProvider.models[modelId] ?? {})} metadata</small>
+                          </button>
+                        ))}
+                      </div>
+                      <label htmlFor="remote-model">
+                        Model ID
+                        <input id="remote-model" value={selectedRemoteModelId} onChange={(event) => handleRemoteModelIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-model-variant">
+                        Variant
+                        <input id="remote-model-variant" value={selectedRemoteModel.variant ?? ''} onChange={(event) => updateRemoteModel((model) => withOptionalString(model, 'variant', event.target.value))} placeholder="chat（可选）" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-model-context-window">
+                        Limit Context
+                        <input id="remote-model-context-window" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextWindow)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextWindow', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-model-context-tokens">
+                        Limit Input
+                        <input id="remote-model-context-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                      <label htmlFor="remote-model-max-tokens">
+                        Limit Output
+                        <input id="remote-model-max-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.maxTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'maxTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                      </label>
+                    </section>
+
+                    <section className="remote-editor-section remote-editor-section--full" aria-label="默认 Provider 和 Model">
+                      <div className="remote-subheading">
+                        <div>
+                          <p className="eyebrow">Defaults</p>
+                          <h3>显式默认 Provider / Model</h3>
+                        </div>
+                      </div>
+                      <label htmlFor="remote-default-provider">
+                        Default Provider
+                        <select id="remote-default-provider" value={defaultProvider} onChange={(event) => handleDefaultRemoteProviderChange(event.target.value)} disabled={isSavingRemote}>
+                          {remoteProviderIds.map((providerId) => (
+                            <option value={providerId} key={providerId}>{providerId.trim() === '' ? '未命名 Provider' : providerId}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label htmlFor="remote-default-model">
+                        Default Model
+                        <select id="remote-default-model" value={remoteDraft.defaults.model} onChange={(event) => handleDefaultRemoteModelChange(event.target.value)} disabled={isSavingRemote}>
+                          {defaultProviderModelIds.map((modelId) => (
+                            <option value={modelId} key={modelId}>{modelId.trim() === '' ? '未命名 Model' : modelId}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </section>
+
                     <div className="remote-actions">
                       <button className="secondary-action" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
                         {isLoadingRemote ? '正在加载...' : '加载远端配置'}
@@ -746,21 +1084,26 @@ function App() {
                 <div className="config-editor-toolbar">
                   <fieldset className="target-grid raw-config-target-grid">
                     <legend>选择要查看的配置文件</legend>
-                    {CONFIG_TARGET_OPTIONS.map((target) => (
-                      <label className="target-option" key={target.value}>
-                        <input
-                          type="radio"
-                          name="config-target-mode"
-                          value={target.value}
-                          checked={targetMode === target.value}
-                          onChange={() => setTargetMode(target.value)}
-                        />
-                        <span>
-                          <strong>{target.title}</strong>
-                          <small>{target.copy}</small>
-                        </span>
-                      </label>
-                    ))}
+                    {CONFIG_TARGET_OPTIONS.map((target) => {
+                      const availability = configAvailabilityByAgent.get(target.value);
+                      const unavailable = availability?.available === false;
+                      return (
+                        <label className="target-option" key={target.value}>
+                          <input
+                            type="radio"
+                            name="config-target-mode"
+                            value={target.value}
+                            checked={targetMode === target.value}
+                            onChange={() => setTargetMode(target.value)}
+                            disabled={isLoadingConfigAvailability || unavailable}
+                          />
+                          <span>
+                            <strong>{target.title}</strong>
+                            <small>{unavailable ? availability.reason ?? '未找到可编辑的配置文件。' : target.copy}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
                   </fieldset>
                   <div className="path-form">
                     <label htmlFor="config-path-editor">
@@ -773,6 +1116,9 @@ function App() {
                         autoComplete="off"
                       />
                     </label>
+                    <div className="path-note">
+                      留空时使用检测到的默认原生配置；仅当所选代理的原生配置在其他文件或目录时填写。该值会同时作为 diff、dry-run、应用的路径覆盖。
+                    </div>
                     <div className="path-note">
                       <span>当前目标</span>
                       <strong>{configAgent === null ? '请选择单个代理' : agentLabel(configAgent)}</strong>
@@ -954,14 +1300,15 @@ function App() {
                 <div className="section-heading section-heading--split">
                   <div>
                     <p className="eyebrow">冲突</p>
-                    <h2>安全指示器</h2>
+                    <h2>远端基线冲突检查</h2>
                   </div>
                   <StatusBadge tone={runtimeState?.conflict.present ? 'warning' : 'ready'}>
                     {runtimeState?.conflict.present ? '待审阅' : '清晰'}
                   </StatusBadge>
                 </div>
                 <dl className="detail-list">
-                  <Detail label="冲突状态" value={runtimeState?.conflict.present ? '已存储远端基线' : '当前无冲突'} />
+                  <Detail label="冲突状态" value={runtimeState?.conflict.present ? '已存储远端基线，需先审阅' : '当前无冲突'} />
+                  <Detail label="页面含义" value={runtimeState?.conflict.present ? '顶部“需要检查冲突”表示本机保存了远端基线，请先核对差异再继续。' : '顶部不会显示“需要检查冲突”，当前没有待审阅的远端基线。'} />
                   <Detail label="Base revision" value={runtimeState?.conflict.baseRevision ?? '无'} />
                   <Detail label="Base ETag" value={runtimeState?.conflict.baseETag ?? '无'} />
                 </dl>
@@ -1004,14 +1351,200 @@ function EmptyCopy({ title, copy }: { title: string; copy: string }) {
 }
 
 function ConfigSummary({ config }: { config: AgentConfig }) {
+  const provider = config.providers[config.defaults.provider];
+
   return (
     <dl className="detail-list config-summary">
-      <Detail label="提供方" value={config.provider} />
-      <Detail label="模型" value={config.model} />
-      <Detail label="Base URL" value={config.baseURL} />
-      <Detail label="API 密钥" value={config.apiKey.value} />
+      <Detail label="提供方" value={config.defaults.provider} />
+      <Detail label="模型" value={config.defaults.model} />
+      <Detail label="Base URL" value={provider.baseURL} />
+      <Detail label="API 密钥" value={provider.apiKey.value} />
     </dl>
   );
+}
+
+function providerDraft(config: EditableAgentConfig, providerId: string): EditableAgentConfig['providers'][string] {
+  return config.providers[providerId] ?? emptyProviderDraft(config.defaults.model);
+}
+
+function modelDraft(provider: EditableAgentConfig['providers'][string], modelId: string): EditableAgentConfig['providers'][string]['models'][string] {
+  return provider.models[modelId] ?? {};
+}
+
+function updateProviderDraft(config: EditableAgentConfig, providerId: string, updateProvider: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string]): EditableAgentConfig {
+  return {
+    ...config,
+    providers: {
+      ...config.providers,
+      [providerId]: updateProvider(providerDraft(config, providerId)),
+    },
+  };
+}
+
+function updateModelDraft(config: EditableAgentConfig, providerId: string, modelId: string, updateModel: (model: EditableAgentConfig['providers'][string]['models'][string]) => EditableAgentConfig['providers'][string]['models'][string]): EditableAgentConfig {
+  return updateProviderDraft(config, providerId, (provider) => ({
+    ...provider,
+    models: {
+      ...provider.models,
+      [modelId]: updateModel(modelDraft(provider, modelId)),
+    },
+  }));
+}
+
+function renameProviderDraft(config: EditableAgentConfig, previousProviderId: string, nextProviderId: string): EditableAgentConfig {
+  if (previousProviderId === nextProviderId) {
+    return config;
+  }
+  if (config.providers[nextProviderId] !== undefined) {
+    return config;
+  }
+
+  const provider = providerDraft(config, previousProviderId);
+  const providers = { ...config.providers };
+  delete providers[previousProviderId];
+  providers[nextProviderId] = provider;
+
+  return {
+    ...config,
+    defaults: config.defaults.provider === previousProviderId ? { ...config.defaults, provider: nextProviderId } : config.defaults,
+    providers,
+  };
+}
+
+function renameModelDraft(config: EditableAgentConfig, providerId: string, previousModelId: string, nextModelId: string): EditableAgentConfig {
+  if (previousModelId === nextModelId) {
+    return config;
+  }
+
+  const provider = providerDraft(config, providerId);
+  if (provider.models[nextModelId] !== undefined) {
+    return config;
+  }
+
+  const model = modelDraft(provider, previousModelId);
+  const models = { ...provider.models };
+  delete models[previousModelId];
+  models[nextModelId] = model;
+
+  return {
+    ...config,
+    defaults: config.defaults.provider === providerId && config.defaults.model === previousModelId ? { ...config.defaults, model: nextModelId } : config.defaults,
+    providers: {
+      ...config.providers,
+      [providerId]: { ...provider, models },
+    },
+  };
+}
+
+function emptyProviderDraft(modelId: string): EditableAgentConfig['providers'][string] {
+  return {
+    baseURL: '',
+    apiKey: { type: 'plain', value: '' },
+    models: { [modelId]: {} },
+  };
+}
+
+function uniqueDraftId(baseId: string, records: Record<string, unknown>): string {
+  if (records[baseId] === undefined) {
+    return baseId;
+  }
+
+  for (let index = 2; ; index += 1) {
+    const candidate = `${baseId}-${index}`;
+    if (records[candidate] === undefined) {
+      return candidate;
+    }
+  }
+}
+
+function withModelDiscoveryPath(provider: EditableAgentConfig['providers'][string], path: string): EditableAgentConfig['providers'][string] {
+  if (path.trim() === '') {
+    const { modelDiscovery: _modelDiscovery, ...providerWithoutDiscovery } = provider;
+    return providerWithoutDiscovery;
+  }
+
+  return { ...provider, modelDiscovery: { path } };
+}
+
+function withOptionalString<T extends Record<string, unknown>, K extends keyof T>(record: T, key: K, value: string): T {
+  if (value.trim() === '') {
+    const nextRecord = { ...record };
+    delete nextRecord[key];
+    return nextRecord;
+  }
+
+  return { ...record, [key]: value };
+}
+
+function withOptionalNumber<T extends Record<string, unknown>, K extends keyof T>(record: T, key: K, value: string): T {
+  if (value.trim() === '') {
+    const nextRecord = { ...record };
+    delete nextRecord[key];
+    return nextRecord;
+  }
+
+  return { ...record, [key]: Number(value) };
+}
+
+function formatOptionalNumber(value: number | undefined): string {
+  return value === undefined ? '' : String(value);
+}
+
+function modelMetadataCount(model: EditableAgentConfig['providers'][string]['models'][string]): number {
+  return [model.variant, model.contextWindow, model.contextTokens, model.maxTokens].filter((value) => value !== undefined).length;
+}
+
+function validateRemoteDraft(config: EditableAgentConfig): string | null {
+  const providerEntries = Object.entries(config.providers);
+  if (providerEntries.length === 0) {
+    return '至少需要一个 Provider。';
+  }
+
+  if (config.providers[config.defaults.provider] === undefined) {
+    return '默认 Provider 必须指向已配置的 Provider。';
+  }
+
+  if (config.providers[config.defaults.provider]?.models[config.defaults.model] === undefined) {
+    return '默认 Model 必须属于默认 Provider。';
+  }
+
+  for (const [providerId, provider] of providerEntries) {
+    const providerLabel = providerId.trim() === '' ? '未命名 Provider' : providerId;
+    if (providerId.trim() === '') {
+      return 'Provider ID 不能为空。';
+    }
+    if (provider.baseURL.trim() === '') {
+      return `${providerLabel} 的 Base URL 不能为空。`;
+    }
+    if (provider.apiKey.value.trim() === '') {
+      return `${providerLabel} 的 API Key 不能为空；Web 页面不隐藏或沿用不可见密钥。`;
+    }
+    if (provider.modelDiscovery !== undefined && (provider.modelDiscovery.path.trim() === '' || !provider.modelDiscovery.path.startsWith('/'))) {
+      return `${providerLabel} 的 Model Discovery Path 必须留空或以 / 开头。`;
+    }
+
+    const modelEntries = Object.entries(provider.models);
+    if (modelEntries.length === 0) {
+      return `${providerLabel} 至少需要一个 Model。`;
+    }
+
+    for (const [modelId, model] of modelEntries) {
+      const modelLabel = modelId.trim() === '' ? '未命名 Model' : modelId;
+      if (modelId.trim() === '') {
+        return `${providerLabel} 的 Model ID 不能为空。`;
+      }
+      if (model.variant !== undefined && model.variant.trim() === '') {
+        return `${providerLabel}/${modelLabel} 的 variant 必须留空或填写非空文本。`;
+      }
+      for (const field of ['contextWindow', 'contextTokens', 'maxTokens'] as const) {
+        if (model[field] !== undefined && (!Number.isInteger(model[field]) || model[field] <= 0)) {
+          return `${providerLabel}/${modelLabel} 的 ${field} 必须留空或填写正整数。`;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function DiffResults({ results }: { results: AgentDiffResult[] | null }) {
@@ -1023,7 +1556,13 @@ function DiffResults({ results }: { results: AgentDiffResult[] | null }) {
     <section className="result-stack" aria-label="Diff 结果">
       <ResultHeading eyebrow="Diff" title="托管字段变更" />
       {results.map((result) => (
-        <AgentChangeCard key={result.agent} title={agentLabel(result.agent)} subtitle="当前原生值 -> 预期缓存值" changes={result.changes} />
+        <AgentChangeCard
+          key={result.agent}
+          title={agentLabel(result.agent)}
+          subtitle="当前原生值 -> 预期缓存值"
+          changes={result.changes}
+          notices={result.notices}
+        />
       ))}
     </section>
   );
@@ -1050,6 +1589,7 @@ function PlanResults({ plans, results, stale }: { plans: ApplyPlanSummary[] | nu
             {plan.envPath !== undefined && <Detail label="Env 文件" value={plan.envPath} />}
             <Detail label="状态" value={formatStatus(results.find((result) => result.agent === plan.agent)?.status)} />
           </dl>
+          <NoticeList notices={plan.notices} />
           <PathList title="操作路径" paths={plan.operationPaths} empty="不会更改任何文件。" />
           <FilePreviewList previews={plan.filePreviews} />
           <FieldRows changes={plan.changes} />
@@ -1078,6 +1618,7 @@ function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
             {result.envPath !== undefined && <Detail label="Env 文件" value={result.envPath} />}
             {result.error !== undefined && <Detail label="错误" value={result.error} />}
           </dl>
+          <NoticeList notices={result.notices} />
           <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
           <FieldRows changes={result.changes} />
         </article>
@@ -1095,7 +1636,7 @@ function ResultHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
-function AgentChangeCard({ title, subtitle, changes }: { title: string; subtitle: string; changes: ManagedDiffChange[] }) {
+function AgentChangeCard({ title, subtitle, changes, notices }: { title: string; subtitle: string; changes: ManagedDiffChange[]; notices: ManagedDiffNotice[] }) {
   return (
     <article className="agent-result-card">
       <div className="agent-result-card__header">
@@ -1105,8 +1646,30 @@ function AgentChangeCard({ title, subtitle, changes }: { title: string; subtitle
         </div>
         <StatusBadge tone={changes.length > 0 ? 'warning' : 'ready'}>{changes.length > 0 ? '有变更' : '未变化'}</StatusBadge>
       </div>
+      <NoticeList notices={notices} />
       <FieldRows changes={changes} />
     </article>
+  );
+}
+
+function NoticeList({ notices }: { notices: ManagedDiffNotice[] }) {
+  if (notices.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="managed-notice-list" role="note" aria-label="托管字段提示">
+      <strong>注意事项</strong>
+      <ul>
+        {notices.map((notice) => (
+          <li key={`${notice.field}-${notice.code}`}>
+            <span className="managed-notice-list__field">{fieldLabel(notice.field)}</span>
+            <code>{notice.code}</code>
+            <span>{notice.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -1168,25 +1731,70 @@ function FilePreviewList({ previews }: { previews: ApplyFilePreview[] }) {
 }
 
 function SchemaReference() {
+  const schemaTree = buildSchemaDocTree(AGENTCFG_SCHEMA_DOCS);
+
   return (
     <section id="remote-schema-preview" className="schema-docs" aria-label="agentcfg.yaml schema 参考">
       <p className="schema-docs__intro">agentcfg.yaml canonical fields. This reference documents the schema only and never mirrors current form values.</p>
-      <dl className="schema-docs__list">
-        {AGENTCFG_SCHEMA_DOCS.map((field) => (
-          <div className="schema-docs__field" key={field.path}>
-            <dt>
-              <code>{field.path}</code>
-              <span>{field.required ? 'required' : 'optional'}</span>
-            </dt>
-            <dd>
-              <strong>{field.label}</strong>
-              <span>Type: {field.type}</span>
-              <p>{field.description}</p>
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <div className="schema-docs__tree" aria-label="Schema field tree">
+        {schemaTree.map((node) => renderSchemaDocNode(node, true))}
+      </div>
     </section>
+  );
+}
+
+function buildSchemaDocTree(fields: readonly AgentConfigSchemaDoc[]): SchemaDocTreeNode[] {
+  const nodesByPath = new Map<string, SchemaDocTreeNode>();
+  const roots: SchemaDocTreeNode[] = [];
+
+  for (const field of fields) {
+    nodesByPath.set(field.path, { field, children: [] });
+  }
+
+  for (const field of fields) {
+    const node = nodesByPath.get(field.path);
+    if (node === undefined) {
+      continue;
+    }
+
+    const parent = nodesByPath.get(parentSchemaPath(field.path));
+    if (parent === undefined) {
+      roots.push(node);
+      continue;
+    }
+
+    parent.children.push(node);
+  }
+
+  return roots;
+}
+
+function parentSchemaPath(path: string): string {
+  const segments = path.split('.');
+  segments.pop();
+  return segments.join('.');
+}
+
+function renderSchemaDocNode(node: SchemaDocTreeNode, isRoot: boolean) {
+  return (
+    <details className="schema-docs__node" data-schema-path={node.field.path} key={node.field.path} open={isRoot}>
+      <summary className="schema-docs__summary">
+        <span className="schema-docs__summary-main">
+          <code>{node.field.path}</code>
+          <strong>{node.field.label}</strong>
+        </span>
+        <span className="schema-docs__badge">{node.field.required ? 'required' : 'optional'}</span>
+      </summary>
+      <div className="schema-docs__body">
+        <span>Type: {node.field.type}</span>
+        <p>{node.field.description}</p>
+      </div>
+      {node.children.length > 0 && (
+        <div className="schema-docs__children">
+          {node.children.map((child) => renderSchemaDocNode(child, false))}
+        </div>
+      )}
+    </details>
   );
 }
 

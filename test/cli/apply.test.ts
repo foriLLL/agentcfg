@@ -11,12 +11,38 @@ const CACHED_SECRET = ['sk', 'apply', 'redacted'].join('-');
 const NATIVE_SECRET = ['native', 'apply', 'value'].join('-');
 const CANONICAL_CONFIG = {
   schemaVersion: 1,
-  provider: 'openai',
-  model: 'gpt-4.1-mini',
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: {
-    type: 'plain',
-    value: CACHED_SECRET,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      models: {
+        'gpt-4.1-mini': {},
+      },
+    },
+  },
+};
+
+const METADATA_CONFIG = {
+  ...CANONICAL_CONFIG,
+  providers: {
+    openai: {
+      ...CANONICAL_CONFIG.providers.openai,
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'chat',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+        },
+      },
+    },
   },
 };
 
@@ -133,6 +159,170 @@ test('apply yes writes atomically with backup and is idempotent', async () => {
   }
 });
 
+test('apply yes writes Claude Code settings and is idempotent', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-claude-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'settings.json');
+  const original = `${JSON.stringify({ theme: 'dark', env: { KEEP_ME: 'yes', ANTHROPIC_API_KEY: NATIVE_SECRET, ANTHROPIC_BASE_URL: 'https://old.example.test' } }, null, 2)}\n`;
+
+  try {
+    await writeState(statePath);
+    await writeFile(nativePath, original);
+
+    const first = await runCli(['apply', '--agent', 'claude', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /Apply complete/);
+    assert.match(first.stdout, /Status: applied/);
+    assert.equal(first.stdout.includes(CACHED_SECRET), false);
+    assert.equal(first.stdout.includes(NATIVE_SECRET), false);
+    const rendered = JSON.parse(await readFile(nativePath, 'utf8')) as Record<string, unknown>;
+    assert.equal(rendered.model, 'gpt-4.1-mini');
+    assert.equal(readNestedString(rendered, ['env', 'KEEP_ME']), 'yes');
+    assert.equal(readNestedString(rendered, ['env', 'ANTHROPIC_API_KEY']), CACHED_SECRET);
+    assert.equal(readNestedString(rendered, ['env', 'ANTHROPIC_BASE_URL']), 'https://api.openai.com/v1');
+    assert.equal((await stat(nativePath)).mode & 0o777, 0o600);
+    const backupsAfterFirst = await backupFiles(directory);
+    assert.equal(backupsAfterFirst.length, 1);
+    assert.equal(await readFile(join(directory, backupsAfterFirst[0]), 'utf8'), original);
+
+    const afterFirst = await readFile(nativePath, 'utf8');
+    const second = await runCli(['apply', '--agent', 'claude', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(second.status, 0, second.stderr);
+    assert.match(second.stdout, /Status: unchanged/);
+    assert.equal(await readFile(nativePath, 'utf8'), afterFirst);
+    assert.deepEqual(await backupFiles(directory), backupsAfterFirst);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('apply yes writes OpenCode metadata-only changes and preserves existing model fields', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-opencode-metadata-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'opencode.jsonc');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await writeFile(
+      nativePath,
+      `${JSON.stringify(
+        {
+          theme: 'system',
+          model: 'openai/gpt-4.1-mini',
+          provider: {
+            openai: {
+              options: {
+                baseURL: 'https://api.openai.com/v1',
+                apiKey: CACHED_SECRET,
+              },
+              models: {
+                'gpt-4.1-mini': {
+                  reasoning: true,
+                  limit: {
+                    context: 4096,
+                    input: 4096,
+                    output: 1024,
+                  },
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runCli(['apply', '--agent', 'opencode', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Status: applied/);
+    assert.match(result.stdout, /contextWindow: 4096 -> 1047576/);
+    assert.match(result.stdout, /contextTokens: 4096 -> 1047576/);
+    assert.match(result.stdout, /maxTokens: 1024 -> 32768/);
+    const rendered = JSON.parse(await readFile(nativePath, 'utf8')) as Record<string, unknown>;
+    assert.deepEqual(readNestedValue(rendered, ['provider', 'openai', 'models', 'gpt-4.1-mini']), {
+      reasoning: true,
+      limit: {
+        context: 1047576,
+        input: 1047576,
+        output: 32768,
+      },
+    });
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('apply yes writes OpenClaw metadata-only changes and preserves selected model fields', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-openclaw-metadata-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'openclaw.json5');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await writeFile(
+      nativePath,
+      `${JSON.stringify(
+        {
+          agents: { defaults: { model: { primary: 'openai/gpt-4.1-mini' } } },
+          models: {
+            providers: {
+              openai: {
+                baseUrl: 'https://api.openai.com/v1',
+                apiKey: CACHED_SECRET,
+                models: [
+                  {
+                    id: 'gpt-4.1-mini',
+                    name: 'Existing model name',
+                    input: ['text', 'image'],
+                    contextWindow: 4096,
+                    contextTokens: 4096,
+                    maxTokens: 1024,
+                  },
+                  {
+                    id: 'gpt-4.1',
+                    name: 'Other model',
+                  },
+                ],
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runCli(['apply', '--agent', 'openclaw', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Status: applied/);
+    assert.match(result.stdout, /contextWindow: 4096 -> 1047576/);
+    assert.match(result.stdout, /contextTokens: 4096 -> 1047576/);
+    assert.match(result.stdout, /maxTokens: 1024 -> 32768/);
+    const rendered = JSON.parse(await readFile(nativePath, 'utf8')) as Record<string, unknown>;
+    assert.deepEqual(readNestedValue(rendered, ['models', 'providers', 'openai', 'models']), [
+      {
+        id: 'gpt-4.1-mini',
+        name: 'Existing model name',
+        input: ['text', 'image'],
+        contextWindow: 1047576,
+        contextTokens: 1047576,
+        maxTokens: 32768,
+      },
+      {
+        id: 'gpt-4.1',
+        name: 'Other model',
+      },
+    ]);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('apply yes writes Codex native config and generated env file with backups and idempotency', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-codex-'));
   const statePath = join(directory, 'state.json');
@@ -194,6 +384,7 @@ test('apply all-agents validates all selected agents before any write', async ()
     codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
+    claude: join(fixturesRoot, 'claude', 'input.settings.json'),
   };
 
   try {
@@ -210,11 +401,14 @@ test('apply all-agents validates all selected agents before any write', async ()
     assert.match(result.stderr, /Agent: opencode/);
     assert.match(result.stderr, /Status: failed/);
     assert.match(result.stderr, /Agent: openclaw/);
+    assert.match(result.stderr, /Agent: claude/);
     assert.equal(result.stderr.includes(CACHED_SECRET), false);
     assert.equal(result.stderr.includes(NATIVE_SECRET), false);
     assert.deepEqual(await snapshotFiles(Object.values(paths)), before);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'codex')), []);
+    assert.deepEqual(await backupFiles(join(fixturesRoot, 'opencode')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'openclaw')), []);
+    assert.deepEqual(await backupFiles(join(fixturesRoot, 'claude')), []);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }
@@ -229,6 +423,7 @@ test('apply all-agents rejects a read-only later target before writing earlier a
     codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
+    claude: join(fixturesRoot, 'claude', 'input.settings.json'),
   };
 
   try {
@@ -247,6 +442,7 @@ test('apply all-agents rejects a read-only later target before writing earlier a
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'codex')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'opencode')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'openclaw')), []);
+    assert.deepEqual(await backupFiles(join(fixturesRoot, 'claude')), []);
   } finally {
     await chmod(paths.openclaw, 0o644).catch(() => undefined);
     await rm(directory, { force: true, recursive: true });
@@ -270,6 +466,7 @@ test('apply rollback restores prior content and mode after a later write failure
         configPath: laterPath,
         envPath: secretPath,
         changes: [],
+        notices: [],
         operations: [
           { path: secretPath, content: 'AGENTCFG_OPENAI_API_KEY=new-secret\n', mode: 0o600, kind: 'env' },
           { path: laterPath, content: 'LATER=new\n', kind: 'env' },
@@ -297,14 +494,58 @@ test('apply rollback restores prior content and mode after a later write failure
   }
 });
 
-async function writeState(path: string): Promise<void> {
+test('apply dry-run reports Codex unsupported metadata notices without writing or changing status', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-codex-notices-'));
+  const statePath = join(directory, 'state.json');
+  const fixturesRoot = join(directory, 'fixtures');
+  const codexDirectory = join(fixturesRoot, 'codex');
+  const nativePath = join(codexDirectory, 'input.config.toml');
+  const envPath = join(codexDirectory, 'codex.env');
+
+  try {
+    await writeState(statePath, METADATA_CONFIG);
+    await mkdir(codexDirectory, { recursive: true });
+    await writeFile(
+      nativePath,
+      [
+        'model = "gpt-4.1-mini"',
+        'model_provider = "openai"',
+        '',
+        '[model_providers.openai]',
+        'base_url = "https://api.openai.com/v1"',
+        'env_key = "AGENTCFG_OPENAI_API_KEY"',
+        '',
+      ].join('\n'),
+    );
+    await writeFile(envPath, `AGENTCFG_OPENAI_API_KEY=${CACHED_SECRET}\n`);
+    const before = await snapshotFiles([nativePath, envPath]);
+
+    const result = await runCli(['apply', '--agent', 'codex', '--dry-run', '--yes', '--state', statePath, '--fixtures-root', fixturesRoot]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Status: unchanged/);
+    assert.match(result.stdout, /No managed changes\./);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for contextWindow/);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for contextTokens/);
+    assert.match(result.stdout, /Notice: Codex has no official native mapping for maxTokens/);
+    assert.doesNotMatch(result.stdout, /contextWindow: .* -> /);
+    assert.doesNotMatch(result.stdout, /contextTokens: .* -> /);
+    assert.doesNotMatch(result.stdout, /maxTokens: .* -> /);
+    assert.deepEqual(await snapshotFiles(Object.keys(before)), before);
+    assert.deepEqual(await backupFiles(codexDirectory), []);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+async function writeState(path: string, config = CANONICAL_CONFIG): Promise<void> {
   await writeFile(
     path,
     `${JSON.stringify(
       {
         schemaVersion: 1,
         cache: {
-          config: CANONICAL_CONFIG,
+          config,
           updatedAt: '2026-06-06T00:00:00.000Z',
         },
       },
@@ -318,10 +559,12 @@ async function writeNativeFixtures(fixturesRoot: string): Promise<void> {
   await mkdir(join(fixturesRoot, 'codex'), { recursive: true });
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
   await writeFile(join(fixturesRoot, 'codex', 'input.config.toml'), codexNativeToml());
   await writeFile(join(fixturesRoot, 'codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
   await writeFile(join(fixturesRoot, 'opencode', 'input.opencode.jsonc'), opencodeNativeJson(NATIVE_SECRET));
   await writeFile(join(fixturesRoot, 'openclaw', 'input.openclaw.json5'), openclawNativeJson(NATIVE_SECRET));
+  await writeFile(join(fixturesRoot, 'claude', 'input.settings.json'), claudeNativeJson(NATIVE_SECRET));
 }
 
 function codexNativeToml(): string {
@@ -379,6 +622,22 @@ function openclawNativeJson(apiKey: string): string {
   )}\n`;
 }
 
+function claudeNativeJson(apiKey: string): string {
+  return `${JSON.stringify(
+    {
+      theme: 'dark',
+      model: 'claude-3-5-sonnet',
+      env: {
+        KEEP_ME: 'yes',
+        ANTHROPIC_API_KEY: apiKey,
+        ANTHROPIC_BASE_URL: 'https://old.example.test/v1',
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {
   const snapshot: Record<string, string> = {};
   for (const path of paths) {
@@ -408,6 +667,17 @@ function readNestedString(object: Record<string, unknown>, path: string[]): stri
     current = (current as Record<string, unknown>)[segment];
   }
   return typeof current === 'string' ? current : undefined;
+}
+
+function readNestedValue(object: Record<string, unknown>, path: string[]): unknown {
+  let current: unknown = object;
+  for (const segment of path) {
+    if (typeof current !== 'object' || current === null || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
 }
 
 async function runCli(args: string[], env: NodeJS.ProcessEnv = {}): Promise<CliResult> {

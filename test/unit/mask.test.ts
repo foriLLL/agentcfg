@@ -4,31 +4,40 @@ import { maskConfig, maskConfigForOutput, maskSecret, MASKED_SECRET, type Canoni
 
 const CONFIG: CanonicalAgentConfig = {
   schemaVersion: 1,
-  provider: 'openai',
-  model: 'gpt-4.1-mini',
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: {
-    type: 'plain',
-    value: 'sk-test-redacted',
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: 'sk-test-redacted',
+      },
+      models: {
+        'gpt-4.1-mini': {},
+      },
+    },
   },
 };
 
 test('masks API key values in config helpers', () => {
   const masked = maskConfig(CONFIG);
 
-  assert.equal(masked.apiKey.value, MASKED_SECRET);
-  assert.equal(masked.provider, 'openai');
-  assert.notEqual(masked.apiKey.value, CONFIG.apiKey.value);
+  assert.equal(masked.providers.openai.apiKey.value, MASKED_SECRET);
+  assert.equal(masked.defaults.provider, 'openai');
+  assert.notEqual(masked.providers.openai.apiKey.value, CONFIG.providers.openai.apiKey.value);
 });
 
 test('masks individual secret values', () => {
-  assert.equal(maskSecret(CONFIG.apiKey.value), MASKED_SECRET);
-  assert.equal(maskSecret(CONFIG.apiKey.value).includes(CONFIG.apiKey.value), false);
+  assert.equal(maskSecret(CONFIG.providers.openai.apiKey.value), MASKED_SECRET);
+  assert.equal(maskSecret(CONFIG.providers.openai.apiKey.value).includes(CONFIG.providers.openai.apiKey.value), false);
 });
 
 test('masked output never includes the raw API key', () => {
   const output = maskConfigForOutput(CONFIG);
 
   assert.ok(output.includes(MASKED_SECRET));
-  assert.equal(output.includes(CONFIG.apiKey.value), false);
+  assert.equal(output.includes(CONFIG.providers.openai.apiKey.value), false);
 });

@@ -9,20 +9,34 @@ import {
   renderCodexConfig,
   resolveCodexEnvPath,
 } from '../../src/adapters/codex';
-import { NativeConfigParseError, NativeConfigSerializeError, type CanonicalAgentConfig } from '../../src/core';
+import { NativeConfigParseError, NativeConfigSerializeError, validateAgentConfig } from '../../src/core';
 
 const CACHED_SECRET = ['sk', 'test', 'redacted'].join('-');
 
-const CANONICAL_CONFIG: CanonicalAgentConfig = {
+const CANONICAL_CONFIG = validateAgentConfig({
   schemaVersion: 1,
-  provider: 'openai',
-  model: 'gpt-4.1-mini',
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: {
-    type: 'plain',
-    value: CACHED_SECRET,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
   },
-};
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'chat',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+        },
+      },
+    },
+  },
+});
 
 test('Codex adapter maps canonical config to TOML and env metadata', () => {
   const result = renderCodexConfig(
@@ -101,6 +115,17 @@ env_key = "AGENTCFG_OPENAI_API_KEY"
       },
     },
   });
+});
+
+test('Codex adapter skips unsupported canonical model metadata fields', () => {
+  const result = renderCodexConfig(CANONICAL_CONFIG, {});
+
+  assert.equal(result.toml.includes('variant'), false);
+  assert.equal(result.toml.includes('contextWindow'), false);
+  assert.equal(result.toml.includes('contextTokens'), false);
+  assert.equal(result.toml.includes('maxTokens'), false);
+  assert.equal(result.toml.includes('context_window'), false);
+  assert.equal(result.toml.includes('max_tokens'), false);
 });
 
 test('Codex adapter fails closed on malformed TOML input', () => {

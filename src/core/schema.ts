@@ -5,12 +5,38 @@ export type PlainApiKey = {
   value: string;
 };
 
-export type CanonicalAgentConfig = {
-  schemaVersion: 1;
+export type AgentConfigDefaults = {
   provider: string;
   model: string;
+};
+
+export type ModelConfig = {
+  variant?: string;
+  contextWindow?: number;
+  contextTokens?: number;
+  maxTokens?: number;
+};
+
+export type ProviderConfig = {
   baseURL: string;
   apiKey: PlainApiKey;
+  modelDiscovery?: {
+    path: string;
+  };
+  models: Record<string, ModelConfig>;
+};
+
+export type CanonicalAgentConfig = {
+  schemaVersion: 1;
+  defaults: AgentConfigDefaults;
+  providers: Record<string, ProviderConfig>;
+};
+
+export type SelectedProviderConfig = {
+  providerId: string;
+  modelId: string;
+  provider: ProviderConfig;
+  model: ModelConfig;
 };
 
 export type AgentConfigInput = {
@@ -19,6 +45,8 @@ export type AgentConfigInput = {
   model?: unknown;
   baseURL?: unknown;
   apiKey?: unknown;
+  defaults?: unknown;
+  providers?: unknown;
 };
 
 export class AgentConfigValidationError extends Error {
@@ -30,8 +58,6 @@ export class AgentConfigValidationError extends Error {
     this.issues = issues;
   }
 }
-
-const REQUIRED_STRING_FIELDS = ['provider', 'model', 'baseURL'] as const;
 
 export function parseAgentConfigYaml(yaml: string): AgentConfigInput {
   try {
@@ -60,20 +86,46 @@ export function parseCanonicalAgentConfig(yaml: string): CanonicalAgentConfig {
 }
 
 export function serializeCanonicalAgentConfig(config: AgentConfigInput): string {
-  const canonicalConfig = validateAgentConfig(config);
+  const canonicalConfig = validateNestedAgentConfig(config);
+  const providers: Record<string, ProviderConfig> = {};
+
+  for (const [providerId, provider] of Object.entries(canonicalConfig.providers)) {
+    providers[providerId] = serializeProvider(provider);
+  }
+
   return stringifyYaml({
     schemaVersion: canonicalConfig.schemaVersion,
-    provider: canonicalConfig.provider,
-    model: canonicalConfig.model,
-    baseURL: canonicalConfig.baseURL,
-    apiKey: {
-      type: canonicalConfig.apiKey.type,
-      value: canonicalConfig.apiKey.value,
+    defaults: {
+      provider: canonicalConfig.defaults.provider,
+      model: canonicalConfig.defaults.model,
     },
+    providers,
   });
 }
 
 export function validateAgentConfig(input: AgentConfigInput): CanonicalAgentConfig {
+  return validateNestedAgentConfig(input);
+}
+
+export function getSelectedProviderConfig(config: CanonicalAgentConfig): SelectedProviderConfig {
+  const providerId = config.defaults.provider;
+  const modelId = config.defaults.model;
+  const provider = config.providers[providerId];
+
+  if (provider === undefined) {
+    throw new AgentConfigValidationError([`defaults.provider must reference an existing provider (received ${providerId})`]);
+  }
+
+  const model = provider.models[modelId];
+
+  if (model === undefined) {
+    throw new AgentConfigValidationError([`defaults.model must reference an existing model under defaults.provider (received ${modelId})`]);
+  }
+
+  return { providerId, modelId, provider, model };
+}
+
+function validateNestedAgentConfig(input: AgentConfigInput): CanonicalAgentConfig {
   const issues: string[] = [];
   const schemaVersion = normalizeSchemaVersion(input.schemaVersion);
 
@@ -82,15 +134,17 @@ export function validateAgentConfig(input: AgentConfigInput): CanonicalAgentConf
     issues.push(`schemaVersion must be 1 before parsing native configs (received ${received})`);
   }
 
-  for (const field of REQUIRED_STRING_FIELDS) {
-    if (!isNonEmptyString(input[field])) {
-      issues.push(`${field} is required and must be a non-empty string`);
-    }
-  }
+  const defaults = validateDefaults(input.defaults, issues);
+  const providers = validateProviders(input.providers, issues);
 
-  const apiKey = normalizeApiKey(input.apiKey);
-  if (apiKey === undefined) {
-    issues.push('apiKey is required and must be a non-empty string or { type: "plain", value: string }');
+  if (defaults !== undefined && providers !== undefined) {
+    const defaultProvider = providers[defaults.provider];
+
+    if (defaultProvider === undefined) {
+      issues.push(`defaults.provider must reference an existing provider (received ${defaults.provider})`);
+    } else if (defaultProvider.models[defaults.model] === undefined) {
+      issues.push(`defaults.model must reference an existing model under defaults.provider (received ${defaults.model})`);
+    }
   }
 
   if (issues.length > 0) {
@@ -99,11 +153,261 @@ export function validateAgentConfig(input: AgentConfigInput): CanonicalAgentConf
 
   return {
     schemaVersion: 1,
-    provider: input.provider as string,
-    model: input.model as string,
-    baseURL: input.baseURL as string,
-    apiKey: apiKey as PlainApiKey,
+    defaults: defaults as AgentConfigDefaults,
+    providers: providers as Record<string, ProviderConfig>,
   };
+}
+
+function serializeProvider(provider: ProviderConfig): ProviderConfig {
+  const serializedModels: Record<string, ModelConfig> = {};
+
+  for (const [modelId, model] of Object.entries(provider.models)) {
+    const serializedModel: ModelConfig = {};
+
+    if (model.variant !== undefined) {
+      serializedModel.variant = model.variant;
+    }
+
+    if (model.contextWindow !== undefined) {
+      serializedModel.contextWindow = model.contextWindow;
+    }
+
+    if (model.contextTokens !== undefined) {
+      serializedModel.contextTokens = model.contextTokens;
+    }
+
+    if (model.maxTokens !== undefined) {
+      serializedModel.maxTokens = model.maxTokens;
+    }
+
+    serializedModels[modelId] = serializedModel;
+  }
+
+  const serializedProvider: ProviderConfig = {
+    baseURL: provider.baseURL,
+    apiKey: {
+      type: provider.apiKey.type,
+      value: provider.apiKey.value,
+    },
+    models: serializedModels,
+  };
+
+  if (provider.modelDiscovery !== undefined) {
+    return {
+      baseURL: serializedProvider.baseURL,
+      apiKey: serializedProvider.apiKey,
+      modelDiscovery: {
+        path: provider.modelDiscovery.path,
+      },
+      models: serializedProvider.models,
+    };
+  }
+
+  return serializedProvider;
+}
+
+function validateDefaults(value: unknown, issues: string[]): AgentConfigDefaults | undefined {
+  if (!isRecord(value)) {
+    issues.push('defaults is required and must be an object');
+    return undefined;
+  }
+
+  const provider = value.provider;
+  const model = value.model;
+
+  if (!isNonEmptyString(provider)) {
+    issues.push('defaults.provider is required and must be a non-empty string');
+  }
+
+  if (!isNonEmptyString(model)) {
+    issues.push('defaults.model is required and must be a non-empty string');
+  }
+
+  if (!isNonEmptyString(provider) || !isNonEmptyString(model)) {
+    return undefined;
+  }
+
+  return { provider, model };
+}
+
+function validateProviders(value: unknown, issues: string[]): Record<string, ProviderConfig> | undefined {
+  if (!isRecord(value)) {
+    issues.push('providers is required and must be an object with at least one provider');
+    return undefined;
+  }
+
+  const providerEntries = Object.entries(value);
+  if (providerEntries.length === 0) {
+    issues.push('providers is required and must include at least one provider');
+    return undefined;
+  }
+
+  const providers: Record<string, ProviderConfig> = {};
+
+  for (const [providerId, providerValue] of providerEntries) {
+    if (!isNonEmptyString(providerId)) {
+      issues.push('providers must use non-empty provider IDs');
+      continue;
+    }
+
+    const provider = validateProvider(providerId, providerValue, issues);
+    if (provider !== undefined) {
+      providers[providerId] = provider;
+    }
+  }
+
+  return providers;
+}
+
+function validateProvider(providerId: string, value: unknown, issues: string[]): ProviderConfig | undefined {
+  const path = `providers.${providerId}`;
+
+  if (!isRecord(value)) {
+    issues.push(`${path} is required and must be an object`);
+    return undefined;
+  }
+
+  if (!isNonEmptyString(value.baseURL)) {
+    issues.push(`${path}.baseURL is required and must be a non-empty string`);
+  }
+
+  const apiKey = validateApiKey(`${path}.apiKey`, value.apiKey, issues);
+  const modelDiscovery = validateModelDiscovery(`${path}.modelDiscovery`, value.modelDiscovery, issues);
+  const models = validateModels(`${path}.models`, value.models, issues);
+
+  if (!isNonEmptyString(value.baseURL) || apiKey === undefined || models === undefined) {
+    return undefined;
+  }
+
+  const provider: ProviderConfig = {
+    baseURL: value.baseURL,
+    apiKey,
+    models,
+  };
+
+  if (modelDiscovery !== undefined) {
+    provider.modelDiscovery = modelDiscovery;
+  }
+
+  return provider;
+}
+
+function validateApiKey(path: string, value: unknown, issues: string[]): PlainApiKey | undefined {
+  if (!isRecord(value)) {
+    issues.push(`${path} is required and must be an object`);
+    issues.push(`${path}.type is required and must be plain`);
+    issues.push(`${path}.value is required and must be a non-empty string`);
+    return undefined;
+  }
+
+  if (value.type !== 'plain') {
+    issues.push(`${path}.type is required and must be plain`);
+  }
+
+  if (!isNonEmptyString(value.value)) {
+    issues.push(`${path}.value is required and must be a non-empty string`);
+  }
+
+  if (value.type !== 'plain' || !isNonEmptyString(value.value)) {
+    return undefined;
+  }
+
+  return { type: 'plain', value: value.value };
+}
+
+function validateModelDiscovery(path: string, value: unknown, issues: string[]): ProviderConfig['modelDiscovery'] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object when present`);
+    return undefined;
+  }
+
+  if (!isNonEmptyString(value.path) || !value.path.startsWith('/')) {
+    issues.push(`${path}.path must be a non-empty string that must begin with /`);
+    return undefined;
+  }
+
+  return { path: value.path };
+}
+
+function validateModels(path: string, value: unknown, issues: string[]): Record<string, ModelConfig> | undefined {
+  if (!isRecord(value)) {
+    issues.push(`${path} is required and must be an object with at least one model`);
+    return undefined;
+  }
+
+  const modelEntries = Object.entries(value);
+  if (modelEntries.length === 0) {
+    issues.push(`${path} is required and must include at least one model`);
+    return undefined;
+  }
+
+  const models: Record<string, ModelConfig> = {};
+
+  for (const [modelId, modelValue] of modelEntries) {
+    if (!isNonEmptyString(modelId)) {
+      issues.push(`${path} must use non-empty model IDs`);
+      continue;
+    }
+
+    const model = validateModelConfig(`${path}.${modelId}`, modelValue, issues);
+    if (model !== undefined) {
+      models[modelId] = model;
+    }
+  }
+
+  return models;
+}
+
+function validateModelConfig(path: string, value: unknown, issues: string[]): ModelConfig | undefined {
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object`);
+    return undefined;
+  }
+
+  const model: ModelConfig = {};
+  let valid = true;
+
+  if (value.variant !== undefined) {
+    if (!isNonEmptyString(value.variant)) {
+      issues.push(`${path}.variant must be a non-empty string when present`);
+      valid = false;
+    } else {
+      model.variant = value.variant;
+    }
+  }
+
+  if (value.contextWindow !== undefined) {
+    if (!isPositiveInteger(value.contextWindow)) {
+      issues.push(`${path}.contextWindow must be a positive integer when present`);
+      valid = false;
+    } else {
+      model.contextWindow = value.contextWindow;
+    }
+  }
+
+  if (value.contextTokens !== undefined) {
+    if (!isPositiveInteger(value.contextTokens)) {
+      issues.push(`${path}.contextTokens must be a positive integer when present`);
+      valid = false;
+    } else {
+      model.contextTokens = value.contextTokens;
+    }
+  }
+
+  if (value.maxTokens !== undefined) {
+    if (!isPositiveInteger(value.maxTokens)) {
+      issues.push(`${path}.maxTokens must be a positive integer when present`);
+      valid = false;
+    } else {
+      model.maxTokens = value.maxTokens;
+    }
+  }
+
+  return valid ? model : undefined;
 }
 
 function normalizeSchemaVersion(value: unknown): number | undefined {
@@ -118,24 +422,12 @@ function normalizeSchemaVersion(value: unknown): number | undefined {
   return undefined;
 }
 
-function normalizeApiKey(value: unknown): PlainApiKey | undefined {
-  if (isNonEmptyString(value)) {
-    return { type: 'plain', value };
-  }
-
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  if (value.type !== 'plain' || !isNonEmptyString(value.value)) {
-    return undefined;
-  }
-
-  return { type: 'plain', value: value.value };
-}
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

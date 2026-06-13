@@ -14,12 +14,14 @@ Encryption is deferred to a later release.
 
 ## MVP scope
 
-The MVP manages one canonical config file in a private Gist and applies these managed fields only:
+The MVP manages one canonical config file in a private Gist and applies the selected provider/model from this provider catalog:
 
-- `provider`
-- `model`
-- `baseURL`
-- `apiKey`
+- `defaults.provider`
+- `defaults.model`
+- `providers.<provider>.baseURL`
+- `providers.<provider>.apiKey`
+- `providers.<provider>.models.<model>` metadata
+- optional `providers.<provider>.modelDiscovery.path`
 
 Source of truth works like this, the Gist wins for managed fields and local native config keeps everything else.
 
@@ -33,10 +35,23 @@ Minimal example:
 
 ```yaml
 schemaVersion: 1
-provider: openai
-model: gpt-4.1-mini
-baseURL: https://api.openai.com/v1
-apiKey: sk-test-redacted
+defaults:
+  provider: openai
+  model: gpt-4.1-mini
+providers:
+  openai:
+    baseURL: https://api.openai.com/v1
+    apiKey:
+      type: plain
+      value: sk-test-redacted
+    modelDiscovery:
+      path: /models
+    models:
+      gpt-4.1-mini:
+        variant: chat
+        contextWindow: 1047576
+        contextTokens: 1047576
+        maxTokens: 32768
 ```
 
 The sample file in `examples/agentcfg.yaml` uses the same shape.
@@ -94,6 +109,8 @@ Use these options when you need a different bind or state file:
 - `preview:web` previews the built Web UI.
 
 ### Test lanes
+
+Use `docs/testing-capability.md` as the development-time test design contract before changing existing behavior or designing new behavior.
 
 - `test:api` covers the runtime API contract.
 - `test:server` covers the local HTTP server.
@@ -181,17 +198,23 @@ Codex uses TOML for the native config and a generated env file at `~/.agentcfg/e
 
 The env file stores the secret, and agentcfg writes it with restrictive permissions.
 
+Codex has no official native per-model field for `variant`, `contextWindow`, `contextTokens`, or `maxTokens`, so agentcfg does not emit those metadata fields into Codex config. When the selected canonical model has `contextWindow`, `contextTokens`, or `maxTokens`, diff, dry-run, and apply output show non-fatal notices explaining that those fields are unsupported and were not written.
+
 ### OpenCode
 
 OpenCode uses JSON or JSONC.
 
 agentcfg updates the top-level `model` and the selected provider’s `options` fields for `baseURL` and `apiKey`.
 
+When the selected canonical model has both `contextWindow` and `maxTokens`, agentcfg writes them to the official OpenCode model override `provider.<id>.models.<model>.limit.context` and `limit.output`. If `contextTokens` is present, agentcfg also writes it to the official optional `limit.input` field. If either `contextWindow` or `maxTokens` is missing, it skips `limit` because OpenCode requires both native fields. `variant` is not emitted for OpenCode.
+
 ### OpenClaw
 
 OpenClaw uses JSON5.
 
 agentcfg updates the nested provider/default model fields and the selected provider entry under `models.providers`.
+
+For the selected canonical model, agentcfg writes official OpenClaw model metadata as `models.providers.<provider>.models[]` with `id`, `contextWindow`, `contextTokens`, and `maxTokens` when those fields are present. `variant` is not emitted for OpenClaw.
 
 ## Managed and unmanaged fields
 

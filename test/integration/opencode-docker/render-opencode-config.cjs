@@ -15,11 +15,14 @@ const { renderOpenCodeConfigText } = require(path.join(rootDir, 'dist/src/adapte
 
 const rendered = renderOpenCodeConfigText(canonical, existingConfigText);
 const parsed = JSON.parse(rendered);
+const providerId = canonical.defaults.provider;
+const modelId = canonical.defaults.model;
+const providerConfig = canonical.providers[providerId];
 
-assert.equal(parsed.model, `${canonical.provider}/${canonical.model}`);
-assert.equal(parsed.provider[canonical.provider].name, canonical.provider);
-assert.equal(parsed.provider[canonical.provider].options.baseURL, canonical.baseURL);
-assert.equal(parsed.provider[canonical.provider].options.apiKey, canonical.apiKey.value);
+assert.equal(parsed.model, `${providerId}/${modelId}`);
+assert.equal(parsed.provider[providerId].name, providerId);
+assert.equal(parsed.provider[providerId].options.baseURL, providerConfig.baseURL);
+assert.equal(parsed.provider[providerId].options.apiKey, providerConfig.apiKey.value);
 assert.equal(parsed.theme, 'system');
 assert.deepEqual(parsed.tools, { bash: true });
 

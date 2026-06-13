@@ -4,8 +4,10 @@ import { basename, dirname, join } from 'node:path';
 import {
   DiffError,
   diffManagedSnapshots,
+  unsupportedCodexManagedFieldNotices,
   parseNativeConfig,
   isNodeErrorWithCode,
+  getSelectedProviderConfig,
   type AgentDiffResult,
   type CanonicalAgentConfig,
   type ManagedDiffSnapshot,
@@ -13,10 +15,11 @@ import {
   type NativeConfigValue,
 } from '../core';
 import { codexEnvKeyForProvider, renderCodexConfig, resolveCodexEnvPath } from './codex';
+import { renderClaudeCodeConfigObject } from './claude';
 import { renderOpenClawConfigObject, resolveOpenClawConfigPath } from './openclaw';
 import { renderOpenCodeConfigObject } from './opencode';
 
-export const ADAPTER_NAMES = ['codex', 'opencode', 'openclaw'] as const;
+export const ADAPTER_NAMES = ['codex', 'opencode', 'openclaw', 'claude'] as const;
 
 export type AdapterName = (typeof ADAPTER_NAMES)[number];
 
@@ -55,6 +58,12 @@ export const adapters: Readonly<Record<AdapterName, AdapterRegistryEntry>> = Obj
     defaultConfigPath: () => resolveOpenClawConfigPath(),
     diff: diffOpenClaw,
   }),
+  claude: Object.freeze({
+    name: 'claude',
+    configFileCandidates: ['settings.json', 'settings.local.json', 'input.settings.json'],
+    defaultConfigPath: () => join(homedir(), '.claude', 'settings.json'),
+    diff: diffClaude,
+  }),
 });
 
 export function getAdapter(name: AdapterName): AdapterRegistryEntry {
@@ -73,17 +82,19 @@ async function diffCodex(config: CanonicalAgentConfig, options: AdapterDiffOptio
   const paths = await resolveNativePath(adapters.codex, options);
   const currentText = await readNativeText(paths.configPath, 'codex');
   const current = assertNativeObject(parseNativeConfig(currentText, 'toml'), 'Codex config');
+  const selected = getSelectedProviderConfig(config);
   const expectedText = renderCodexConfig(config, currentText).toml;
   const expected = assertNativeObject(parseNativeConfig(expectedText, 'toml'), 'rendered Codex config');
-  const envKey = codexEnvKeyForProvider(config.provider);
+  const envKey = codexEnvKeyForProvider(selected.providerId);
   const currentEnv = await readOptionalText(resolveCodexDiffEnvPath(options));
 
   return {
     agent: 'codex',
     changes: diffManagedSnapshots(
       codexSnapshot(current, envKey, currentEnv),
-      codexSnapshot(expected, envKey, `${envKey}=${config.apiKey.value}\n`),
+      codexSnapshot(expected, envKey, `${envKey}=${selected.provider.apiKey.value}\n`),
     ),
+    notices: unsupportedCodexManagedFieldNotices(selected.model),
   };
 }
 
@@ -98,24 +109,41 @@ function resolveCodexDiffEnvPath(options: AdapterDiffOptions): string {
 async function diffOpenCode(config: CanonicalAgentConfig, options: AdapterDiffOptions = {}): Promise<AgentDiffResult> {
   const paths = await resolveNativePath(adapters.opencode, options);
   const currentText = await readNativeText(paths.configPath, 'opencode');
+  const selected = getSelectedProviderConfig(config);
   const current = assertNativeObject(parseNativeConfig(currentText, 'jsonc'), 'OpenCode config');
   const expected = renderOpenCodeConfigObject(config, current);
 
   return {
     agent: 'opencode',
-    changes: diffManagedSnapshots(openCodeSnapshot(current, config.provider), openCodeSnapshot(expected, config.provider)),
+    changes: diffManagedSnapshots(openCodeSnapshot(current, selected.providerId), openCodeSnapshot(expected, selected.providerId)),
+    notices: [],
   };
 }
 
 async function diffOpenClaw(config: CanonicalAgentConfig, options: AdapterDiffOptions = {}): Promise<AgentDiffResult> {
   const paths = await resolveNativePath(adapters.openclaw, options);
   const currentText = await readNativeText(paths.configPath, 'openclaw');
+  const selected = getSelectedProviderConfig(config);
   const current = assertNativeObject(parseNativeConfig(currentText, 'json5'), 'OpenClaw config');
   const expected = renderOpenClawConfigObject(config, current);
 
   return {
     agent: 'openclaw',
-    changes: diffManagedSnapshots(openClawSnapshot(current, config.provider), openClawSnapshot(expected, config.provider)),
+    changes: diffManagedSnapshots(openClawSnapshot(current, selected.providerId), openClawSnapshot(expected, selected.providerId)),
+    notices: [],
+  };
+}
+
+async function diffClaude(config: CanonicalAgentConfig, options: AdapterDiffOptions = {}): Promise<AgentDiffResult> {
+  const paths = await resolveNativePath(adapters.claude, options);
+  const currentText = await readNativeText(paths.configPath, 'claude');
+  const current = assertNativeObject(parseNativeConfig(currentText, 'json'), 'Claude Code settings');
+  const expected = renderClaudeCodeConfigObject(config, current);
+
+  return {
+    agent: 'claude',
+    changes: diffManagedSnapshots(claudeSnapshot(current), claudeSnapshot(expected)),
+    notices: [],
   };
 }
 
@@ -156,20 +184,24 @@ async function resolveDefaultPath(adapter: AdapterRegistryEntry): Promise<Native
 async function resolveConfiguredPath(adapter: AdapterRegistryEntry, configPath: string): Promise<string> {
   const stats = await stat(configPath).catch((error: unknown) => {
     if (isNodeErrorWithCode(error, 'ENOENT')) {
-      if (isConfigFileCandidate(adapter, configPath)) {
-        return undefined;
-      }
-      throw new DiffError(`Missing ${adapter.name} native config path: ${configPath}`);
+      return undefined;
     }
     throw new DiffError(`Missing ${adapter.name} native config path: ${configPath} (${formatError(error)})`);
   });
 
   if (stats === undefined) {
+    if (!isConfigFileCandidate(adapter, configPath)) {
+      throw new DiffError(`Unsupported ${adapter.name} native config filename: ${basename(configPath)}`);
+    }
     return resolveCandidateInDirectory(adapter, dirname(configPath));
   }
 
   if (stats.isDirectory()) {
     return resolveCandidateInDirectory(adapter, configPath);
+  }
+
+  if (!isConfigFileCandidate(adapter, configPath)) {
+    throw new DiffError(`Unsupported ${adapter.name} native config filename: ${basename(configPath)}`);
   }
 
   return configPath;
@@ -232,12 +264,16 @@ function openCodeSnapshot(config: NativeConfigObject, canonicalProvider: string)
   const modelValue = getString(config, ['model']);
   const parsedModel = parseProviderModel(modelValue);
   const provider = parsedModel?.provider ?? canonicalProvider;
+  const model = parsedModel?.model;
 
   return {
     provider: parsedModel?.provider,
-    model: parsedModel?.model,
+    model,
     baseURL: getString(config, ['provider', provider, 'options', 'baseURL']),
     apiKey: getString(config, ['provider', provider, 'options', 'apiKey']),
+    contextWindow: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'context']),
+    contextTokens: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'input']),
+    maxTokens: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'output']),
   };
 }
 
@@ -245,13 +281,47 @@ function openClawSnapshot(config: NativeConfigObject, canonicalProvider: string)
   const modelValue = getString(config, ['agents', 'defaults', 'model', 'primary']);
   const parsedModel = parseProviderModel(modelValue);
   const provider = parsedModel?.provider ?? canonicalProvider;
+  const model = parsedModel?.model;
+  const modelConfig = model === undefined ? undefined : getOpenClawModelConfig(config, provider, model);
 
   return {
     provider: parsedModel?.provider,
-    model: parsedModel?.model,
+    model,
     baseURL: getString(config, ['models', 'providers', provider, 'baseUrl']),
     apiKey: getString(config, ['models', 'providers', provider, 'apiKey']),
+    contextWindow: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['contextWindow']),
+    contextTokens: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['contextTokens']),
+    maxTokens: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['maxTokens']),
   };
+}
+
+function claudeSnapshot(config: NativeConfigObject): ManagedDiffSnapshot {
+  return {
+    model: getString(config, ['model']),
+    baseURL: getString(config, ['env', 'ANTHROPIC_BASE_URL']),
+    apiKey: getString(config, ['env', 'ANTHROPIC_API_KEY']),
+  };
+}
+
+function getOpenClawModelConfig(config: NativeConfigObject, provider: string, model: string): NativeConfigObject | undefined {
+  const providerConfig = getObject(config, ['models', 'providers', provider]);
+  const models = providerConfig?.models;
+
+  if (models === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(models)) {
+    throw new DiffError(`Unsupported native shape at models.providers.${provider}.models; expected array`);
+  }
+
+  for (const entry of models) {
+    if (isNativeObject(entry) && entry.id === model) {
+      return entry;
+    }
+  }
+
+  return undefined;
 }
 
 function parseProviderModel(value: string | undefined): { provider: string; model: string } | undefined {
@@ -286,6 +356,47 @@ function getString(config: NativeConfigObject, path: string[]): string | undefin
 
   if (typeof current !== 'string') {
     throw new DiffError(`Unsupported native shape at ${path.join('.')}; expected string`);
+  }
+
+  return current;
+}
+
+function getNumberString(config: NativeConfigObject, path: string[]): string | undefined {
+  const value = getValue(config, path);
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'number') {
+    throw new DiffError(`Unsupported native shape at ${path.join('.')}; expected number`);
+  }
+
+  return String(value);
+}
+
+function getObject(config: NativeConfigObject, path: string[]): NativeConfigObject | undefined {
+  const value = getValue(config, path);
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isNativeObject(value)) {
+    throw new DiffError(`Unsupported native shape at ${path.join('.')}; expected object`);
+  }
+
+  return value;
+}
+
+function getValue(config: NativeConfigObject, path: string[]): NativeConfigValue | undefined {
+  let current: NativeConfigValue | undefined = config;
+
+  for (const segment of path) {
+    if (!isNativeObject(current)) {
+      return undefined;
+    }
+    current = current[segment];
   }
 
   return current;

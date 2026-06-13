@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 1
 defaults:
   provider: openai
   model: gpt-4.1-mini
@@ -8,5 +8,7 @@ providers:
     apiKey:
       type: plain
       value: sk-test-visible-openai
+    modelDiscovery:
+      path: models
     models:
       gpt-4.1-mini: {}

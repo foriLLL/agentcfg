@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 1
 defaults:
   provider: openai
   model: gpt-4.1-mini
@@ -9,4 +9,8 @@ providers:
       type: plain
       value: sk-test-visible-openai
     models:
-      gpt-4.1-mini: {}
+      gpt-4.1-mini:
+        variant: ''
+        contextWindow: 0
+        contextTokens: -1
+        maxTokens: 1.5

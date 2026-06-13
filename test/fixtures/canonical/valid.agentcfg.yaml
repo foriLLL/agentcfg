@@ -1,5 +1,29 @@
 schemaVersion: 1
-provider: openai
-model: gpt-4.1-mini
-baseURL: https://api.openai.com/v1
-apiKey: sk-test-redacted
+defaults:
+  provider: openai
+  model: gpt-4.1-mini
+providers:
+  openai:
+    baseURL: https://api.openai.com/v1
+    apiKey:
+      type: plain
+      value: sk-test-visible-openai
+    modelDiscovery:
+      path: /models
+    models:
+      gpt-4.1-mini:
+        variant: chat
+        contextWindow: 1047576
+        contextTokens: 1047576
+        maxTokens: 32768
+      gpt-4.1: {}
+  anthropic:
+    baseURL: https://api.anthropic.com/v1
+    apiKey:
+      type: plain
+      value: sk-ant-visible-anthropic
+    models:
+      claude-3-5-sonnet-latest:
+        contextWindow: 200000
+        contextTokens: 180000
+        maxTokens: 8192

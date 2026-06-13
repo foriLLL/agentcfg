@@ -22,7 +22,15 @@
       },
       "openai": {
         "baseUrl": "https://api.openai.com/v1",
-        "apiKey": "sk-test-redacted"
+        "apiKey": "sk-test-visible-openai",
+        "models": [
+          {
+            "id": "gpt-4.1-mini",
+            "contextWindow": 1047576,
+            "contextTokens": 1047576,
+            "maxTokens": 32768
+          }
+        ]
       }
     }
   },

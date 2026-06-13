@@ -1,4 +1,4 @@
-import type { CanonicalAgentConfig } from '../core/schema';
+import { getSelectedProviderConfig, type CanonicalAgentConfig } from '../core/schema';
 import {
   parseNativeConfig,
   serializeNativeConfig,
@@ -24,27 +24,40 @@ export function renderOpenCodeConfigObject(
   config: CanonicalAgentConfig,
   existingConfig: NativeConfigObject = {},
 ): NativeConfigObject {
+  const selected = getSelectedProviderConfig(config);
   const output = cloneNativeConfigObject(existingConfig);
-  const providerPath = ['provider', config.provider];
+  const providerPath = ['provider', selected.providerId];
   const optionsPath = [...providerPath, 'options'];
 
   failIfManaged(output.model, 'model');
-  output.model = `${config.provider}/${config.model}`;
+  output.model = `${selected.providerId}/${selected.modelId}`;
 
   const providerConfig = getOrCreateObject(output, providerPath);
   const options = getOrCreateObject(output, optionsPath);
 
   if (providerConfig.name === undefined) {
-    providerConfig.name = config.provider;
+    providerConfig.name = selected.providerId;
   } else {
     failIfManaged(providerConfig.name, `${providerPath.join('.')}.name`);
   }
 
   failIfManaged(options.baseURL, `${optionsPath.join('.')}.baseURL`);
-  options.baseURL = config.baseURL;
+  options.baseURL = selected.provider.baseURL;
 
   failIfManaged(options.apiKey, `${optionsPath.join('.')}.apiKey`);
-  options.apiKey = config.apiKey.value;
+  options.apiKey = selected.provider.apiKey.value;
+
+  if (selected.model.contextWindow !== undefined && selected.model.maxTokens !== undefined) {
+    const modelConfig = getOrCreateObject(output, [...providerPath, 'models', selected.modelId]);
+    failIfManaged(modelConfig.limit, `${[...providerPath, 'models', selected.modelId, 'limit'].join('.')}`);
+    const existingLimit = isNativeConfigObject(modelConfig.limit) ? modelConfig.limit : {};
+    modelConfig.limit = {
+      ...existingLimit,
+      context: selected.model.contextWindow,
+      ...(selected.model.contextTokens === undefined ? {} : { input: selected.model.contextTokens }),
+      output: selected.model.maxTokens,
+    };
+  }
 
   return output;
 }

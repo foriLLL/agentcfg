@@ -52,10 +52,15 @@ import type {
   ApplyRuntimeResponse,
   ClearSavedGitHubTokenRuntimeRequest,
   ClearSavedGitHubTokenRuntimeResponse,
+  ConfigAvailabilityEntry,
+  ConfigAvailabilityRuntimeRequest,
+  ConfigAvailabilityRuntimeResponse,
   ConfigFileRuntimeRequest,
   ConfigFileRuntimeResponse,
   DiffRuntimeRequest,
   DiffRuntimeResponse,
+  DiscoverProviderModelsRuntimeRequest,
+  DiscoverProviderModelsRuntimeResponse,
   GetRuntimeStateRequest,
   GetRuntimeStateResponse,
   InitRuntimeRequest,
@@ -80,7 +85,20 @@ import type {
 export type RuntimeServiceOptions = {
   gistOptions?: FetchGistOptions;
   applyWriteOptions?: ApplyWriteOptions;
+  providerHttpClient?: ProviderModelDiscoveryHttpClient;
 };
+
+export type ProviderModelDiscoveryHttpResponse = {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  json(): Promise<unknown>;
+};
+
+export type ProviderModelDiscoveryHttpClient = (
+  url: string,
+  options: { method: 'GET'; headers: Record<string, string> },
+) => Promise<ProviderModelDiscoveryHttpResponse>;
 
 export class RuntimeApiError extends Error {
   readonly code: RuntimeApiErrorCode;
@@ -228,6 +246,42 @@ export async function clearSavedGitHubTokenRuntime(
   }
 }
 
+export async function discoverProviderModelsRuntime(
+  request: DiscoverProviderModelsRuntimeRequest,
+  options: RuntimeServiceOptions = {},
+): Promise<DiscoverProviderModelsRuntimeResponse> {
+  try {
+    const providerId = requireProviderId(request.provider);
+    const state = await readLocalState(request.statePath);
+    if (state.cache === undefined) {
+      throw new RuntimeApiError('state-error', 'No cached agentcfg.yaml found. Run agentcfg pull before discovering provider models.');
+    }
+
+    const provider = state.cache.config.providers[providerId];
+    if (provider === undefined) {
+      throw new RuntimeApiError('invalid-request', `Provider ${providerId} is not configured.`);
+    }
+    if (provider.modelDiscovery === undefined) {
+      throw new RuntimeApiError('invalid-request', `Provider ${providerId} model discovery is not configured.`);
+    }
+
+    const response = await requestProviderModels(
+      buildProviderModelDiscoveryUrl(provider.baseURL, provider.modelDiscovery.path),
+      provider.apiKey.value,
+      options.providerHttpClient ?? defaultProviderModelDiscoveryHttpClient,
+    );
+
+    if (!response.ok) {
+      throw new RuntimeApiError('provider-error', formatProviderHttpError(response));
+    }
+
+    const body = await readProviderModelsJson(response, providerId);
+    return { provider: providerId, models: extractProviderModelIds(body, providerId) };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
 export async function diffRuntime(request: DiffRuntimeRequest): Promise<DiffRuntimeResponse> {
   try {
     const selectedAgents = selectAgents(request);
@@ -246,7 +300,13 @@ export async function diffRuntime(request: DiffRuntimeRequest): Promise<DiffRunt
       );
     }
 
-    return { results: results.map((result) => ({ agent: result.agent as AdapterName, changes: result.changes })) };
+    return {
+      results: results.map((result) => ({
+        agent: result.agent as AdapterName,
+        changes: result.changes,
+        notices: result.notices,
+      })),
+    };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
@@ -305,6 +365,37 @@ export async function getConfigFileRuntime(request: ConfigFileRuntimeRequest): P
   } catch (error) {
     throw toRuntimeApiError(error);
   }
+}
+
+export async function getConfigAvailabilityRuntime(
+  request: ConfigAvailabilityRuntimeRequest = {},
+): Promise<ConfigAvailabilityRuntimeResponse> {
+  const agents: ConfigAvailabilityEntry[] = [];
+
+  for (const agent of ADAPTER_NAMES) {
+    try {
+      const configPath = await resolveConfigEditorPath(agent, { ...request, agent });
+      const fileStat = await stat(configPath);
+      agents.push({
+        agent,
+        available: true,
+        status: 'available',
+        path: configPath,
+        format: detectNativeConfigFormat(configPath),
+        updatedAt: fileStat.mtime.toISOString(),
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unable to resolve native config.';
+      agents.push({
+        agent,
+        available: false,
+        status: reason.startsWith('Ambiguous') ? 'ambiguous' : 'missing',
+        reason,
+      });
+    }
+  }
+
+  return { agents };
 }
 
 export async function saveConfigFileRuntime(request: SaveConfigFileRuntimeRequest): Promise<SaveConfigFileRuntimeResponse> {
@@ -402,6 +493,89 @@ async function rememberGitHubTokenIfRequested(
   await saveGitHubToken(token, request.statePath);
 }
 
+function requireProviderId(provider: string | undefined): string {
+  if (provider === undefined || provider.trim() === '') {
+    throw new RuntimeApiError('invalid-request', 'provider is required.');
+  }
+  return provider;
+}
+
+async function requestProviderModels(
+  url: string,
+  apiKey: string,
+  httpClient: ProviderModelDiscoveryHttpClient,
+): Promise<ProviderModelDiscoveryHttpResponse> {
+  try {
+    return await httpClient(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'User-Agent': 'agentcfg',
+      },
+    });
+  } catch {
+    throw new RuntimeApiError('provider-error', 'Provider model discovery network request failed before receiving a response.');
+  }
+}
+
+function buildProviderModelDiscoveryUrl(baseURL: string, path: string): string {
+  return `${baseURL.replace(/\/+$/, '')}${path}`;
+}
+
+async function defaultProviderModelDiscoveryHttpClient(
+  url: string,
+  options: { method: 'GET'; headers: Record<string, string> },
+): Promise<ProviderModelDiscoveryHttpResponse> {
+  return fetch(url, { method: options.method, headers: options.headers });
+}
+
+function formatProviderHttpError(response: ProviderModelDiscoveryHttpResponse): string {
+  const statusText = response.statusText.trim();
+  return `Provider model discovery failed with ${response.status}${statusText === '' ? '' : ` ${statusText}`}.`;
+}
+
+async function readProviderModelsJson(response: ProviderModelDiscoveryHttpResponse, providerId: string): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new RuntimeApiError('provider-error', `Provider ${providerId} model discovery response was not valid JSON.`);
+  }
+}
+
+function extractProviderModelIds(body: unknown, providerId: string): string[] {
+  const entries = extractProviderModelEntries(body, providerId);
+  return entries.map((entry) => {
+    if (!isRecord(entry) || typeof entry.id !== 'string' || entry.id.trim() === '') {
+      throw new RuntimeApiError(
+        'provider-error',
+        `Provider ${providerId} model discovery response must include model objects with non-empty string id values.`,
+      );
+    }
+    return entry.id;
+  });
+}
+
+function extractProviderModelEntries(body: unknown, providerId: string): unknown[] {
+  if (!isRecord(body)) {
+    throw unsupportedProviderModelsShape(providerId);
+  }
+  if (Array.isArray(body.data)) {
+    return body.data;
+  }
+  if (Array.isArray(body.models)) {
+    return body.models;
+  }
+  throw unsupportedProviderModelsShape(providerId);
+}
+
+function unsupportedProviderModelsShape(providerId: string): RuntimeApiError {
+  return new RuntimeApiError(
+    'provider-error',
+    `Provider ${providerId} model discovery response must include a data or models array.`,
+  );
+}
+
 function withRequestToken(gistOptions: FetchGistOptions | undefined, githubToken: string | undefined): FetchGistOptions | undefined {
   if (githubToken === undefined) {
     return gistOptions;
@@ -418,19 +592,10 @@ function withRequiredRequestToken(gistOptions: FetchGistOptions | undefined, git
 
 async function resolveRemoteConfigForSave(
   configInput: AgentConfigInput,
-  gistId: string | undefined,
-  gistOptions: FetchGistOptions,
+  _gistId: string | undefined,
+  _gistOptions: FetchGistOptions,
 ): Promise<CanonicalAgentConfig> {
-  if (!shouldPreserveRemoteApiKey(configInput)) {
-    return validateAgentConfig(configInput);
-  }
-
-  if (gistId === undefined) {
-    return validateAgentConfig(configInput);
-  }
-
-  const existingRemote = parseCanonicalAgentConfig((await fetchGistAgentConfig(gistId, gistOptions)).content);
-  return validateAgentConfig({ ...configInput, apiKey: existingRemote.apiKey });
+  return validateAgentConfig(configInput);
 }
 
 async function writeRemoteConfigState(
@@ -449,20 +614,6 @@ async function writeRemoteConfigState(
   };
   await writeLocalState(state, statePath);
   return state;
-}
-
-function shouldPreserveRemoteApiKey(configInput: AgentConfigInput): boolean {
-  const apiKey = configInput.apiKey;
-  if (apiKey === undefined) {
-    return true;
-  }
-  if (typeof apiKey === 'string') {
-    return apiKey.trim() === '';
-  }
-  if (typeof apiKey === 'object' && apiKey !== null && !Array.isArray(apiKey) && 'value' in apiKey) {
-    return typeof apiKey.value === 'string' && apiKey.value.trim() === '';
-  }
-  return false;
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -531,6 +682,7 @@ async function summarizePlans(plans: ApplyAgentPlan[]): Promise<ApiApplyPlanSumm
     configPath: plan.configPath,
     envPath: plan.envPath,
     changes: plan.changes,
+    notices: plan.notices,
     operationCount: plan.operations.length,
     operationPaths: plan.operations.map((operation) => operation.path),
     filePreviews: await Promise.all(plan.operations.map(operationToFilePreview)),
@@ -590,4 +742,8 @@ function toRuntimeApiError(error: unknown): RuntimeApiError {
 
 function isAgentConfigValidationError(error: unknown): error is AgentConfigValidationError {
   return error instanceof Error && error.name === 'AgentConfigValidationError';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

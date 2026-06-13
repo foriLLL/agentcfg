@@ -40,10 +40,30 @@ test('managed diff formatter masks secret values', () => {
         { apiKey: NATIVE_SECRET },
         { apiKey: CACHED_SECRET },
       ),
+      notices: [],
     },
   ]);
 
   assert.match(output, /apiKey: \*\*\*MASKED\*\*\* -> \*\*\*MASKED\*\*\*/);
   assert.equal(output.includes(NATIVE_SECRET), false);
   assert.equal(output.includes(CACHED_SECRET), false);
+});
+
+test('managed diff formatter shows notice-only results as non-fatal notices', () => {
+  const output = formatAgentDiffResults([
+    {
+      agent: 'codex',
+      changes: [],
+      notices: [
+        {
+          field: 'contextWindow',
+          code: 'unsupported-native-mapping',
+          message: 'Codex has no official native mapping for contextWindow; agentcfg will not write this canonical model field.',
+        },
+      ],
+    },
+  ]);
+
+  assert.match(output, /Agent: codex\n  No managed diffs\./);
+  assert.match(output, /Notice: Codex has no official native mapping for contextWindow/);
 });

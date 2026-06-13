@@ -25,7 +25,7 @@ fail_validation() {
 assert_no_fixture_secret_in_logs() {
   local canonical_path="$FIXTURE_DIR/canonical.agentcfg.json"
   local secret
-  secret=$(node -e "const fs=require('node:fs'); const config=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(config.apiKey.value);" "$canonical_path") || fail_validation "could not read fixture secret"
+  secret=$(node -e "const fs=require('node:fs'); const config=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); const provider=config.providers[config.defaults.provider]; process.stdout.write(provider.apiKey.value);" "$canonical_path") || fail_validation "could not read fixture secret"
 
   node -e "const fs=require('node:fs'); const secret=process.argv[1]; for (const file of process.argv.slice(2)) { if (fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes(secret)) process.exit(1); }" "$secret" "$@"
 }
@@ -85,7 +85,7 @@ fi
 assert_no_fixture_secret_in_logs "$STDOUT_LOG" "$STDERR_LOG" || fail_validation "local generation wrote the raw fake API key to logs"
 chmod 0444 "$GENERATED_CONFIG" || fail_validation "could not make generated config read-only"
 
-if ! node -e "const fs=require('node:fs'); const config=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); const canonical=JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); config.provider[canonical.provider].options.apiKey='agentcfg-docker-redacted-api-key'; fs.writeFileSync(process.argv[3], JSON.stringify(config));" "$GENERATED_CONFIG" "$FIXTURE_DIR/canonical.agentcfg.json" "$CONTAINER_CONFIG" >"$STDOUT_LOG" 2>"$STDERR_LOG"; then
+if ! node -e "const fs=require('node:fs'); const config=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); const canonical=JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); const providerId=canonical.defaults.provider; config.provider[providerId].options.apiKey='agentcfg-docker-redacted-api-key'; fs.writeFileSync(process.argv[3], JSON.stringify(config));" "$GENERATED_CONFIG" "$FIXTURE_DIR/canonical.agentcfg.json" "$CONTAINER_CONFIG" >"$STDOUT_LOG" 2>"$STDERR_LOG"; then
   assert_no_fixture_secret_in_logs "$STDOUT_LOG" "$STDERR_LOG" || fail_validation "container config sanitization wrote the raw fake API key to logs"
   fail_validation "could not sanitize generated OpenCode config before Docker validation"
 fi

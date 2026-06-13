@@ -1,6 +1,6 @@
 import type { AdapterName } from '../adapters';
 import type { ApplyAgentResult } from '../core/apply';
-import type { ManagedDiffField } from '../core/diff';
+import type { ManagedDiffField, ManagedDiffNotice } from '../core/diff';
 import type { NativeConfigFormat } from '../core/native-io';
 import type { AgentConfigInput, CanonicalAgentConfig } from '../core/schema';
 import type { RemoteRevisionMetadata } from '../core/state';
@@ -9,6 +9,7 @@ export type RuntimeApiErrorCode =
   | 'invalid-request'
   | 'state-error'
   | 'gist-error'
+  | 'provider-error'
   | 'validation-error'
   | 'diff-error'
   | 'apply-error';
@@ -81,6 +82,15 @@ export type ClearSavedGitHubTokenRuntimeResponse = {
   state: RuntimeStateSummary;
 };
 
+export type DiscoverProviderModelsRuntimeRequest = RuntimeRequest & {
+  provider?: string;
+};
+
+export type DiscoverProviderModelsRuntimeResponse = {
+  provider: string;
+  models: string[];
+};
+
 export type SetupRemoteConfigRuntimeRequest = RemoteConfigRuntimeRequest;
 
 export type SetupRemoteConfigRuntimeResponse = {
@@ -124,6 +134,7 @@ export type ApiManagedDiffChange = {
 export type ApiAgentDiffResult = {
   agent: AdapterName;
   changes: ApiManagedDiffChange[];
+  notices: ManagedDiffNotice[];
 };
 
 export type DiffRuntimeRequest = RuntimeTargetRequest;
@@ -141,6 +152,7 @@ export type ApiApplyPlanSummary = {
   configPath: string;
   envPath?: string;
   changes: ApiManagedDiffChange[];
+  notices: ManagedDiffNotice[];
   operationCount: number;
   operationPaths: string[];
   filePreviews: ApiApplyFilePreview[];
@@ -173,6 +185,27 @@ export type ConfigFileRuntimeRequest = RuntimeRequest & {
   agent?: string;
   configPath?: string;
   fixturesRoot?: string;
+};
+
+export type ConfigAvailabilityStatus = 'available' | 'missing' | 'ambiguous';
+
+export type ConfigAvailabilityEntry = {
+  agent: AdapterName;
+  available: boolean;
+  status: ConfigAvailabilityStatus;
+  path?: string;
+  format?: NativeConfigFormat;
+  updatedAt?: string;
+  reason?: string;
+};
+
+export type ConfigAvailabilityRuntimeRequest = RuntimeRequest & {
+  configPath?: string;
+  fixturesRoot?: string;
+};
+
+export type ConfigAvailabilityRuntimeResponse = {
+  agents: ConfigAvailabilityEntry[];
 };
 
 export type ConfigFileRuntimeResponse = {

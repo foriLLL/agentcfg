@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import {
+  getSelectedProviderConfig,
   parseNativeConfig,
   serializeNativeConfig,
   type CanonicalAgentConfig,
@@ -20,12 +21,11 @@ export type ResolveOpenClawConfigPathOptions = {
   env?: Pick<NodeJS.ProcessEnv, 'OPENCLAW_CONFIG_PATH'>;
 };
 
-const DEFAULT_OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 const MANAGED_PROVIDER_PATH = ['models', 'providers'] as const;
 const MANAGED_MODEL_PATH = ['agents', 'defaults', 'model', 'primary'] as const;
 
 export function resolveOpenClawConfigPath(options: ResolveOpenClawConfigPathOptions = {}): string {
-  return options.configPath ?? options.env?.OPENCLAW_CONFIG_PATH ?? DEFAULT_OPENCLAW_CONFIG_PATH;
+  return options.configPath ?? options.env?.OPENCLAW_CONFIG_PATH ?? join(homedir(), '.openclaw', 'openclaw.json');
 }
 
 export function renderOpenClawConfigText(config: CanonicalAgentConfig, existingText = '{}'): string {
@@ -39,19 +39,21 @@ export function renderOpenClawConfigObject(
   config: CanonicalAgentConfig,
   existingConfig: NativeConfigObject = {},
 ): NativeConfigObject {
+  const selected = getSelectedProviderConfig(config);
   const rendered = cloneNativeConfigObject(existingConfig);
-  assertManagedPathsAreDirect(rendered, config.provider);
+  assertManagedPathsAreDirect(rendered, selected.providerId);
 
   const agents = ensureObject(rendered, 'agents');
   const defaults = ensureObject(agents, 'defaults');
   const model = ensureObject(defaults, 'model');
-  model.primary = `${config.provider}/${config.model}`;
+  model.primary = `${selected.providerId}/${selected.modelId}`;
 
   const models = ensureObject(rendered, 'models');
   const providers = ensureObject(models, 'providers');
-  const providerConfig = ensureObject(providers, config.provider);
-  providerConfig.baseUrl = config.baseURL;
-  providerConfig.apiKey = config.apiKey.value;
+  const providerConfig = ensureObject(providers, selected.providerId);
+  providerConfig.baseUrl = selected.provider.baseURL;
+  providerConfig.apiKey = selected.provider.apiKey.value;
+  renderSelectedModelMetadata(providerConfig, selected.modelId, selected.model);
 
   return rendered;
 }
@@ -61,9 +63,56 @@ function assertManagedPathsAreDirect(config: NativeConfigObject, provider: strin
   assertNoIncludeOnPath(config, [...MANAGED_PROVIDER_PATH, provider]);
   assertNoIncludeOnPath(config, [...MANAGED_PROVIDER_PATH, provider, 'baseUrl']);
   assertNoIncludeOnPath(config, [...MANAGED_PROVIDER_PATH, provider, 'apiKey']);
+  assertNoIncludeOnPath(config, [...MANAGED_PROVIDER_PATH, provider, 'models']);
   assertNoUnsupportedExpressionAtPath(config, [...MANAGED_MODEL_PATH]);
   assertNoUnsupportedExpressionAtPath(config, [...MANAGED_PROVIDER_PATH, provider, 'baseUrl']);
   assertNoUnsupportedExpressionAtPath(config, [...MANAGED_PROVIDER_PATH, provider, 'apiKey']);
+  assertNoUnsupportedExpressionAtPath(config, [...MANAGED_PROVIDER_PATH, provider, 'models']);
+}
+
+function renderSelectedModelMetadata(
+  providerConfig: NativeConfigObject,
+  modelId: string,
+  model: { contextWindow?: number; contextTokens?: number; maxTokens?: number },
+): void {
+  const modelEntry: NativeConfigObject = { id: modelId };
+
+  if (model.contextWindow !== undefined) {
+    modelEntry.contextWindow = model.contextWindow;
+  }
+
+  if (model.contextTokens !== undefined) {
+    modelEntry.contextTokens = model.contextTokens;
+  }
+
+  if (model.maxTokens !== undefined) {
+    modelEntry.maxTokens = model.maxTokens;
+  }
+
+  if (Object.keys(modelEntry).length === 1) {
+    return;
+  }
+
+  const existingModels = providerConfig.models;
+  if (existingModels !== undefined && !Array.isArray(existingModels)) {
+    throw new OpenClawAdapterError("OpenClaw native field 'models' must be an array before rendering managed model metadata");
+  }
+
+  let updatedSelectedModel = false;
+  const preservedModels =
+    existingModels?.map((entry) => {
+      if (!isNativeConfigObject(entry) || entry.id !== modelId) {
+        return entry;
+      }
+
+      updatedSelectedModel = true;
+      return {
+        ...entry,
+        ...modelEntry,
+      };
+    }) ?? [];
+
+  providerConfig.models = updatedSelectedModel ? preservedModels : [...preservedModels, modelEntry];
 }
 
 function assertNoIncludeOnPath(config: NativeConfigObject, path: string[]): void {

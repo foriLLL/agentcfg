@@ -1,12 +1,19 @@
 import { access, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { getAdapter, type AdapterName } from '../adapters/registry';
+import { renderClaudeCodeConfigObject } from '../adapters/claude';
 import { codexEnvKeyForProvider, renderCodexConfig } from '../adapters/codex';
 import { renderOpenClawConfigObject } from '../adapters/openclaw';
 import { renderOpenCodeConfigObject } from '../adapters/opencode';
 import { atomicWriteFile, type AtomicWriteFileOptions, type AtomicWriteFileResult } from './atomic-write';
-import { diffManagedSnapshots, type ManagedDiffChange, type ManagedDiffSnapshot } from './diff';
+import {
+  diffManagedSnapshots,
+  unsupportedCodexManagedFieldNotices,
+  type ManagedDiffChange,
+  type ManagedDiffNotice,
+  type ManagedDiffSnapshot,
+} from './diff';
 import { isNodeErrorWithCode } from './node-errors';
 import {
   detectNativeConfigFormat,
@@ -16,7 +23,7 @@ import {
   type NativeConfigValue,
 } from './native-io';
 import { type BackupOptions } from './backup';
-import { type CanonicalAgentConfig } from './schema';
+import { getSelectedProviderConfig, type CanonicalAgentConfig } from './schema';
 
 export type ApplyPlanOptions = {
   configPath?: string;
@@ -37,6 +44,7 @@ export type ApplyAgentPlan = {
   configPath: string;
   envPath?: string;
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
   operations: ApplyWriteOperation[];
 };
 
@@ -46,6 +54,7 @@ export type ApplyAgentResult = {
   envPath?: string;
   status: 'would-change' | 'unchanged' | 'applied' | 'failed' | 'cancelled';
   changes: ManagedDiffChange[];
+  notices: ManagedDiffNotice[];
   backups: string[];
   error?: string;
 };
@@ -88,6 +97,7 @@ export async function planApply(
         agent,
         status: 'failed',
         changes: [],
+        notices: [],
         backups: [],
         error: formatError(error),
       });
@@ -146,6 +156,7 @@ function planToResult(plan: ApplyAgentPlan, status: ApplyAgentResult['status']):
     envPath: plan.envPath,
     status,
     changes: plan.changes,
+    notices: plan.notices,
     backups: [],
   };
 }
@@ -161,19 +172,23 @@ async function planAgentApply(
   if (agent === 'opencode') {
     return planOpenCodeApply(config, options);
   }
+  if (agent === 'claude') {
+    return planClaudeApply(config, options);
+  }
   return planOpenClawApply(config, options);
 }
 
 async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
+  const selected = getSelectedProviderConfig(config);
   const paths = await resolveNativePath('codex', options);
   const currentText = await readNativeText(paths.configPath, 'codex');
   const current = assertNativeObject(parseNativeConfig(currentText, 'toml'), 'Codex config');
   const rendered = renderCodexConfig(config, currentText);
   const expected = assertNativeObject(parseNativeConfig(rendered.toml, 'toml'), 'rendered Codex config');
-  const envKey = codexEnvKeyForProvider(config.provider);
+  const envKey = codexEnvKeyForProvider(selected.providerId);
   const envPath = resolveCodexApplyEnvPath(options);
   const currentEnv = await readOptionalText(envPath);
-  const expectedEnv = rendered.envFile?.content ?? `${envKey}=${config.apiKey.value}\n`;
+  const expectedEnv = rendered.envFile?.content ?? `${envKey}=${selected.provider.apiKey.value}\n`;
   const changes = diffManagedSnapshots(
     codexSnapshot(current, envKey, currentEnv),
     codexSnapshot(expected, envKey, expectedEnv),
@@ -192,22 +207,25 @@ async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOp
     configPath: paths.configPath,
     envPath,
     changes,
+    notices: unsupportedCodexManagedFieldNotices(selected.model),
     operations,
   };
 }
 
 async function planOpenCodeApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
+  const selected = getSelectedProviderConfig(config);
   const paths = await resolveNativePath('opencode', options);
   const format = detectNativeConfigFormat(paths.configPath);
   const currentText = await readNativeText(paths.configPath, 'opencode');
   const current = assertNativeObject(parseNativeConfig(currentText, format), 'OpenCode config');
   const expected = renderOpenCodeConfigObject(config, current);
-  const changes = diffManagedSnapshots(openCodeSnapshot(current, config.provider), openCodeSnapshot(expected, config.provider));
+  const changes = diffManagedSnapshots(openCodeSnapshot(current, selected.providerId), openCodeSnapshot(expected, selected.providerId));
 
   return {
     agent: 'opencode',
     configPath: paths.configPath,
     changes,
+    notices: [],
     operations:
       changes.length === 0
         ? []
@@ -216,17 +234,39 @@ async function planOpenCodeApply(config: CanonicalAgentConfig, options: ApplyPla
 }
 
 async function planOpenClawApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
+  const selected = getSelectedProviderConfig(config);
   const paths = await resolveNativePath('openclaw', options);
   const format = detectNativeConfigFormat(paths.configPath);
   const currentText = await readNativeText(paths.configPath, 'openclaw');
   const current = assertNativeObject(parseNativeConfig(currentText, format), 'OpenClaw config');
   const expected = renderOpenClawConfigObject(config, current);
-  const changes = diffManagedSnapshots(openClawSnapshot(current, config.provider), openClawSnapshot(expected, config.provider));
+  const changes = diffManagedSnapshots(openClawSnapshot(current, selected.providerId), openClawSnapshot(expected, selected.providerId));
 
   return {
     agent: 'openclaw',
     configPath: paths.configPath,
     changes,
+    notices: [],
+    operations:
+      changes.length === 0
+        ? []
+        : [{ path: paths.configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
+  };
+}
+
+async function planClaudeApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
+  const paths = await resolveNativePath('claude', options);
+  const format = detectNativeConfigFormat(paths.configPath);
+  const currentText = await readNativeText(paths.configPath, 'claude');
+  const current = assertNativeObject(parseNativeConfig(currentText, format), 'Claude Code settings');
+  const expected = renderClaudeCodeConfigObject(config, current);
+  const changes = diffManagedSnapshots(claudeSnapshot(current), claudeSnapshot(expected));
+
+  return {
+    agent: 'claude',
+    configPath: paths.configPath,
+    changes,
+    notices: [],
     operations:
       changes.length === 0
         ? []
@@ -267,14 +307,32 @@ async function resolveNativePath(agent: AdapterName, options: ApplyPlanOptions):
 
 async function resolveConfiguredPath(agent: AdapterName, configPath: string): Promise<string> {
   const stats = await stat(configPath).catch((error: unknown) => {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      return undefined;
+    }
     throw new Error(`Missing ${agent} native config path: ${configPath} (${formatError(error)})`);
   });
+
+  if (stats === undefined) {
+    if (!isConfigFileCandidate(agent, configPath)) {
+      throw new Error(`Unsupported ${agent} native config filename: ${basename(configPath)}`);
+    }
+    return resolveCandidateInDirectory(agent, dirname(configPath));
+  }
 
   if (stats.isDirectory()) {
     return resolveCandidateInDirectory(agent, configPath);
   }
 
+  if (!isConfigFileCandidate(agent, configPath)) {
+    throw new Error(`Unsupported ${agent} native config filename: ${basename(configPath)}`);
+  }
+
   return configPath;
+}
+
+function isConfigFileCandidate(agent: AdapterName, configPath: string): boolean {
+  return getAdapter(agent).configFileCandidates.includes(basename(configPath));
 }
 
 async function resolveCandidateInDirectory(agent: AdapterName, directory: string): Promise<string> {
@@ -336,23 +394,61 @@ function codexSnapshot(config: NativeConfigObject, envKey: string, envText: stri
 function openCodeSnapshot(config: NativeConfigObject, canonicalProvider: string): ManagedDiffSnapshot {
   const parsedModel = parseProviderModel(getString(config, ['model']));
   const provider = parsedModel?.provider ?? canonicalProvider;
+  const model = parsedModel?.model;
   return {
     provider: parsedModel?.provider,
-    model: parsedModel?.model,
+    model,
     baseURL: getString(config, ['provider', provider, 'options', 'baseURL']),
     apiKey: getString(config, ['provider', provider, 'options', 'apiKey']),
+    contextWindow: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'context']),
+    contextTokens: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'input']),
+    maxTokens: model === undefined ? undefined : getNumberString(config, ['provider', provider, 'models', model, 'limit', 'output']),
   };
 }
 
 function openClawSnapshot(config: NativeConfigObject, canonicalProvider: string): ManagedDiffSnapshot {
   const parsedModel = parseProviderModel(getString(config, ['agents', 'defaults', 'model', 'primary']));
   const provider = parsedModel?.provider ?? canonicalProvider;
+  const model = parsedModel?.model;
+  const modelConfig = model === undefined ? undefined : getOpenClawModelConfig(config, provider, model);
   return {
     provider: parsedModel?.provider,
-    model: parsedModel?.model,
+    model,
     baseURL: getString(config, ['models', 'providers', provider, 'baseUrl']),
     apiKey: getString(config, ['models', 'providers', provider, 'apiKey']),
+    contextWindow: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['contextWindow']),
+    contextTokens: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['contextTokens']),
+    maxTokens: modelConfig === undefined ? undefined : getNumberString(modelConfig, ['maxTokens']),
   };
+}
+
+function claudeSnapshot(config: NativeConfigObject): ManagedDiffSnapshot {
+  return {
+    model: getString(config, ['model']),
+    baseURL: getString(config, ['env', 'ANTHROPIC_BASE_URL']),
+    apiKey: getString(config, ['env', 'ANTHROPIC_API_KEY']),
+  };
+}
+
+function getOpenClawModelConfig(config: NativeConfigObject, provider: string, model: string): NativeConfigObject | undefined {
+  const providerConfig = getObject(config, ['models', 'providers', provider]);
+  const models = providerConfig?.models;
+
+  if (models === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(models)) {
+    throw new Error(`Unsupported native shape at models.providers.${provider}.models; expected array`);
+  }
+
+  for (const entry of models) {
+    if (isNativeObject(entry) && entry.id === model) {
+      return entry;
+    }
+  }
+
+  return undefined;
 }
 
 function parseProviderModel(value: string | undefined): { provider: string; model: string } | undefined {
@@ -387,6 +483,47 @@ function getString(config: NativeConfigObject, path: string[]): string | undefin
 
   if (typeof current !== 'string') {
     throw new Error(`Unsupported native shape at ${path.join('.')}; expected string`);
+  }
+
+  return current;
+}
+
+function getNumberString(config: NativeConfigObject, path: string[]): string | undefined {
+  const value = getValue(config, path);
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'number') {
+    throw new Error(`Unsupported native shape at ${path.join('.')}; expected number`);
+  }
+
+  return String(value);
+}
+
+function getObject(config: NativeConfigObject, path: string[]): NativeConfigObject | undefined {
+  const value = getValue(config, path);
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isNativeObject(value)) {
+    throw new Error(`Unsupported native shape at ${path.join('.')}; expected object`);
+  }
+
+  return value;
+}
+
+function getValue(config: NativeConfigObject, path: string[]): NativeConfigValue | undefined {
+  let current: NativeConfigValue | undefined = config;
+
+  for (const segment of path) {
+    if (!isNativeObject(current)) {
+      return undefined;
+    }
+    current = current[segment];
   }
 
   return current;
