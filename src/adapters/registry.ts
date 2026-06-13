@@ -48,8 +48,8 @@ export const adapters: Readonly<Record<AdapterName, AdapterRegistryEntry>> = Obj
   }),
   opencode: Object.freeze({
     name: 'opencode',
-    configFileCandidates: ['opencode.jsonc', 'opencode.json', 'input.opencode.jsonc'],
-    defaultConfigPath: () => join(homedir(), '.config', 'opencode', 'opencode.jsonc'),
+    configFileCandidates: ['opencode.json', 'opencode.jsonc', 'input.opencode.jsonc'],
+    defaultConfigPath: () => join(homedir(), '.config', 'opencode', 'opencode.json'),
     diff: diffOpenCode,
   }),
   openclaw: Object.freeze({
@@ -214,17 +214,13 @@ async function resolveCandidateInDirectory(adapter: AdapterRegistryEntry, direct
     }
     throw new DiffError(`Missing ${adapter.name} native config directory: ${directory} (${formatError(error)})`);
   });
-  const matches = adapter.configFileCandidates.filter((candidate) => entries.includes(candidate));
+  const candidate = adapter.configFileCandidates.find((entry) => entries.includes(entry));
 
-  if (matches.length === 0) {
+  if (candidate === undefined) {
     throw new DiffError(`Missing ${adapter.name} native config in ${directory}`);
   }
 
-  if (matches.length > 1) {
-    throw new DiffError(`Ambiguous ${adapter.name} native config in ${directory}: ${matches.join(', ')}`);
-  }
-
-  return join(directory, matches[0]);
+  return join(directory, candidate);
 }
 
 function isConfigFileCandidate(adapter: AdapterRegistryEntry, configPath: string): boolean {

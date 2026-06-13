@@ -1,7 +1,7 @@
-import { access, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { access, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
-import { getAdapter, type AdapterName } from '../adapters/registry';
+import { join } from 'node:path';
+import { resolveAdapterConfigPath, type AdapterName } from '../adapters/registry';
 import { renderClaudeCodeConfigObject } from '../adapters/claude';
 import { codexEnvKeyForProvider, renderCodexConfig } from '../adapters/codex';
 import { renderOpenClawConfigObject } from '../adapters/openclaw';
@@ -57,10 +57,6 @@ export type ApplyAgentResult = {
   notices: ManagedDiffNotice[];
   backups: string[];
   error?: string;
-};
-
-type NativePathResolution = {
-  configPath: string;
 };
 
 type RollbackRecord = {
@@ -180,8 +176,8 @@ async function planAgentApply(
 
 async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
   const selected = getSelectedProviderConfig(config);
-  const paths = await resolveNativePath('codex', options);
-  const currentText = await readNativeText(paths.configPath, 'codex');
+  const configPath = await resolveAdapterConfigPath('codex', options);
+  const currentText = await readNativeText(configPath, 'codex');
   const current = assertNativeObject(parseNativeConfig(currentText, 'toml'), 'Codex config');
   const rendered = renderCodexConfig(config, currentText);
   const expected = assertNativeObject(parseNativeConfig(rendered.toml, 'toml'), 'rendered Codex config');
@@ -196,7 +192,7 @@ async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOp
   const operations: ApplyWriteOperation[] = [];
 
   if (changes.some((change) => change.field !== 'apiKey')) {
-    operations.push({ path: paths.configPath, content: rendered.toml, kind: 'native' });
+    operations.push({ path: configPath, content: rendered.toml, kind: 'native' });
   }
   if (changes.some((change) => change.field === 'apiKey')) {
     operations.push({ path: envPath, content: expectedEnv, mode: 0o600, kind: 'env' });
@@ -204,7 +200,7 @@ async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOp
 
   return {
     agent: 'codex',
-    configPath: paths.configPath,
+    configPath,
     envPath,
     changes,
     notices: unsupportedCodexManagedFieldNotices(selected.model),
@@ -214,63 +210,63 @@ async function planCodexApply(config: CanonicalAgentConfig, options: ApplyPlanOp
 
 async function planOpenCodeApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
   const selected = getSelectedProviderConfig(config);
-  const paths = await resolveNativePath('opencode', options);
-  const format = detectNativeConfigFormat(paths.configPath);
-  const currentText = await readNativeText(paths.configPath, 'opencode');
+  const configPath = await resolveAdapterConfigPath('opencode', options);
+  const format = detectNativeConfigFormat(configPath);
+  const currentText = await readNativeText(configPath, 'opencode');
   const current = assertNativeObject(parseNativeConfig(currentText, format), 'OpenCode config');
   const expected = renderOpenCodeConfigObject(config, current);
   const changes = diffManagedSnapshots(openCodeSnapshot(current, selected.providerId), openCodeSnapshot(expected, selected.providerId));
 
   return {
     agent: 'opencode',
-    configPath: paths.configPath,
+    configPath,
     changes,
     notices: [],
     operations:
       changes.length === 0
         ? []
-        : [{ path: paths.configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
+        : [{ path: configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
   };
 }
 
 async function planOpenClawApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
   const selected = getSelectedProviderConfig(config);
-  const paths = await resolveNativePath('openclaw', options);
-  const format = detectNativeConfigFormat(paths.configPath);
-  const currentText = await readNativeText(paths.configPath, 'openclaw');
+  const configPath = await resolveAdapterConfigPath('openclaw', options);
+  const format = detectNativeConfigFormat(configPath);
+  const currentText = await readNativeText(configPath, 'openclaw');
   const current = assertNativeObject(parseNativeConfig(currentText, format), 'OpenClaw config');
   const expected = renderOpenClawConfigObject(config, current);
   const changes = diffManagedSnapshots(openClawSnapshot(current, selected.providerId), openClawSnapshot(expected, selected.providerId));
 
   return {
     agent: 'openclaw',
-    configPath: paths.configPath,
+    configPath,
     changes,
     notices: [],
     operations:
       changes.length === 0
         ? []
-        : [{ path: paths.configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
+        : [{ path: configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
   };
 }
 
 async function planClaudeApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
-  const paths = await resolveNativePath('claude', options);
-  const format = detectNativeConfigFormat(paths.configPath);
-  const currentText = await readNativeText(paths.configPath, 'claude');
+  const configPath = await resolveAdapterConfigPath('claude', options);
+  const format = detectNativeConfigFormat(configPath);
+  const currentText = await readNativeText(configPath, 'claude');
   const current = assertNativeObject(parseNativeConfig(currentText, format), 'Claude Code settings');
   const expected = renderClaudeCodeConfigObject(config, current);
   const changes = diffManagedSnapshots(claudeSnapshot(current), claudeSnapshot(expected));
 
   return {
     agent: 'claude',
-    configPath: paths.configPath,
+    configPath,
     changes,
     notices: [],
     operations:
       changes.length === 0
         ? []
-        : [{ path: paths.configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
+        : [{ path: configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
   };
 }
 
@@ -290,67 +286,6 @@ async function verifyWrittenPlan(plan: ApplyAgentPlan): Promise<void> {
       }
     }
   }
-}
-
-async function resolveNativePath(agent: AdapterName, options: ApplyPlanOptions): Promise<NativePathResolution> {
-  const adapter = getAdapter(agent);
-  if (options.configPath !== undefined) {
-    return { configPath: await resolveConfiguredPath(agent, options.configPath) };
-  }
-
-  if (options.fixturesRoot !== undefined) {
-    return { configPath: await resolveCandidateInDirectory(agent, join(options.fixturesRoot, agent)) };
-  }
-
-  return { configPath: adapter.defaultConfigPath() };
-}
-
-async function resolveConfiguredPath(agent: AdapterName, configPath: string): Promise<string> {
-  const stats = await stat(configPath).catch((error: unknown) => {
-    if (isNodeErrorWithCode(error, 'ENOENT')) {
-      return undefined;
-    }
-    throw new Error(`Missing ${agent} native config path: ${configPath} (${formatError(error)})`);
-  });
-
-  if (stats === undefined) {
-    if (!isConfigFileCandidate(agent, configPath)) {
-      throw new Error(`Unsupported ${agent} native config filename: ${basename(configPath)}`);
-    }
-    return resolveCandidateInDirectory(agent, dirname(configPath));
-  }
-
-  if (stats.isDirectory()) {
-    return resolveCandidateInDirectory(agent, configPath);
-  }
-
-  if (!isConfigFileCandidate(agent, configPath)) {
-    throw new Error(`Unsupported ${agent} native config filename: ${basename(configPath)}`);
-  }
-
-  return configPath;
-}
-
-function isConfigFileCandidate(agent: AdapterName, configPath: string): boolean {
-  return getAdapter(agent).configFileCandidates.includes(basename(configPath));
-}
-
-async function resolveCandidateInDirectory(agent: AdapterName, directory: string): Promise<string> {
-  const adapter = getAdapter(agent);
-  const entries = await readdir(directory).catch((error: unknown) => {
-    throw new Error(`Missing ${agent} native config directory: ${directory} (${formatError(error)})`);
-  });
-  const matches = adapter.configFileCandidates.filter((candidate) => entries.includes(candidate));
-
-  if (matches.length === 0) {
-    throw new Error(`Missing ${agent} native config in ${directory}`);
-  }
-
-  if (matches.length > 1) {
-    throw new Error(`Ambiguous ${agent} native config in ${directory}: ${matches.join(', ')}`);
-  }
-
-  return join(directory, matches[0]);
 }
 
 function resolveCodexApplyEnvPath(options: ApplyPlanOptions): string {

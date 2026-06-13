@@ -614,22 +614,111 @@ test('runtime config editor reports missing default native config clearly', asyn
   }
 });
 
-test('runtime config editor resolves default OpenCode json candidate', async () => {
+test('runtime diff and apply planning resolve default OpenCode json candidate', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-default-opencode-'));
   const previousHome = process.env.HOME;
   process.env.HOME = directory;
+  const statePath = join(directory, 'state.json');
 
   try {
     const configDirectory = join(directory, '.config', 'opencode');
     const nativePath = join(configDirectory, 'opencode.json');
-    const original = opencodeNativeJson(NATIVE_SECRET);
+    const original = opencodeCanonicalNativeJson(CACHED_SECRET);
     await mkdir(configDirectory, { recursive: true });
     await writeFile(nativePath, original);
+    await writeStateWithConfig(statePath, CANONICAL_CONFIG);
+
+    const diff = await diffRuntime({ statePath, agent: 'opencode' });
+    assert.deepEqual(diff.results[0]?.changes, []);
+
+    const plan = await planApplyRuntime({ statePath, agent: 'opencode' });
+    assert.equal(plan.plans[0]?.configPath, nativePath);
+    assert.equal(plan.plans[0]?.operationCount, 0);
+    assert.deepEqual(plan.plans[0]?.operationPaths, []);
+    assert.equal(plan.results[0]?.status, 'unchanged');
 
     const loaded = await getConfigFileRuntime({ agent: 'opencode' });
     assert.equal(loaded.path, nativePath);
     assert.equal(loaded.format, 'json');
     assert.equal(loaded.content, original);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime diff and apply planning prefer OpenCode json over jsonc when both exist', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-opencode-json-first-'));
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const statePath = join(directory, 'state.json');
+
+  try {
+    const configDirectory = join(directory, '.config', 'opencode');
+    const jsonPath = join(configDirectory, 'opencode.json');
+    const jsoncPath = join(configDirectory, 'opencode.jsonc');
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(jsonPath, opencodeCanonicalNativeJson(CACHED_SECRET));
+    await writeFile(jsoncPath, '{ "model": 42 }\n');
+    await writeStateWithConfig(statePath, CANONICAL_CONFIG);
+
+    const diff = await diffRuntime({ statePath, agent: 'opencode' });
+    assert.deepEqual(diff.results[0]?.changes, []);
+
+    const plan = await planApplyRuntime({ statePath, agent: 'opencode' });
+    assert.equal(plan.plans[0]?.configPath, jsonPath);
+    assert.equal(plan.plans[0]?.operationCount, 0);
+    assert.deepEqual(plan.plans[0]?.operationPaths, []);
+    assert.equal(plan.results[0]?.status, 'unchanged');
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime config editor resolves JSON-first OpenClaw and Claude candidates and falls back to JSON5', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-json-first-native-'));
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+
+  try {
+    const openclawDirectory = join(directory, '.openclaw');
+    const openclawJsonPath = join(openclawDirectory, 'openclaw.json');
+    const openclawJson5Path = join(openclawDirectory, 'openclaw.json5');
+    await mkdir(openclawDirectory, { recursive: true });
+    await writeFile(openclawJsonPath, '{"from":"json"}\n');
+    await writeFile(openclawJson5Path, '{"from":"json5"}\n');
+
+    const openclawLoaded = await getConfigFileRuntime({ agent: 'openclaw' });
+    assert.equal(openclawLoaded.path, openclawJsonPath);
+    assert.equal(openclawLoaded.format, 'json');
+    assert.equal(openclawLoaded.content, '{"from":"json"}\n');
+
+    await rm(openclawJsonPath);
+    const openclawFallback = await getConfigFileRuntime({ agent: 'openclaw' });
+    assert.equal(openclawFallback.path, openclawJson5Path);
+    assert.equal(openclawFallback.format, 'json5');
+    assert.equal(openclawFallback.content, '{"from":"json5"}\n');
+
+    const claudeDirectory = join(directory, '.claude');
+    const claudeJsonPath = join(claudeDirectory, 'settings.json');
+    const claudeLocalPath = join(claudeDirectory, 'settings.local.json');
+    await mkdir(claudeDirectory, { recursive: true });
+    await writeFile(claudeJsonPath, '{"from":"json"}\n');
+    await writeFile(claudeLocalPath, '{"from":"local"}\n');
+
+    const claudeLoaded = await getConfigFileRuntime({ agent: 'claude' });
+    assert.equal(claudeLoaded.path, claudeJsonPath);
+    assert.equal(claudeLoaded.format, 'json');
+    assert.equal(claudeLoaded.content, '{"from":"json"}\n');
   } finally {
     if (previousHome === undefined) {
       delete process.env.HOME;
@@ -692,6 +781,27 @@ test('runtime config editor resolves explicit OpenCode candidate aliases', async
   }
 });
 
+test('runtime config editor resolves explicit OpenCode directories by configured candidate priority', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-opencode-directory-'));
+  const configDirectory = join(directory, 'opencode');
+  const jsonPath = join(configDirectory, 'opencode.json');
+  const jsoncPath = join(configDirectory, 'opencode.jsonc');
+  const original = opencodeCanonicalNativeJson(CACHED_SECRET);
+
+  try {
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(jsonPath, original);
+    await writeFile(jsoncPath, '{"model":"ignored"}\n');
+
+    const loaded = await getConfigFileRuntime({ agent: 'opencode', configPath: configDirectory });
+    assert.equal(loaded.path, jsonPath);
+    assert.equal(loaded.format, 'json');
+    assert.equal(loaded.content, original);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 async function writeState(path: string): Promise<void> {
   await writeStateWithConfig(path, CANONICAL_CONFIG);
 }
@@ -721,6 +831,24 @@ function opencodeNativeJson(apiKey: string): string {
         anthropic: {
           options: {
             baseURL: 'https://old.example.test/v1',
+            apiKey,
+          },
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function opencodeCanonicalNativeJson(apiKey: string): string {
+  return `${JSON.stringify(
+    {
+      model: 'openai/gpt-4.1-mini',
+      provider: {
+        openai: {
+          options: {
+            baseURL: 'https://api.openai.com/v1',
             apiKey,
           },
         },

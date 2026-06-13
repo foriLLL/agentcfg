@@ -298,13 +298,32 @@ test('E2E native failure paths leave fixtures unchanged', async () => {
   });
 
   await withPulledFixture('ambiguous-config-path', async ({ statePath, fixturesRoot, nativePaths, env }) => {
-    await writeFile(join(fixturesRoot, 'opencode', 'opencode.json'), '{ "model": "openai/gpt-4.1-mini" }\n');
+    await writeFile(
+      join(fixturesRoot, 'opencode', 'opencode.json'),
+      `${JSON.stringify(
+        {
+          model: 'openai/gpt-4.1-mini',
+          provider: {
+            openai: {
+              options: {
+                baseURL: 'https://api.openai.com/v1',
+                apiKey: TEST_SECRET,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const before = await snapshotFiles(Object.values(nativePaths));
 
     const result = await runCli(['diff', '--agent', 'opencode', '--state', statePath, '--fixtures-root', fixturesRoot], env);
 
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Ambiguous opencode native config/);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Agent: opencode/);
+    assert.match(result.stdout, /No managed diffs\./);
+    assert.equal(result.stdout.includes('Ambiguous opencode native config'), false);
     assertNoSecretOutput(result);
     assert.deepEqual(await snapshotFiles(Object.values(nativePaths)), before);
     assert.deepEqual(await allBackupFiles(fixturesRoot), []);

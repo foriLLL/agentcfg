@@ -364,10 +364,29 @@ test('diff exits non-zero for missing cache, invalid cache, ambiguous path, and 
     await writeState(statePath, CANONICAL_CONFIG);
     await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
     await writeFile(join(fixturesRoot, 'opencode', 'input.opencode.jsonc'), '{ "model": "openai/gpt-4.1-mini" }\n');
-    await writeFile(join(fixturesRoot, 'opencode', 'opencode.json'), '{ "model": "openai/gpt-4.1-mini" }\n');
-    const ambiguous = await runCli(['diff', '--agent', 'opencode', '--state', statePath, '--fixtures-root', fixturesRoot]);
-    assert.notEqual(ambiguous.status, 0);
-    assert.match(ambiguous.stderr, /Ambiguous opencode native config/);
+    await writeFile(
+      join(fixturesRoot, 'opencode', 'opencode.json'),
+      `${JSON.stringify(
+        {
+          model: 'openai/gpt-4.1-mini',
+          provider: {
+            openai: {
+              options: {
+                baseURL: 'https://api.openai.com/v1',
+                apiKey: CANONICAL_CONFIG.providers.openai.apiKey.value,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const diff = await runCli(['diff', '--agent', 'opencode', '--state', statePath, '--fixtures-root', fixturesRoot]);
+    assert.equal(diff.status, 0, diff.stderr);
+    assert.match(diff.stdout, /Agent: opencode/);
+    assert.match(diff.stdout, /No managed diffs\./);
+    assert.equal(diff.stdout.includes('Ambiguous opencode native config'), false);
 
     const unsupportedPath = join(directory, 'opencode.jsonc');
     await writeFile(unsupportedPath, '{ "model": 42 }\n');
