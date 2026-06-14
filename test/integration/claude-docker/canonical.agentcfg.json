@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "provider": "anthropic",
+    "model": "claude-3-5-sonnet-latest"
+  },
+  "providers": {
+    "anthropic": {
+      "baseURL": "https://api.anthropic.com/v1",
+      "apiKey": {
+        "type": "plain",
+        "value": "sk-claude-docker-fixture-secret"
+      },
+      "models": {
+        "claude-3-5-sonnet-latest": {
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      }
+    }
+  }
+}

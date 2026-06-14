@@ -1,0 +1,14 @@
+{
+  "theme": "dark",
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)"
+    ],
+    "deny": [
+      "WebFetch(*)"
+    ]
+  },
+  "env": {
+    "KEEP_ME": "yes"
+  }
+}
