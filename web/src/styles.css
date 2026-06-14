@@ -419,6 +419,16 @@ h3 {
   gap: var(--space-3);
 }
 
+.notice-stack {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.notice-stack .notice {
+  margin: 0;
+}
+
 .notice strong {
   color: var(--color-cocoa);
 }

@@ -112,6 +112,7 @@ test('App wires the remote access warning helper into a visible banner', async (
   const appSource = await readFile(join(process.cwd(), 'web', 'src', 'App.tsx'), 'utf8');
 
   assert.match(appSource, /remoteAccessWarningForHostname\(typeof window === 'undefined' \? undefined : window\.location\.hostname\)/);
+  assert.match(appSource, /className="notice-stack"/);
   assert.match(appSource, /<strong>远程访问警告<\/strong>/);
   assert.match(appSource, /<span>\{remoteAccessWarning\}<\/span>/);
 });

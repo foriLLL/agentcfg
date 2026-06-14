@@ -760,6 +760,13 @@ function App() {
     </section>
   );
 
+  const noticeStackNode = (remoteAccessWarningNode || noticeNode) && (
+    <section className="notice-stack" aria-label="页面提示">
+      {remoteAccessWarningNode}
+      {noticeNode}
+    </section>
+  );
+
   return (
     <main className="app-shell" aria-labelledby="page-title">
         <header className="app-header">
@@ -789,10 +796,9 @@ function App() {
         </header>
 
         <section className="tab-viewport">
-          {remoteAccessWarningNode}
+          {noticeStackNode}
           {activeTab === 'connection' && (
             <section className="dashboard-grid dashboard-grid--connection" id="connection-panel" role="tabpanel" aria-labelledby="connection-tab">
-              {noticeNode}
               {loadErrorNode}
               <article className="card onboarding-card connection-card" id="setup-panel">
                 <div className="section-heading section-heading--split">
@@ -913,7 +919,6 @@ function App() {
 
           {activeTab === 'remote' && (
             <section className="dashboard-grid" id="remote-panel" role="tabpanel" aria-labelledby="remote-tab">
-              {noticeNode}
               {loadErrorNode}
               <article className="card remote-editor-card">
                 <div className="section-heading section-heading--split">
@@ -1079,7 +1084,6 @@ function App() {
 
           {activeTab === 'config' && (
             <section className="dashboard-grid dashboard-grid--config" id="config-panel" role="tabpanel" aria-labelledby="config-tab">
-              {noticeNode}
               {loadErrorNode}
               <article className="card config-editor-card">
                 <div className="section-heading section-heading--split">
@@ -1164,7 +1168,6 @@ function App() {
 
           {activeTab === 'execute' && (
             <section className="dashboard-grid" id="execute-panel" role="tabpanel" aria-labelledby="execute-tab">
-              {noticeNode}
               {loadErrorNode}
               <article className="card diff-card execute-card" id="review-panel">
                 <div className="section-heading section-heading--split">
@@ -1259,7 +1262,6 @@ function App() {
 
           {activeTab === 'status' && (
             <section className="dashboard-grid" id="status-panel" role="tabpanel" aria-labelledby="status-tab">
-              {noticeNode}
               {loadErrorNode}
               <article className="card source-card">
                 <div className="section-heading section-heading--split">
