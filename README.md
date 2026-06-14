@@ -1,5 +1,7 @@
 # agentcfg
 
+Language: English | [中文](README.zh-CN.md)
+
 agentcfg is a CLI for keeping Codex, OpenCode, OpenClaw, and Claude Code aligned across devices from one canonical `agentcfg.yaml` stored in a private GitHub Gist.
 
 It is built for people who want one safe sync path instead of hand editing several agent config files.
