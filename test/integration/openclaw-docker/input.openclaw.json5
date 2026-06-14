@@ -1,0 +1,31 @@
+{
+  agents: {
+    defaults: {
+      model: {
+        fallbacks: ['local/fallback-model'],
+      },
+    },
+  },
+  models: {
+    providers: {
+      legacy: {
+        baseUrl: 'https://legacy.example.test/v1',
+        apiKey: 'legacy-placeholder',
+        models: [
+          {
+            id: 'old-model',
+            name: 'Old model',
+          },
+        ],
+      },
+      openai: {
+        models: [
+          {
+            id: 'gpt-4.1-mini',
+            name: 'GPT-4.1 mini',
+          },
+        ],
+      },
+    },
+  },
+}

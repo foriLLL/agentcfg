@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "provider": "openai",
+    "model": "gpt-4.1-mini"
+  },
+  "providers": {
+    "openai": {
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": {
+        "type": "plain",
+        "value": "sk-test-openclaw-docker-secret"
+      },
+      "models": {
+        "gpt-4.1-mini": {
+          "contextWindow": 1047576,
+          "contextTokens": 1047576,
+          "maxTokens": 32768
+        }
+      }
+    }
+  }
+}
