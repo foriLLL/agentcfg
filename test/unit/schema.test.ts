@@ -20,6 +20,7 @@ const INVALID_DEFAULT_MODEL_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-de
 const INVALID_MODEL_METADATA_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-model-metadata.yaml');
 const INVALID_DISCOVERY_PATH_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-discovery-path.yaml');
 const INVALID_EMPTY_API_KEY_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-empty-api-key.yaml');
+const CJK_COPY_PATTERN = /[\u3400-\u9fff]/u;
 
 const EXPECTED_CANONICAL_CONFIG = {
   schemaVersion: 1,
@@ -221,7 +222,23 @@ test('documents every canonical agentcfg.yaml schema field', () => {
   const apiKeyValueDoc = AGENTCFG_SCHEMA_DOCS.find(
     (field) => (field.path as string) === 'providers.<provider>.apiKey.value',
   );
-  assert.match(apiKeyValueDoc?.description ?? '', /visible/);
-  assert.match(apiKeyValueDoc?.description ?? '', /provider API key/);
+  assert.match(apiKeyValueDoc?.description ?? '', /明文可见/);
+  assert.match(apiKeyValueDoc?.description ?? '', /API Key/);
   assert.doesNotMatch(apiKeyValueDoc?.description ?? '', /masked|redacted/i);
 });
+
+test('localizes schema labels and descriptions to Simplified Chinese copy', () => {
+  for (const field of AGENTCFG_SCHEMA_DOCS) {
+    assertLocalizedSchemaCopy(field, 'label');
+    assertLocalizedSchemaCopy(field, 'description');
+  }
+});
+
+function assertLocalizedSchemaCopy(field: (typeof AGENTCFG_SCHEMA_DOCS)[number], property: 'label' | 'description'): void {
+  const value = field[property];
+  if (value === field.path || value === field.type) {
+    return;
+  }
+
+  assert.match(value, CJK_COPY_PATTERN, `${field.path} ${property} should contain Simplified Chinese copy`);
+}
