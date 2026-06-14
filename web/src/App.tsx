@@ -44,6 +44,7 @@ import {
   formatFileMode,
   formatManagedValue,
   formatStatus,
+  remoteAccessWarningForHostname,
   statusLabel,
   statusTone,
   type Step,
@@ -225,6 +226,7 @@ function App() {
   const selectedRemoteModel = modelDraft(selectedRemoteProvider, selectedRemoteModelId);
   const defaultProvider = remoteDraft.providers[remoteDraft.defaults.provider] === undefined ? selectedRemoteProviderId : remoteDraft.defaults.provider;
   const defaultProviderModelIds = Object.keys(providerDraft(remoteDraft, defaultProvider).models);
+  const remoteAccessWarning = useMemo(() => remoteAccessWarningForHostname(typeof window === 'undefined' ? undefined : window.location.hostname), []);
 
   useEffect(() => {
     setConfirmationText('');
@@ -507,7 +509,7 @@ function App() {
   function handleRemoteProviderIdChange(providerId: string): void {
     const previousProviderId = selectedRemoteProviderId;
     if (providerId !== previousProviderId && remoteDraft.providers[providerId] !== undefined) {
-      setNotice({ tone: 'error', title: 'Provider ID 已存在', copy: `Provider ID "${providerId}" 已被使用。当前 Provider 保持为 "${previousProviderId}"；请填写唯一 ID 后再继续。` });
+      setNotice({ tone: 'error', title: '提供商 ID 已存在', copy: `提供商 ID "${providerId}" 已被使用。当前提供商保持为 "${previousProviderId}"；请填写唯一 ID 后再继续。` });
       return;
     }
 
@@ -577,7 +579,7 @@ function App() {
     const providerId = selectedRemoteProviderId;
     const previousModelId = selectedRemoteModelId;
     if (modelId !== previousModelId && selectedRemoteProvider.models[modelId] !== undefined) {
-      setNotice({ tone: 'error', title: 'Model ID 已存在', copy: `Provider "${providerId}" 中已存在 Model ID "${modelId}"。当前 Model 保持为 "${previousModelId}"；请填写唯一 ID 后再继续。` });
+      setNotice({ tone: 'error', title: '模型 ID 已存在', copy: `提供商 "${providerId}" 中已存在模型 ID "${modelId}"。当前模型保持为 "${previousModelId}"；请填写唯一 ID 后再继续。` });
       return;
     }
 
@@ -751,6 +753,13 @@ function App() {
     </section>
   );
 
+  const remoteAccessWarningNode = remoteAccessWarning && (
+    <section className="notice" role="alert" aria-live="polite">
+      <strong>远程访问警告</strong>
+      <span>{remoteAccessWarning}</span>
+    </section>
+  );
+
   return (
     <main className="app-shell" aria-labelledby="page-title">
         <header className="app-header">
@@ -780,6 +789,7 @@ function App() {
         </header>
 
         <section className="tab-viewport">
+          {remoteAccessWarningNode}
           {activeTab === 'connection' && (
             <section className="dashboard-grid dashboard-grid--connection" id="connection-panel" role="tabpanel" aria-labelledby="connection-tab">
               {noticeNode}
@@ -919,38 +929,38 @@ function App() {
                 </div>
                 <div className="remote-config-layout">
                   <form className="remote-config-form" onSubmit={(event) => { event.preventDefault(); void handleSaveRemoteConfig(); }}>
-                    <section className="remote-editor-section remote-editor-section--full" aria-label="Provider 列表">
+                    <section className="remote-editor-section remote-editor-section--full" aria-label="提供商列表">
                       <div className="remote-subheading">
                         <div>
-                          <p className="eyebrow">Providers</p>
-                          <h3>选择或新增 Provider</h3>
+                          <p className="eyebrow">提供商</p>
+                          <h3>选择或新增提供商</h3>
                         </div>
                         <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteProvider} disabled={isSavingRemote}>
-                          添加 Provider
+                          添加提供商
                         </button>
                       </div>
-                      <div className="remote-entity-list" role="list" aria-label="已配置 Providers">
+                      <div className="remote-entity-list" role="list" aria-label="已配置提供商">
                         {remoteProviderIds.map((providerId) => (
                           <button className={`remote-entity-chip ${providerId === selectedRemoteProviderId ? 'remote-entity-chip--active' : ''}`} type="button" key={providerId} onClick={() => handleSelectRemoteProvider(providerId)} disabled={isSavingRemote}>
-                            <strong>{providerId.trim() === '' ? '未命名 Provider' : providerId}</strong>
-                            <small>{Object.keys(remoteDraft.providers[providerId]?.models ?? {}).length} models</small>
+                            <strong>{providerId.trim() === '' ? '未命名提供商' : providerId}</strong>
+                            <small>{Object.keys(remoteDraft.providers[providerId]?.models ?? {}).length} 个模型</small>
                           </button>
                         ))}
                       </div>
                     </section>
 
-                    <section className="remote-editor-section" aria-label="Provider 字段">
+                    <section className="remote-editor-section" aria-label="提供商字段">
                       <div className="remote-subheading">
                         <div>
-                          <p className="eyebrow">Provider</p>
-                          <h3>Endpoint 与可见 API Key</h3>
+                          <p className="eyebrow">提供商配置</p>
+                          <h3>端点与可见 API Key</h3>
                         </div>
                         <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteProvider} disabled={isSavingRemote || remoteProviderIds.length <= 1}>
-                          删除 Provider
+                          删除提供商
                         </button>
                       </div>
                       <label htmlFor="remote-provider">
-                        Provider ID
+                        提供商 ID
                         <input id="remote-provider" value={selectedRemoteProviderId} onChange={(event) => handleRemoteProviderIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-base-url">
@@ -962,76 +972,76 @@ function App() {
                         <input id="remote-api-key" type="text" value={selectedRemoteProvider.apiKey.value} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, apiKey: { type: 'plain', value: event.target.value } }))} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-model-discovery-path">
-                        Model Discovery Path
+                        模型发现路径
                         <input id="remote-model-discovery-path" value={selectedRemoteProvider.modelDiscovery?.path ?? ''} onChange={(event) => updateRemoteProvider((provider) => withModelDiscoveryPath(provider, event.target.value))} placeholder="/models（可选）" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                     </section>
 
-                    <section className="remote-editor-section" aria-label="Model 字段">
+                    <section className="remote-editor-section" aria-label="模型字段">
                       <div className="remote-subheading">
                         <div>
-                          <p className="eyebrow">Models</p>
-                          <h3>当前 Provider 的模型目录</h3>
+                          <p className="eyebrow">模型</p>
+                          <h3>当前提供商的模型目录</h3>
                         </div>
                         <div className="remote-inline-actions">
                           <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteModel} disabled={isSavingRemote}>
-                            添加 Model
+                            添加模型
                           </button>
                           <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteModel} disabled={isSavingRemote || remoteModelIds.length <= 1}>
-                            删除 Model
+                            删除模型
                           </button>
                         </div>
                       </div>
-                      <div className="remote-entity-list" role="list" aria-label="当前 Provider 的 Models">
+                      <div className="remote-entity-list" role="list" aria-label="当前提供商的模型">
                         {remoteModelIds.map((modelId) => (
                           <button className={`remote-entity-chip ${modelId === selectedRemoteModelId ? 'remote-entity-chip--active' : ''}`} type="button" key={modelId} onClick={() => handleSelectRemoteModel(modelId)} disabled={isSavingRemote}>
-                            <strong>{modelId.trim() === '' ? '未命名 Model' : modelId}</strong>
-                            <small>{modelMetadataCount(selectedRemoteProvider.models[modelId] ?? {})} metadata</small>
+                            <strong>{modelId.trim() === '' ? '未命名模型' : modelId}</strong>
+                            <small>{modelMetadataCount(selectedRemoteProvider.models[modelId] ?? {})} 项元数据</small>
                           </button>
                         ))}
                       </div>
                       <label htmlFor="remote-model">
-                        Model ID
+                        模型 ID
                         <input id="remote-model" value={selectedRemoteModelId} onChange={(event) => handleRemoteModelIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-model-variant">
-                        Variant
+                        variant 元数据
                         <input id="remote-model-variant" value={selectedRemoteModel.variant ?? ''} onChange={(event) => updateRemoteModel((model) => withOptionalString(model, 'variant', event.target.value))} placeholder="chat（可选）" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-model-context-window">
-                        Limit Context
+                        Limit Context（上下文窗口）
                         <input id="remote-model-context-window" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextWindow)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextWindow', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-model-context-tokens">
-                        Limit Input
+                        Limit Input（输入预算）
                         <input id="remote-model-context-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                       <label htmlFor="remote-model-max-tokens">
-                        Limit Output
+                        Limit Output（输出上限）
                         <input id="remote-model-max-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.maxTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'maxTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
                       </label>
                     </section>
 
-                    <section className="remote-editor-section remote-editor-section--full" aria-label="默认 Provider 和 Model">
+                    <section className="remote-editor-section remote-editor-section--full" aria-label="默认提供商和模型">
                       <div className="remote-subheading">
                         <div>
-                          <p className="eyebrow">Defaults</p>
-                          <h3>显式默认 Provider / Model</h3>
+                          <p className="eyebrow">默认项</p>
+                          <h3>显式默认提供商 / 模型</h3>
                         </div>
                       </div>
                       <label htmlFor="remote-default-provider">
-                        Default Provider
+                        默认提供商
                         <select id="remote-default-provider" value={defaultProvider} onChange={(event) => handleDefaultRemoteProviderChange(event.target.value)} disabled={isSavingRemote}>
                           {remoteProviderIds.map((providerId) => (
-                            <option value={providerId} key={providerId}>{providerId.trim() === '' ? '未命名 Provider' : providerId}</option>
+                            <option value={providerId} key={providerId}>{providerId.trim() === '' ? '未命名提供商' : providerId}</option>
                           ))}
                         </select>
                       </label>
                       <label htmlFor="remote-default-model">
-                        Default Model
+                        默认模型
                         <select id="remote-default-model" value={remoteDraft.defaults.model} onChange={(event) => handleDefaultRemoteModelChange(event.target.value)} disabled={isSavingRemote}>
                           {defaultProviderModelIds.map((modelId) => (
-                            <option value={modelId} key={modelId}>{modelId.trim() === '' ? '未命名 Model' : modelId}</option>
+                            <option value={modelId} key={modelId}>{modelId.trim() === '' ? '未命名模型' : modelId}</option>
                           ))}
                         </select>
                       </label>
@@ -1497,21 +1507,21 @@ function modelMetadataCount(model: EditableAgentConfig['providers'][string]['mod
 function validateRemoteDraft(config: EditableAgentConfig): string | null {
   const providerEntries = Object.entries(config.providers);
   if (providerEntries.length === 0) {
-    return '至少需要一个 Provider。';
+    return '至少需要一个提供商。';
   }
 
   if (config.providers[config.defaults.provider] === undefined) {
-    return '默认 Provider 必须指向已配置的 Provider。';
+    return '默认提供商必须指向已配置的提供商。';
   }
 
   if (config.providers[config.defaults.provider]?.models[config.defaults.model] === undefined) {
-    return '默认 Model 必须属于默认 Provider。';
+    return '默认模型必须属于默认提供商。';
   }
 
   for (const [providerId, provider] of providerEntries) {
-    const providerLabel = providerId.trim() === '' ? '未命名 Provider' : providerId;
+    const providerLabel = providerId.trim() === '' ? '未命名提供商' : providerId;
     if (providerId.trim() === '') {
-      return 'Provider ID 不能为空。';
+      return '提供商 ID 不能为空。';
     }
     if (provider.baseURL.trim() === '') {
       return `${providerLabel} 的 Base URL 不能为空。`;
@@ -1520,18 +1530,18 @@ function validateRemoteDraft(config: EditableAgentConfig): string | null {
       return `${providerLabel} 的 API Key 不能为空；Web 页面不隐藏或沿用不可见密钥。`;
     }
     if (provider.modelDiscovery !== undefined && (provider.modelDiscovery.path.trim() === '' || !provider.modelDiscovery.path.startsWith('/'))) {
-      return `${providerLabel} 的 Model Discovery Path 必须留空或以 / 开头。`;
+      return `${providerLabel} 的模型发现路径必须留空或以 / 开头。`;
     }
 
     const modelEntries = Object.entries(provider.models);
     if (modelEntries.length === 0) {
-      return `${providerLabel} 至少需要一个 Model。`;
+      return `${providerLabel} 至少需要一个模型。`;
     }
 
     for (const [modelId, model] of modelEntries) {
-      const modelLabel = modelId.trim() === '' ? '未命名 Model' : modelId;
+      const modelLabel = modelId.trim() === '' ? '未命名模型' : modelId;
       if (modelId.trim() === '') {
-        return `${providerLabel} 的 Model ID 不能为空。`;
+        return `${providerLabel} 的模型 ID 不能为空。`;
       }
       if (model.variant !== undefined && model.variant.trim() === '') {
         return `${providerLabel}/${modelLabel} 的 variant 必须留空或填写非空文本。`;
@@ -1735,8 +1745,8 @@ function SchemaReference() {
 
   return (
     <section id="remote-schema-preview" className="schema-docs" aria-label="agentcfg.yaml schema 参考">
-      <p className="schema-docs__intro">agentcfg.yaml canonical fields. This reference documents the schema only and never mirrors current form values.</p>
-      <div className="schema-docs__tree" aria-label="Schema field tree">
+      <p className="schema-docs__intro">agentcfg.yaml 规范字段。此参考只说明 schema，不镜像本页表单值。</p>
+      <div className="schema-docs__tree" aria-label="Schema 字段树">
         {schemaTree.map((node) => renderSchemaDocNode(node, true))}
       </div>
     </section>
@@ -1783,10 +1793,10 @@ function renderSchemaDocNode(node: SchemaDocTreeNode, isRoot: boolean) {
           <code>{node.field.path}</code>
           <strong>{node.field.label}</strong>
         </span>
-        <span className="schema-docs__badge">{node.field.required ? 'required' : 'optional'}</span>
+        <span className="schema-docs__badge">{node.field.required ? '必填' : '可选'}</span>
       </summary>
       <div className="schema-docs__body">
-        <span>Type: {node.field.type}</span>
+        <span>类型：{node.field.type}</span>
         <p>{node.field.description}</p>
       </div>
       {node.children.length > 0 && (

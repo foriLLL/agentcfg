@@ -137,7 +137,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.match(initialSchemaDocs, /providers\.<provider>\.modelDiscovery\.path/);
       assert.match(initialSchemaDocs, /providers\.<provider>\.models\.<model>\.contextWindow/);
       assert.match(initialSchemaDocs, /plain/);
-      assert.match(initialSchemaDocs, /plaintext provider API key stored in agentcfg\.yaml and written verbatim to target agent configs/);
+      assert.match(initialSchemaDocs, /plain 表示提供商 API Key 以明文存储在 agentcfg\.yaml 中，并按原值写入目标 Agent 配置/);
       assert.equal(initialSchemaDocs.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
       await assertSchemaReferenceTree(cdp);
       await cdp.setInputValue('#remote-provider', 'openai');
@@ -149,7 +149,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model-context-window', '1047576');
       await cdp.setInputValue('#remote-model-context-tokens', '1040000');
       await cdp.setInputValue('#remote-model-max-tokens', '32768');
-      await cdp.clickButton('添加 Provider');
+      await cdp.clickButton('添加提供商');
       await cdp.setInputValue('#remote-provider', 'anthropic');
       await cdp.setInputValue('#remote-base-url', 'https://api.anthropic.com/v1');
       await cdp.setInputValue('#remote-api-key', 'sk-gui-visible-anthropic');
@@ -157,17 +157,17 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model-context-window', '200000');
       await cdp.setInputValue('#remote-model-context-tokens', '180000');
       await cdp.setInputValue('#remote-model-max-tokens', '8192');
-      await cdp.clickButton('添加 Model');
+      await cdp.clickButton('添加模型');
       await cdp.setInputValue('#remote-model', 'claude-3-haiku');
       await cdp.setInputValue('#remote-model', 'claude-3-5-sonnet-latest');
-      await cdp.waitForText('Model ID 已存在');
+      await cdp.waitForText('模型 ID 已存在');
       await cdp.waitForFunction('document.querySelector("#remote-model") instanceof HTMLInputElement && document.querySelector("#remote-model").value === "claude-3-haiku"');
       const yamlPreviewAfterDuplicateModel = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewAfterDuplicateModel, /claude-3-5-sonnet-latest/);
       assert.match(yamlPreviewAfterDuplicateModel, /"claude-3-haiku": \{\}/);
       assert.match(yamlPreviewAfterDuplicateModel, /contextWindow: 200000/);
       await cdp.setInputValue('#remote-provider', 'openai');
-      await cdp.waitForText('Provider ID 已存在');
+      await cdp.waitForText('提供商 ID 已存在');
       await cdp.waitForFunction('document.querySelector("#remote-provider") instanceof HTMLInputElement && document.querySelector("#remote-provider").value === "anthropic"');
       const yamlPreviewAfterDuplicateProvider = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewAfterDuplicateProvider, /openai/);
@@ -1027,9 +1027,9 @@ async function assertSchemaReferenceTree(cdp: CdpPage): Promise<void> {
   assert.equal(tree.providerContainsApiKey, true, 'provider API key node was not nested under provider config');
   assert.equal(tree.modelContainsContextWindow, true, 'contextWindow node was not nested under model config');
   assert.equal(tree.providerOpenedAfterSummaryClick, true, 'schema tree provider node did not expand from its summary');
-  assert.match(tree.metadataText, /required/);
-  assert.match(tree.metadataText, /optional/);
-  assert.match(tree.metadataText, /Type:/);
+  assert.match(tree.metadataText, /必填/);
+  assert.match(tree.metadataText, /可选/);
+  assert.match(tree.metadataText, /类型：/);
 }
 
 async function assertConfigEditorLayout(cdp: CdpPage, label = 'desktop', expectTabViewportScroll = false): Promise<void> {

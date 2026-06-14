@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
-import { stdout as defaultOutput } from 'node:process';
+import { stderr as defaultErrorOutput, stdout as defaultOutput } from 'node:process';
 import type { Writable } from 'node:stream';
 import { startWebServer } from '../server';
 
@@ -11,7 +11,10 @@ export type WebCommandOptions = {
   open?: boolean;
   env?: NodeJS.ProcessEnv;
   output?: Writable & { isTTY?: boolean };
+  errorOutput?: Writable;
 };
+
+const REMOTE_BIND_WARNING_COPY = '局域网设备可能访问并读写本机 Agent 配置。仅在可信网络中使用。';
 
 export function buildWebHelpText(): string {
   return [
@@ -30,6 +33,7 @@ export function buildWebHelpText(): string {
 
 export async function runWebCommand(options: WebCommandOptions = {}): Promise<void> {
   const output = options.output ?? defaultOutput;
+  const errorOutput = options.errorOutput ?? defaultErrorOutput;
   const env = options.env ?? process.env;
   const server = await startWebServer({
     host: options.host,
@@ -38,12 +42,25 @@ export async function runWebCommand(options: WebCommandOptions = {}): Promise<vo
     env,
   });
 
+  if (!isLoopbackHost(options.host)) {
+    errorOutput.write(`${formatRemoteBindWarning(server.host)}\n`);
+  }
   output.write(`agentcfg web listening at ${server.url}\n`);
   if (shouldAutoOpen({ open: options.open, env, output })) {
     openBrowser(server.url);
   }
 
   await waitForShutdown(server.close);
+}
+
+export function isLoopbackHost(host: string | undefined): boolean {
+  if (host === undefined) return true;
+  const normalizedHost = normalizeHost(host);
+  return normalizedHost === '127.0.0.1' || normalizedHost === 'localhost' || normalizedHost === '::1';
+}
+
+export function formatRemoteBindWarning(host: string): string {
+  return `警告：当前 Web API 绑定到非本机回环地址 ${host}，${REMOTE_BIND_WARNING_COPY}`;
 }
 
 export function shouldAutoOpen(options: {
@@ -91,4 +108,12 @@ function waitForShutdown(close: () => Promise<void>): Promise<void> {
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);
   });
+}
+
+function normalizeHost(host: string): string {
+  const trimmedHost = host.trim().toLowerCase();
+  if (trimmedHost.startsWith('[') && trimmedHost.endsWith(']')) {
+    return trimmedHost.slice(1, -1);
+  }
+  return trimmedHost;
 }

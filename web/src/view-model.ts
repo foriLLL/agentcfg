@@ -19,6 +19,8 @@ export type Step = {
 
 export const MANAGED_FIELDS: ManagedField[] = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'];
 
+const REMOTE_ACCESS_WARNING_COPY = '局域网设备可能访问并读写本机 Agent 配置。仅在可信网络中使用。';
+
 export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
   return [
     {
@@ -54,6 +56,19 @@ export function statusLabel(state: RuntimeStateSummary | null): string {
     return '可以拉取';
   }
   return '需要设置';
+}
+
+export function remoteAccessWarningForHostname(hostname: string | undefined): string | null {
+  if (hostname === undefined || hostname.trim() === '') {
+    return null;
+  }
+
+  const normalizedHostname = normalizeHostname(hostname);
+  if (normalizedHostname === '127.0.0.1' || normalizedHostname === 'localhost' || normalizedHostname === '::1') {
+    return null;
+  }
+
+  return `当前浏览器正在通过非本机回环地址 ${hostname} 访问 agentcfg Web API，${REMOTE_ACCESS_WARNING_COPY}`;
 }
 
 export function formatDate(value: string | undefined): string {
@@ -172,13 +187,13 @@ export function fieldLabel(field: ManagedField): string {
     return '模型';
   }
   if (field === 'contextWindow') {
-    return 'Limit Context';
+    return 'Limit Context（上下文窗口）';
   }
   if (field === 'contextTokens') {
-    return 'Limit Input';
+    return 'Limit Input（输入预算）';
   }
   if (field === 'maxTokens') {
-    return 'Limit Output';
+    return 'Limit Output（输出上限）';
   }
   return field;
 }
@@ -266,4 +281,12 @@ function modelLines(model: EditableAgentConfig['providers'][string]['models'][st
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function normalizeHostname(hostname: string): string {
+  const trimmedHostname = hostname.trim().toLowerCase();
+  if (trimmedHostname.startsWith('[') && trimmedHostname.endsWith(']')) {
+    return trimmedHostname.slice(1, -1);
+  }
+  return trimmedHostname;
 }
