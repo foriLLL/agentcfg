@@ -4,7 +4,7 @@
 
 This document is the testing contract for agentcfg development. It turns the current verification lanes into a repeatable TDD workflow so changes to existing features and newly designed features can be proven before they are shipped.
 
-Every behavior change starts with a scenario, a failing assertion, the smallest implementation that makes the assertion pass, and a real-surface check. The current suite provides unit, fixtures, API, server, CLI, GUI, and Docker validation.
+Every behavior change starts with a scenario, a failing assertion, the smallest implementation that makes the assertion pass, and a real-surface check. The current suite provides unit, fixtures, API, server, Electron, CLI, GUI, and Docker validation.
 
 ## Current Verification Lanes
 
@@ -17,10 +17,17 @@ Every behavior change starts with a scenario, a failing assertion, the smallest 
 | `npm run test:fixtures` | All fixture golden outputs match. | Codex, OpenCode, and OpenClaw rendered config shapes. |
 | `npm run test:api` | Runtime API tests pass with expected response bodies and state files. | State, Gist operations, remote save/load, diff/apply planning, config editor, model discovery. |
 | `npm run test:server` | HTTP server tests pass with expected status codes and JSON envelopes. | Local Web API routing, static serving, token secrecy, provider API key visibility. |
+| `npm run test:electron` | Electron tests pass without opening a real desktop window. | Electron main entry, packaged asset resolution, and loopback-only embedded server binding. |
 | `npm run test:cli` | CLI tests pass with expected stdout/stderr and file snapshots. | `init`, `pull`, `diff`, `apply`, `web`, all-agents, dry-run, rollback, idempotency. |
 | `npm run test:gui` | Browser flow test passes through init, pull, diff, dry-run, preview, and apply. | Real Web UI behavior through Chrome/CDP against a running server. |
 | `npm run test:docker:opencode` | Docker validation passes or documents an environment skip. | Generated OpenCode config parses in the upstream container without provider network access. |
+| `npm run test:docker:codex` | Local Codex TOML/env validation passes, then Docker validation passes or documents an environment skip. | Codex generated TOML/env shape plus best-available bounded container smoke; this is not a confirmed full upstream config validator. |
+| `npm run test:docker:openclaw` | Docker validation passes or documents an environment skip. | Generated OpenClaw config validates with the upstream container command when available. |
+| `npm run test:docker:claude` | Local Claude settings validation passes, then Docker validation passes or documents an environment skip. | Claude Code `settings.json` shape plus safe CLI availability smoke. |
+| `npm run test:docker` | All OpenCode, Codex, OpenClaw, and Claude Code Docker lanes pass or document skips. | Aggregate Docker/config validation gate. |
 | `npm test` | Build and every test lane above pass in order. | Full repository regression gate. |
+
+Docker validation skips are acceptable for local development when Docker, an image, or an upstream non-network validator is unavailable. Release gating can set `AGENTCFG_DOCKER_OPENCODE_STRICT=1`, `AGENTCFG_DOCKER_CODEX_STRICT=1`, `AGENTCFG_DOCKER_OPENCLAW_STRICT=1`, or `AGENTCFG_DOCKER_CLAUDE_STRICT=1` to convert that lane's documented skip to exit `77`.
 
 ## TDD Scenario Contract
 
@@ -39,9 +46,10 @@ The RED artifact must fail for the intended reason. The GREEN artifact must show
 | Feature area | Existing tests | Add before new work |
 | --- | --- | --- |
 | Canonical schema and serialization | `test/unit/schema.test.ts`, canonical fixtures. | Add invalid fixtures for every new field, boundary, and cross-reference rule. |
-| Codex adapter | `test/unit/codex-adapter.test.ts`, `test/fixtures/fixtures.test.ts`, CLI all-agent flows. | Add adapter unit tests and fixture goldens before changing native TOML or env output. |
+| Codex adapter | `test/unit/codex-adapter.test.ts`, `test/fixtures/fixtures.test.ts`, CLI all-agent flows, `test:docker:codex`. | Add adapter unit tests and fixture goldens before changing native TOML or env output. |
 | OpenCode adapter | `test/unit/opencode.test.ts`, OpenCode fixtures, Docker validation. | Add unit, fixture, and Docker-shape assertions before changing provider/model rendering. |
-| OpenClaw adapter | `test/unit/openclaw.test.ts`, OpenClaw fixtures. | Add JSON5 fixture goldens before changing primary/provider config rendering. |
+| OpenClaw adapter | `test/unit/openclaw.test.ts`, OpenClaw fixtures, `test:docker:openclaw`. | Add JSON5 fixture goldens before changing primary/provider config rendering. |
+| Claude Code adapter | `test/unit/claude.test.ts`, API runtime Claude coverage, `test:docker:claude`. | Add settings JSON fixture and local/Docker shape assertions before changing Claude output. |
 | Native config IO | `test/unit/native-io.test.ts`. | Add malformed and preservation cases before supporting new native formats. |
 | State, Gist, and token handling | `test/api/runtime.test.ts`, `test/server/web-server.test.ts`, CLI pull/e2e tests. | Add API and server tests before changing state shape, Gist metadata, or token storage. |
 | Diff/apply and atomic writes | CLI diff/apply/e2e tests, backup tests, atomic-write tests. | Add dry-run, apply, idempotency, all-or-nothing, and rollback cases before changing writes. |
@@ -71,7 +79,7 @@ Use manual QA to prove behavior that typechecking cannot see:
 - API changes: call the endpoint with `curl` or the runtime helper and assert status code plus schema-matching body.
 - Web changes: drive the built UI through the browser/CDP flow and verify visible state.
 - Config handling changes: load a real native config file and compare parsed or rendered shape.
-- Docker/OpenCode changes: run `npm run test:docker:opencode` and confirm the generated config parses in the container or records an environment skip.
+- Docker/config validation changes: run the affected `test:docker:<agent>` lane and `npm run test:docker`; confirm generated config parses locally and the container check passes or records a documented environment skip.
 - Write-path changes: verify backup creation, atomic write result, idempotency, and rollback behavior.
 
 Clean up every QA resource created for a scenario, including servers, browser sessions, temp directories, fixture files, and Docker containers.

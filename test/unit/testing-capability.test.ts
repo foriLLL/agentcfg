@@ -22,9 +22,14 @@ const REQUIRED_TEST_LANES = [
   'npm run test:fixtures',
   'npm run test:api',
   'npm run test:server',
+  'npm run test:electron',
   'npm run test:cli',
   'npm run test:gui',
   'npm run test:docker:opencode',
+  'npm run test:docker:codex',
+  'npm run test:docker:openclaw',
+  'npm run test:docker:claude',
+  'npm run test:docker',
   'npm test',
 ] as const;
 
@@ -39,7 +44,9 @@ test('testing capability design documents current verification lanes', () => {
     assert.ok(design.includes(lane), `missing testing lane: ${lane}`);
   }
 
-  assert.ok(design.includes('unit, fixtures, API, server, CLI, GUI, and Docker validation'));
+  assert.ok(design.includes('unit, fixtures, API, server, Electron, CLI, GUI, and Docker validation'));
+  assert.ok(design.includes('Codex generated TOML/env shape plus best-available bounded container smoke'));
+  assert.ok(design.includes('AGENTCFG_DOCKER_CODEX_STRICT=1'));
 });
 
 test('testing capability design requires TDD scenario contract', () => {

@@ -6,27 +6,73 @@
   "bin": {
     "agentcfg": "dist/cli.js"
   },
-  "main": "dist/cli.js",
+  "main": "dist/src/electron/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && npm run test:unit && npm run test:fixtures && npm run test:api && npm run test:server && npm run test:cli && npm run test:gui && npm run test:docker:opencode",
+    "test": "npm run build && npm run test:unit && npm run test:fixtures && npm run test:api && npm run test:server && npm run test:electron && npm run test:cli && npm run test:gui && npm run test:docker",
     "test:unit": "node --test dist/test/unit/*.test.js",
     "test:fixtures": "node --test dist/test/fixtures/*.test.js",
     "test:api": "node --test dist/test/api/*.test.js",
+    "test:electron": "node --test dist/test/electron/*.test.js",
     "test:server": "node --test dist/test/server/*.test.js",
     "test:cli": "node --test dist/test/cli/*.test.js",
     "test:gui": "npm run build:web && npm run build && node --test dist/test/gui/*.test.js",
     "test:docker:opencode": "scripts/validate-opencode-docker.sh",
+    "test:docker:codex": "scripts/validate-codex-docker.sh",
+    "test:docker:openclaw": "scripts/validate-openclaw-docker.sh",
+    "test:docker:claude": "scripts/validate-claude-docker.sh",
+    "test:docker": "npm run test:docker:opencode && npm run test:docker:codex && npm run test:docker:openclaw && npm run test:docker:claude",
     "dev:web": "vite --config web/vite.config.ts",
     "build:web": "tsc -p web/tsconfig.json && vite build --config web/vite.config.ts",
-    "preview:web": "vite preview --config web/vite.config.ts"
+    "preview:web": "vite preview --config web/vite.config.ts",
+    "verify:privacy": "scripts/verify-release-privacy.sh",
+    "dev:electron": "npm run build && npm run build:web && electron .",
+    "dist:dir": "npm run build && npm run build:web && electron-builder --dir",
+    "dist": "npm run build && npm run build:web && electron-builder"
+  },
+  "build": {
+    "appId": "dev.agentcfg.app",
+    "productName": "agentcfg",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "web/dist",
+        "to": "web/dist"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    }
   },
   "devDependencies": {
     "@types/node": "^22.15.29",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.8.3",
     "vite": "^8.0.16"
   },

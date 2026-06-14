@@ -18,7 +18,7 @@ const REQUIRED_HEADINGS = [
   'Adapter behavior',
   'Managed and unmanaged fields',
   'Backups and rollback',
-  'Docker OpenCode validation',
+  'Docker validation',
   'Non-goals',
 ] as const;
 
@@ -42,13 +42,19 @@ const REQUIRED_COMMANDS = [
   'preview:web',
   'test:api',
   'test:server',
+  'test:electron',
   'test:gui',
   'npm install',
   'npm run build',
   'npm run build:web',
   'npm test',
-  'npm run test:docker:opencode',
-  'SKIP: Docker/OpenCode validation unavailable',
+  'npm run test:docker',
+  'npm run verify:privacy',
+  'test:docker:opencode',
+  'test:docker:codex',
+  'test:docker:openclaw',
+  'test:docker:claude',
+  'SKIP: Docker/<Agent> validation unavailable',
 ] as const;
 
 test('readme documents the required agentcfg MVP sections', () => {
@@ -82,6 +88,13 @@ test('readme documents the required agentcfg MVP sections', () => {
   assert.ok(readme.includes("including each planned file's current content and post-apply content."));
   assert.ok(readme.includes('Saved GitHub Tokens are different'));
   assert.ok(readme.includes('docs/testing-capability.md'));
+  assert.ok(readme.includes('OpenCode, OpenClaw, and Claude Code'));
+  assert.ok(readme.includes('--agent <codex|opencode|openclaw|claude>'));
+  assert.ok(readme.includes('Codex has no confirmed upstream full config validator'));
+  assert.ok(readme.includes('AGENTCFG_DOCKER_CODEX_STRICT=1'));
+  assert.ok(readme.includes('default host is loopback-only'));
+  assert.ok(readme.includes('does not read private file contents'));
+  assert.equal(readme.includes('desktop packaging or an Electron wrapper'), false);
 });
 
 test('example config parses and masks the fake API key', () => {

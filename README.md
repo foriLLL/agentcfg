@@ -1,6 +1,6 @@
 # agentcfg
 
-agentcfg is a CLI for keeping Codex, OpenCode, and OpenClaw aligned across devices from one canonical `agentcfg.yaml` stored in a private GitHub Gist.
+agentcfg is a CLI for keeping Codex, OpenCode, OpenClaw, and Claude Code aligned across devices from one canonical `agentcfg.yaml` stored in a private GitHub Gist.
 
 It is built for people who want one safe sync path instead of hand editing several agent config files.
 
@@ -97,7 +97,7 @@ PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" agentcfg web
 
 Use these options when you need a different bind or state file:
 
-- `--host <host>` binds the server to a different host, default `127.0.0.1`.
+- `--host <host>` binds the server to a different host, default `127.0.0.1`. Explicit non-loopback values such as `0.0.0.0` or `::` are allowed, but the CLI and browser UI warn in Chinese that LAN devices may access and modify local Agent config; use this only on trusted networks.
 - `--port <port>` binds a different port, default `8787`, and `0` asks for an ephemeral port.
 - `--state <path>` points the UI and API at a different state file.
 - `--no-open` stops browser auto-open.
@@ -114,8 +114,10 @@ Use `docs/testing-capability.md` as the development-time test design contract be
 
 - `test:api` covers the runtime API contract.
 - `test:server` covers the local HTTP server.
+- `test:electron` covers the Electron entry point, packaged asset resolution, and loopback-only embedded server contract.
 - `test:gui` covers the full browser flow with system Chrome and CDP.
-- `npm test` runs the full suite, including the Web UI lanes.
+- `test:docker` runs the OpenCode, Codex, OpenClaw, and Claude Code Docker validation lanes.
+- `npm test` runs the full suite, including Electron, Web UI, and aggregate Docker lanes.
 
 ### GUI flow
 
@@ -123,7 +125,7 @@ Use `docs/testing-capability.md` as the development-time test design contract be
 - `Remember GitHub Token` stores the GitHub Token locally in plain text and exposes only a saved/not-saved status in the UI.
 - `Pull` fetches `agentcfg.yaml` and refreshes the cache.
 - The dashboard shows state, cache, and remote metadata.
-- `Config file` lets you choose Codex, OpenCode, or OpenClaw and inspect the raw native config file before editing or applying changes.
+- `Config file` lets you choose Codex, OpenCode, OpenClaw, or Claude Code and inspect the raw native config file before editing or applying changes.
 - `Diff` shows managed-field changes for one agent or all agents, including provider API key values.
 - `Dry-run` shows the plan without writing files, including each planned file's current content and post-apply content.
 - `Apply` requires typed `APPLY`, validates again, writes backups, and shows the backup paths and result summary.
@@ -138,8 +140,11 @@ From the `agentcfg/` directory:
 PATH="/opt/homebrew/bin:$PATH" npm install
 PATH="/opt/homebrew/bin:$PATH" npm run build
 PATH="/opt/homebrew/bin:$PATH" npm test
-PATH="/opt/homebrew/bin:$PATH" npm run test:docker:opencode
+PATH="/opt/homebrew/bin:$PATH" npm run verify:privacy
+PATH="/opt/homebrew/bin:$PATH" npm run test:docker
 ```
+
+`npm run verify:privacy` confirms `.agentcfg-state.json` and `secrets.json` are ignored, not staged, not tracked, and absent from git history by filename. It does not read private file contents.
 
 ## Commands
 
@@ -161,7 +166,7 @@ Shows masked managed-field differences only.
 
 Use exactly one target selector:
 
-- `--agent <codex|opencode|openclaw>`
+- `--agent <codex|opencode|openclaw|claude>`
 - `--all-agents`
 
 Common flags:
@@ -188,7 +193,7 @@ Use the same target selector and path flags as `diff`.
 
 Starts the local Web UI on `127.0.0.1:8787` by default.
 
-Use `--host`, `--port`, `--state`, and `--no-open` to match your local setup.
+Use `--host`, `--port`, `--state`, and `--no-open` to match your local setup. The default host is loopback-only. If you explicitly bind to a non-loopback address, agentcfg prints a trusted-network warning instead of blocking the bind.
 
 ## Adapter behavior
 
@@ -216,6 +221,12 @@ agentcfg updates the nested provider/default model fields and the selected provi
 
 For the selected canonical model, agentcfg writes official OpenClaw model metadata as `models.providers.<provider>.models[]` with `id`, `contextWindow`, `contextTokens`, and `maxTokens` when those fields are present. `variant` is not emitted for OpenClaw.
 
+### Claude Code
+
+Claude Code uses `settings.json`.
+
+agentcfg updates the selected model and provider environment variables for Anthropic-compatible Claude Code settings while preserving unrelated settings structurally.
+
 ## Managed and unmanaged fields
 
 Managed fields come from the Gist and replace the native values for the active provider.
@@ -234,22 +245,26 @@ If you need to roll back, restore the latest backup for that file.
 
 Secret-bearing outputs such as `~/.agentcfg/env/codex.env` are written with restrictive permissions, typically `0600`.
 
-## Docker OpenCode validation
+## Docker validation
 
-`PATH="/opt/homebrew/bin:$PATH" npm run test:docker:opencode` checks the generated OpenCode config in Docker when Docker and the upstream image are available.
+`PATH="/opt/homebrew/bin:$PATH" npm run test:docker` runs all Docker validation lanes:
 
-If Docker or the upstream OpenCode install is unavailable, the script may exit cleanly with:
+- `test:docker:opencode` checks generated OpenCode config in Docker when Docker and the upstream image are available.
+- `test:docker:codex` checks Codex TOML/env shape locally and then runs a best-available bounded container smoke when the Codex image is available.
+- `test:docker:openclaw` checks generated OpenClaw config with the OpenClaw container validation command when available.
+- `test:docker:claude` checks Claude Code `settings.json` locally and runs a safe Claude CLI version smoke when available.
 
-`SKIP: Docker/OpenCode validation unavailable`
+Codex has no confirmed upstream full config validator; the Codex lane covers TOML/env shape plus best-available container/policy smoke and must not be treated as equivalent to a full official config validator.
 
-That skip is acceptable for local development.
+If Docker, an image, or an upstream validator is unavailable, a Docker script may exit cleanly with a `SKIP: Docker/<Agent> validation unavailable` message. That skip is acceptable for local development.
+
+Set `AGENTCFG_DOCKER_OPENCODE_STRICT=1`, `AGENTCFG_DOCKER_CODEX_STRICT=1`, `AGENTCFG_DOCKER_OPENCLAW_STRICT=1`, or `AGENTCFG_DOCKER_CLAUDE_STRICT=1` to convert the corresponding documented skip to exit `77` for release gating.
 
 ## Non-goals
 
 MVP does not include:
 
 - encryption
-- desktop packaging or an Electron wrapper
 - per-device profiles
 - daemon, watch, or background sync
 - automatic model discovery
