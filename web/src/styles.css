@@ -170,15 +170,6 @@ a {
   margin: 0;
 }
 
-.app-title-area span {
-  overflow: hidden;
-  color: var(--color-coffee);
-  font-size: var(--text-small);
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .header-actions {
   display: flex;
   justify-self: end;
@@ -553,6 +544,15 @@ h3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+.section-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .status-badge {
@@ -1654,6 +1654,11 @@ h3 {
   .remote-actions {
     display: grid;
     justify-content: stretch;
+  }
+
+  .section-actions {
+    width: 100%;
+    align-items: stretch;
   }
 
   .primary-action,

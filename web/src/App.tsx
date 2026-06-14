@@ -773,7 +773,6 @@ function App() {
           <div className="app-title-area">
             <p className="eyebrow">本地控制台</p>
             <h1 id="page-title">agentcfg</h1>
-            <span>{statusLabel(runtimeState)}</span>
           </div>
 
           <nav className="tab-bar" role="tablist" aria-label="功能切换">
@@ -788,10 +787,6 @@ function App() {
             <StatusBadge tone={statusTone(runtimeState)}>
               {loadState === 'loading' ? '正在加载会话' : statusLabel(runtimeState)}
             </StatusBadge>
-            <button className="primary-action primary-action--compact" type="button" onClick={handlePull} disabled={isBusy}>
-              <span aria-hidden="true">↓</span>
-              {isPulling ? '正在拉取...' : '拉取远端'}
-            </button>
           </div>
         </header>
 
@@ -926,7 +921,13 @@ function App() {
                     <p className="eyebrow">远端配置</p>
                     <h2>用表单生成并保存 agentcfg.yaml，不需要手写 Gist 内容。</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>{runtimeState?.gist.present ? '已绑定 Gist' : '保存时创建'}</StatusBadge>
+                  <div className="section-actions">
+                    <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>{runtimeState?.gist.present ? '已绑定 Gist' : '保存时创建'}</StatusBadge>
+                    <button className="primary-action primary-action--compact" type="button" onClick={handlePull} disabled={isBusy}>
+                      <span aria-hidden="true">↓</span>
+                      {isPulling ? '正在拉取...' : '拉取远端'}
+                    </button>
+                  </div>
                 </div>
                 <div className="config-editor-meta" role="status" aria-live="polite">
                   <span>{remoteStatus}</span>

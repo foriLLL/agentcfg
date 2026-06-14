@@ -315,6 +315,22 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.clickButton('远端配置');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after port-change navigation');
+      assert.deepEqual(await cdp.evaluate(`(() => {
+        const titleArea = document.querySelector('.app-title-area');
+        const headerActions = document.querySelector('.header-actions');
+        const remotePanel = document.querySelector('#remote-panel');
+        return {
+          leftStatusPresent: titleArea?.querySelector(':scope > span') !== null,
+          headerButtonCount: headerActions?.querySelectorAll('button').length ?? -1,
+          headerStatusPresent: headerActions?.querySelector('.status-badge') !== null,
+          remotePullPresent: remotePanel?.querySelector('.section-actions button')?.textContent?.includes('拉取远端') === true,
+        };
+      })()`), {
+        leftStatusPresent: false,
+        headerButtonCount: 0,
+        headerStatusPresent: true,
+        remotePullPresent: true,
+      });
       await assertDomHasNoGitHubToken(cdp, 'post-port-change-remote-auto-refresh DOM');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
