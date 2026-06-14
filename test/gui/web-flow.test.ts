@@ -251,7 +251,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const secretsAfterSave = await readFile(join(directory, 'secrets.json'), 'utf8');
       assert.equal(secretsAfterSave.includes(GITHUB_TOKEN), true, 'remembered GitHub Token was not written to local secrets.json');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-save browser storage');
-      await cdp.clickButton('连接状态');
+      await cdp.clickButton('连接 GitHub');
       await assertSavedGitHubTokenLocked(cdp, 'post-save GitHub Token input');
       await cdp.clickButton('编辑保存的 Token');
       await assertGitHubTokenEditable(cdp, 'editing saved GitHub Token input');
@@ -335,7 +335,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         { url: '/gui-gist-id', method: 'GET', authorization: `Bearer ${GITHUB_TOKEN}` },
       ]);
 
-      await cdp.clickButton('连接状态');
+      await cdp.clickButton('连接 GitHub');
       await cdp.clickButton('清除保存的 Token');
       await cdp.waitForText('已清除本地 Token');
       await assertGitHubTokenEditable(cdp, 'cleared GitHub Token input');
@@ -347,7 +347,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const stateAfterTokenClear = await readFile(statePath, 'utf8');
       assert.equal(stateAfterTokenClear.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after token clear');
 
-      await cdp.clickButton('配置文件');
+      await cdp.clickButton('本地配置');
       await cdp.waitForText('OpenCode');
       await cdp.waitForText('Claude Code');
       await cdp.waitForFunction(`(() => {
@@ -381,7 +381,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('配置已保存');
       const nativeAfterEditorSave = await readFile(nativePath, 'utf8');
       assert.equal(nativeAfterEditorSave.includes('gui-editor-secret'), true);
-      await cdp.clickButton('执行变更');
+      await cdp.clickButton('审阅与应用');
       await cdp.clickButton('运行 diff');
       await cdp.waitForText('Diff 已就绪');
       await cdp.waitForText(CACHED_SECRET);
@@ -405,11 +405,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assertNoGitHubToken(planApi, 'dry-run API response');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
-      await cdp.clickButton('配置文件');
+      await cdp.clickButton('本地配置');
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-plan-secret'));
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
-      await cdp.clickButton('执行变更');
+      await cdp.clickButton('审阅与应用');
       await cdp.waitForText('需要 dry-run');
       assert.equal(await cdp.isButtonDisabled('应用所选目标'), true, 'config save did not invalidate stale dry-run plan');
 

@@ -777,11 +777,11 @@ function App() {
           </div>
 
           <nav className="tab-bar" role="tablist" aria-label="功能切换">
-            <TabButton id="connection-tab" active={activeTab === 'connection'} controls="connection-panel" onClick={() => setActiveTab('connection')}>连接状态</TabButton>
-            <TabButton id="execute-tab" active={activeTab === 'execute'} controls="execute-panel" onClick={() => setActiveTab('execute')}>执行变更</TabButton>
+            <TabButton id="connection-tab" active={activeTab === 'connection'} controls="connection-panel" onClick={() => setActiveTab('connection')}>连接 GitHub</TabButton>
             <TabButton id="remote-tab" active={activeTab === 'remote'} controls="remote-panel" onClick={() => setActiveTab('remote')}>远端配置</TabButton>
-            <TabButton id="config-tab" active={activeTab === 'config'} controls="config-panel" onClick={() => setActiveTab('config')}>配置文件</TabButton>
-            <TabButton id="status-tab" active={activeTab === 'status'} controls="status-panel" onClick={() => setActiveTab('status')}>状态</TabButton>
+            <TabButton id="config-tab" active={activeTab === 'config'} controls="config-panel" onClick={() => setActiveTab('config')}>本地配置</TabButton>
+            <TabButton id="execute-tab" active={activeTab === 'execute'} controls="execute-panel" onClick={() => setActiveTab('execute')}>审阅与应用</TabButton>
+            <TabButton id="status-tab" active={activeTab === 'status'} controls="status-panel" onClick={() => setActiveTab('status')}>状态详情</TabButton>
           </nav>
 
           <div className="header-actions" aria-label="状态与同步操作">
