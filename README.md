@@ -24,6 +24,8 @@ The MVP manages one canonical config file in a private Gist and applies the sele
 - `providers.<provider>.apiKey`
 - `providers.<provider>.models.<model>` metadata
 - optional `providers.<provider>.modelDiscovery.path`
+- optional `ohMyOpenAgent.agents.<agent>.model` / `variant`
+- optional `ohMyOpenAgent.categories.<category>.model` / `variant`
 
 Source of truth works like this, the Gist wins for managed fields and local native config keeps everything else.
 
@@ -54,7 +56,19 @@ providers:
         contextWindow: 1047576
         contextTokens: 1047576
         maxTokens: 32768
+ohMyOpenAgent:
+  agents:
+    oracle:
+      model: openai/gpt-4.1-mini
+      variant: high
+  categories:
+    visual-engineering:
+      model: openai/gpt-4.1-mini
 ```
+
+`ohMyOpenAgent` is an optional dedicated section for OhMyOpenAgent's official model routing. `model` values must reference the provider catalog as `provider/model`; empty mappings are omitted from generated YAML.
+
+Provider IDs cannot contain `/` because `ohMyOpenAgent` uses `/` as the `provider/model` separator. Model IDs may still contain `/`, for example OpenRouter-style model names.
 
 The sample file in `examples/agentcfg.yaml` uses the same shape.
 

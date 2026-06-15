@@ -75,6 +75,12 @@ test('readme documents the required agentcfg MVP sections', () => {
   assert.ok(readme.includes('Encryption is deferred to a later release.'));
   assert.ok(readme.includes('private Gist is not a hard security boundary'));
   assert.ok(readme.includes('examples/agentcfg.yaml'));
+  assert.ok(readme.includes('ohMyOpenAgent.agents.<agent>.model'));
+  assert.ok(readme.includes('ohMyOpenAgent.categories.<category>.model'));
+  assert.ok(readme.includes('model` values must reference the provider catalog as `provider/model`'));
+  assert.ok(readme.includes('empty mappings are omitted from generated YAML'));
+  assert.ok(readme.includes('Provider IDs cannot contain `/`'));
+  assert.ok(readme.includes('Model IDs may still contain `/`'));
   assert.ok(readme.includes('The Web UI still respects the same security warning as the CLI.'));
   assert.ok(readme.includes('provider API keys exactly as the local runtime API will write them'));
   assert.ok(readme.includes('including provider API key values'));
@@ -124,6 +130,19 @@ test('example config parses and masks the fake API key', () => {
             contextTokens: 1047576,
             maxTokens: 32768,
           },
+        },
+      },
+    },
+    ohMyOpenAgent: {
+      agents: {
+        oracle: {
+          model: 'openai/gpt-4.1-mini',
+          variant: 'high',
+        },
+      },
+      categories: {
+        'visual-engineering': {
+          model: 'openai/gpt-4.1-mini',
         },
       },
     },

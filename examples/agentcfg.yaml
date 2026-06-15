@@ -16,3 +16,11 @@ providers:
         contextWindow: 1047576
         contextTokens: 1047576
         maxTokens: 32768
+ohMyOpenAgent:
+  agents:
+    oracle:
+      model: openai/gpt-4.1-mini
+      variant: high
+  categories:
+    visual-engineering:
+      model: openai/gpt-4.1-mini
