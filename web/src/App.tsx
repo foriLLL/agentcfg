@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
 import { FileDiffViewer } from './FileDiffViewer';
@@ -36,6 +36,7 @@ import {
 } from './api';
 import {
   MANAGED_FIELDS,
+  agentSupportsManagedFieldDiff,
   agentLabel,
   buildRemoteYamlPreview,
   buildSetupSteps,
@@ -50,6 +51,7 @@ import {
   remoteAccessWarningForHostname,
   statusLabel,
   statusTone,
+  syncActionCopyForAgent,
   type Step,
 } from './view-model';
 
@@ -216,11 +218,15 @@ function App() {
   const hasSavedGitHubToken = runtimeState?.secrets?.hasGitHubToken === true;
   const isBusy = isSubmittingInit || isPulling || isDiffing || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
+  const canReviewManagedDiff = canReview && (targetRequest?.agent === undefined || agentSupportsManagedFieldDiff(targetRequest.agent));
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
   const configAgent = targetMode === '' || targetMode === 'all' ? null : targetMode;
   const canReviewLocalConfig = configAgent !== null && canReview;
+  const canReviewLocalConfigManagedDiff = configAgent !== null && agentSupportsManagedFieldDiff(configAgent) && canReview;
   const canApplyLocalConfig = configAgent !== null && canApply;
   const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
+  const showLocalConfigDiffButton = configAgent === null || agentSupportsManagedFieldDiff(configAgent);
+  const showReviewDiffButton = targetMode === '' || targetMode === 'all' || (configAgent !== null && agentSupportsManagedFieldDiff(configAgent));
   const localSyncTargetLabel = configAgent === null ? '请选择单个本地配置目标' : `${agentLabel(configAgent)} / ${configPath.trim() === '' ? '默认检测路径' : configPath.trim()}`;
   const configBusy = isLoadingConfig || isSavingConfig;
   const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
@@ -309,7 +315,7 @@ function App() {
     setLoadState('ready');
   }
 
-  async function handleInitSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleInitSubmit(event: SyntheticEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const nextGistId = gistId.trim();
     const nextStatePath = statePath.trim();
@@ -639,7 +645,12 @@ function App() {
 
   async function handleDiff(): Promise<void> {
     if (targetRequest === null) {
-      setNotice({ tone: 'error', title: '请选择目标', copy: '运行 diff 前请选择 Codex、OpenCode、OpenClaw、Claude Code 或全部代理。' });
+      setNotice({ tone: 'error', title: '请选择目标', copy: '运行 diff 前请选择支持字段 diff 的目标或全部代理。' });
+      return;
+    }
+
+    if (targetRequest.agent !== undefined && !agentSupportsManagedFieldDiff(targetRequest.agent)) {
+      await handlePlan();
       return;
     }
 
@@ -1201,15 +1212,17 @@ function App() {
                       <div className="path-note">
                         <span>同步目标</span>
                         <strong>{localSyncTargetLabel}</strong>
-                        <p>拉取、diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。</p>
+                        <p>{syncActionCopyForAgent(configAgent)}</p>
                       </div>
                       <div className="review-actions" aria-label="本地配置 Diff 与应用操作">
                         <button className="secondary-action" type="button" onClick={handlePull} disabled={isBusy}>
                           {isPulling ? '正在拉取...' : '拉取 OMO/agentcfg 配置'}
                         </button>
-                        <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfig}>
-                          {isDiffing ? '正在 diff...' : '运行 diff'}
-                        </button>
+                        {showLocalConfigDiffButton && (
+                          <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfigManagedDiff}>
+                            {isDiffing ? '正在 diff...' : '运行 diff'}
+                          </button>
+                        )}
                         <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReviewLocalConfig}>
                           {isPlanning ? '正在规划...' : '执行 dry-run'}
                         </button>
@@ -1315,9 +1328,11 @@ function App() {
                     </div>
 
                     <div className="review-actions" aria-label="Diff 与应用操作">
-                      <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReview}>
-                        {isDiffing ? '正在 diff...' : '运行 diff'}
-                      </button>
+                      {showReviewDiffButton && (
+                        <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewManagedDiff}>
+                          {isDiffing ? '正在 diff...' : '运行 diff'}
+                        </button>
+                      )}
                       <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReview}>
                         {isPlanning ? '正在规划...' : '执行 dry-run'}
                       </button>
@@ -1946,10 +1961,15 @@ function DiffResults({ results }: { results: AgentDiffResult[] | null }) {
     return <EmptyCopy title="尚未运行 diff" copy="选择目标后运行 diff，以比较托管字段。" />;
   }
 
+  const fieldDiffResults = results.filter((result) => agentSupportsManagedFieldDiff(result.agent));
+  if (fieldDiffResults.length === 0) {
+    return <EmptyCopy title="字段 diff 不适用" copy="此目标使用 dry-run 文件预览审阅变更。" />;
+  }
+
   return (
     <section className="result-stack" aria-label="Diff 结果">
       <ResultHeading eyebrow="Diff" title="托管字段变更" />
-      {results.map((result) => (
+      {fieldDiffResults.map((result) => (
         <AgentChangeCard
           key={result.agent}
           title={agentLabel(result.agent)}
@@ -1986,7 +2006,7 @@ function PlanResults({ plans, results, stale }: { plans: ApplyPlanSummary[] | nu
           <NoticeList notices={plan.notices} />
           <PathList title="操作路径" paths={plan.operationPaths} empty="不会更改任何文件。" />
           <FilePreviewList previews={plan.filePreviews} />
-          <FieldRows changes={plan.changes} />
+          {agentSupportsManagedFieldDiff(plan.agent) && <FieldRows changes={plan.changes} />}
         </article>
       ))}
     </section>
@@ -2014,7 +2034,7 @@ function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
           </dl>
           <NoticeList notices={result.notices} />
           <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
-          <FieldRows changes={result.changes} />
+          {agentSupportsManagedFieldDiff(result.agent) && <FieldRows changes={result.changes} />}
         </article>
       ))}
     </section>
