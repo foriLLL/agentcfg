@@ -54,6 +54,19 @@ export type RemoteRevisionMetadata = {
   pulledAt: string;
 };
 
+export type AutoSyncConfig = {
+  enabled: boolean;
+  intervalMinutes: number;
+  targets: string[];
+};
+
+export type LastSyncRunSummary = {
+  status: 'success' | 'partial' | 'failed';
+  startedAt: string;
+  completedAt: string;
+  message?: string;
+};
+
 export type RuntimeStateSummary = {
   statePath: string;
   schemaVersion: 1;
@@ -76,6 +89,8 @@ export type RuntimeStateSummary = {
     baseETag?: string;
     baseConfig?: AgentConfig;
   };
+  autoSync?: AutoSyncConfig;
+  lastSyncRun?: LastSyncRunSummary;
 };
 
 export type AgentName = 'codex' | 'opencode' | 'openclaw' | 'claude' | 'ohmyopenagent';
@@ -183,6 +198,89 @@ export type ConfigAvailabilityEntry = {
 
 export type ConfigAvailabilityRuntimeResponse = {
   agents: ConfigAvailabilityEntry[];
+};
+
+export type ManagedRuleFileStatus = {
+  id: string;
+  label: string;
+  agent: string;
+  gistFileName: string;
+  localPath: string;
+  local: {
+    exists: boolean;
+    updatedAt?: string;
+    size?: number;
+  };
+};
+
+export type ManagedRuleFileRemote = Omit<ManagedRuleFileStatus, 'local'> & {
+  remote:
+    | {
+        status: 'available';
+        content: string;
+      }
+    | {
+        status: 'missing';
+      };
+};
+
+export type ManagedRuleFilePlan = Omit<ManagedRuleFileStatus, 'local'> & {
+  status: 'would-change' | 'unchanged';
+  currentContent?: string;
+  expectedContent: string;
+};
+
+export type ManagedRuleFileApplyResult = Omit<ManagedRuleFileStatus, 'local'> & {
+  status: 'would-change' | 'unchanged' | 'applied' | 'skipped' | 'failed';
+  currentContent?: string;
+  expectedContent?: string;
+  backupPath?: string;
+  error?: string;
+};
+
+export type ManagedRuleFilesStatusRuntimeResponse = {
+  state: RuntimeStateSummary;
+  files: ManagedRuleFileStatus[];
+};
+
+export type ManagedRuleFilesRemoteRuntimeResponse = {
+  state: RuntimeStateSummary;
+  files: ManagedRuleFileRemote[];
+};
+
+export type ManagedRuleFilesPlanRuntimeResponse = {
+  state: RuntimeStateSummary;
+  plans: ManagedRuleFilePlan[];
+};
+
+export type ManagedRuleFilesApplyRuntimeResponse = {
+  state: RuntimeStateSummary;
+  results: ManagedRuleFileApplyResult[];
+};
+
+export type SyncOnceResult = {
+  status: 'success' | 'partial' | 'failed';
+  startedAt: string;
+  completedAt: string;
+  targets: string[];
+  message?: string;
+};
+
+export type SyncServiceStatus = {
+  platform: 'darwin' | 'linux' | 'win32';
+  installed: boolean;
+  paths: string[];
+  message: string;
+};
+
+export type SyncServiceRuntimeResponse = {
+  state: RuntimeStateSummary;
+  service: SyncServiceStatus;
+};
+
+export type SyncNowRuntimeResponse = {
+  state: RuntimeStateSummary;
+  result: SyncOnceResult;
 };
 
 export type RuntimeErrorBody = {
@@ -327,6 +425,80 @@ export async function getConfigAvailabilityRuntime(request: { statePath?: string
 
 export async function saveConfigFileRuntime(request: { statePath?: string; agent: AgentName; configPath?: string; content: string }): Promise<ConfigFileRuntimeResponse> {
   return requestJson<ConfigFileRuntimeResponse>('/api/config/file', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function getManagedRuleFilesRuntime(request: { statePath?: string } = {}): Promise<ManagedRuleFilesStatusRuntimeResponse> {
+  const params = new URLSearchParams();
+  if (request.statePath !== undefined && request.statePath.trim() !== '') {
+    params.set('statePath', request.statePath);
+  }
+  const query = params.toString();
+  return requestJson<ManagedRuleFilesStatusRuntimeResponse>(`/api/rules/files${query === '' ? '' : `?${query}`}`);
+}
+
+export async function loadManagedRuleFilesRuntime(request: GitHubTokenRuntimeRequest): Promise<ManagedRuleFilesRemoteRuntimeResponse> {
+  return requestJson<ManagedRuleFilesRemoteRuntimeResponse>('/api/rules/files', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function initializeManagedRuleFileRuntime(request: GitHubTokenRuntimeRequest & { id: string }): Promise<ManagedRuleFilesRemoteRuntimeResponse> {
+  return requestJson<ManagedRuleFilesRemoteRuntimeResponse>('/api/rules/init', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function planManagedRuleFilesRuntime(request: GitHubTokenRuntimeRequest & { id?: string; ids?: string[] }): Promise<ManagedRuleFilesPlanRuntimeResponse> {
+  return requestJson<ManagedRuleFilesPlanRuntimeResponse>('/api/rules/plan', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function applyManagedRuleFilesRuntime(request: GitHubTokenRuntimeRequest & { id?: string; ids?: string[]; confirm: 'APPLY' }): Promise<ManagedRuleFilesApplyRuntimeResponse> {
+  return requestJson<ManagedRuleFilesApplyRuntimeResponse>('/api/rules/apply', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function saveAutoSyncRuntime(request: GitHubTokenRuntimeRequest & { autoSync: AutoSyncConfig }): Promise<RuntimeStateResponse> {
+  return requestJson<RuntimeStateResponse>('/api/sync/settings', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function syncNowRuntime(request: GitHubTokenRuntimeRequest & { targets?: string[] }): Promise<SyncNowRuntimeResponse> {
+  return requestJson<SyncNowRuntimeResponse>('/api/sync/now', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function getSyncServiceRuntime(request: { statePath?: string } = {}): Promise<SyncServiceRuntimeResponse> {
+  const params = new URLSearchParams();
+  if (request.statePath !== undefined && request.statePath.trim() !== '') {
+    params.set('statePath', request.statePath);
+  }
+  const query = params.toString();
+  return requestJson<SyncServiceRuntimeResponse>(`/api/sync/service/status${query === '' ? '' : `?${query}`}`);
+}
+
+export async function installSyncServiceRuntime(request: { statePath?: string; intervalMinutes?: number }): Promise<SyncServiceRuntimeResponse> {
+  return requestJson<SyncServiceRuntimeResponse>('/api/sync/service/install', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function uninstallSyncServiceRuntime(request: { statePath?: string }): Promise<SyncServiceRuntimeResponse> {
+  return requestJson<SyncServiceRuntimeResponse>('/api/sync/service/uninstall', {
     method: 'POST',
     body: JSON.stringify(compactRequest(request)),
   });

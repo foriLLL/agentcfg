@@ -1046,7 +1046,6 @@ h3 {
   block-size: 100%;
   align-self: stretch;
   max-height: 100%;
-  align-self: stretch;
   margin: 0;
   padding: var(--space-4);
   overflow: auto;
@@ -1616,6 +1615,52 @@ h3 {
   background: var(--color-panel-strong);
 }
 
+.rules-layout,
+.sync-layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.rules-list,
+.rules-actions,
+.sync-settings,
+.sync-service {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.rule-file-table {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.rule-file-row {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  background: var(--color-panel-strong);
+}
+
+.rule-file-row span,
+.rule-file-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-coffee);
+}
+
+.rules-results {
+  margin-top: var(--space-5);
+}
+
+.sync-target-grid {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
 .field-grid {
   display: grid;
   gap: var(--space-2);
@@ -1744,7 +1789,9 @@ h3 {
   .remote-config-layout,
   .ohmy-openagent-editor__groups,
   .config-editor-toolbar,
-  .review-layout {
+  .review-layout,
+  .rules-layout,
+  .sync-layout {
     grid-template-columns: 1fr;
   }
 

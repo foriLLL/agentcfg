@@ -2,6 +2,8 @@ import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
 import { FileDiffViewer } from './FileDiffViewer';
+import { RulesPanel } from './RulesPanel';
+import { SyncPanel } from './SyncPanel';
 import {
   type EditableAgentConfig,
   applyRuntime,
@@ -63,7 +65,7 @@ type Notice = {
 
 type TargetMode = AgentName | 'all' | '';
 
-type AppTab = 'connection' | 'remote' | 'config' | 'execute' | 'status';
+type AppTab = 'connection' | 'remote' | 'config' | 'rules' | 'sync' | 'execute' | 'status';
 
 type RemoteConfigView = 'editor' | 'preview';
 
@@ -296,6 +298,10 @@ function App() {
       setRememberGitHubToken(false);
       setIsEditingGitHubToken(false);
     }
+  }
+
+  function showNotice(tone: Notice['tone'], title: string, copy: string): void {
+    setNotice({ tone, title, copy });
   }
 
   function replaceRemoteDraft(nextDraft: EditableAgentConfig): void {
@@ -817,6 +823,8 @@ function App() {
             <TabButton id="connection-tab" active={activeTab === 'connection'} controls="connection-panel" onClick={() => setActiveTab('connection')}>连接 GitHub</TabButton>
             <TabButton id="remote-tab" active={activeTab === 'remote'} controls="remote-panel" onClick={() => setActiveTab('remote')}>远端配置</TabButton>
             <TabButton id="config-tab" active={activeTab === 'config'} controls="config-panel" onClick={() => setActiveTab('config')}>本地配置</TabButton>
+            <TabButton id="rules-tab" active={activeTab === 'rules'} controls="rules-panel" onClick={() => setActiveTab('rules')}>规则文件</TabButton>
+            <TabButton id="sync-tab" active={activeTab === 'sync'} controls="sync-panel" onClick={() => setActiveTab('sync')}>自动同步</TabButton>
             <TabButton id="execute-tab" active={activeTab === 'execute'} controls="execute-panel" onClick={() => setActiveTab('execute')}>审阅与应用</TabButton>
             <TabButton id="status-tab" active={activeTab === 'status'} controls="status-panel" onClick={() => setActiveTab('status')}>状态详情</TabButton>
           </nav>
@@ -1270,6 +1278,26 @@ function App() {
                 </div>
               </article>
             </section>
+          )}
+
+          {activeTab === 'rules' && (
+            <RulesPanel
+              runtimeState={runtimeState}
+              requestStatePath={requestStatePath}
+              buildGitHubTokenRequest={() => githubTokenRequest()}
+              onState={commitRuntimeState}
+              onNotice={showNotice}
+            />
+          )}
+
+          {activeTab === 'sync' && (
+            <SyncPanel
+              runtimeState={runtimeState}
+              requestStatePath={requestStatePath}
+              buildGitHubTokenRequest={() => githubTokenRequest()}
+              onState={commitRuntimeState}
+              onNotice={showNotice}
+            />
           )}
 
           {activeTab === 'execute' && (
