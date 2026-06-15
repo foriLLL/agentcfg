@@ -699,6 +699,7 @@ h3 {
 .target-option input:focus-visible,
 .primary-action:focus-visible,
 .secondary-action:focus-visible,
+.remote-view-switch__button:focus-visible,
 .tab-button:focus-visible,
 .schema-docs__summary:focus-visible {
   outline: var(--space-1) solid color-mix(in srgb, var(--color-link) 34%, transparent);
@@ -711,6 +712,7 @@ h3 {
 .config-editor-card,
 .remote-editor-card,
 .config-editor-toolbar,
+.local-sync-panel,
 .remote-config-layout,
 .remote-config-form,
 .remote-editor-section,
@@ -735,7 +737,7 @@ h3 {
 
 .config-editor-card {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto minmax(clamp(18rem, 42vh, 30rem), 1fr);
+  grid-template-rows: auto auto auto auto minmax(clamp(18rem, 42vh, 30rem), 1fr);
   align-content: start;
   min-width: 0;
   min-height: 0;
@@ -757,13 +759,50 @@ h3 {
 }
 
 .remote-editor-card {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-height: 100%;
   overflow: hidden;
 }
 
+.remote-view-switch {
+  display: inline-flex;
+  justify-self: start;
+  gap: var(--space-1);
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-1);
+  overflow-x: auto;
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-segment);
+  box-shadow: inset 0 var(--hairline) var(--space-2) var(--color-shadow-inset);
+}
+
+.remote-view-switch__button {
+  flex: 0 0 auto;
+  min-height: calc(var(--control-height) - var(--space-1));
+  padding: 0 var(--space-5);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--color-coffee);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: 800;
+  white-space: nowrap;
+  background: transparent;
+  transition: border-color var(--motion-fast), color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.remote-view-switch__button--active {
+  border-color: var(--color-line-strong);
+  color: var(--color-link);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+}
+
 .remote-config-layout {
-  grid-template-columns: minmax(var(--panel-wide), 0.95fr) minmax(var(--panel-wide), 1.05fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -970,9 +1009,9 @@ h3 {
 }
 
 .remote-preview-stack {
-  grid-template-rows: repeat(2, minmax(clamp(15rem, 32vh, 24rem), 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .remote-preview-card {
@@ -983,6 +1022,10 @@ h3 {
   border-radius: var(--radius-large);
   background: var(--color-panel-strong);
   box-shadow: var(--shadow-control);
+}
+
+.remote-config-layout--preview .remote-preview-card {
+  min-height: 0;
 }
 
 .remote-preview-heading {
@@ -1193,6 +1236,32 @@ h3 {
 .config-editor-toolbar .review-actions .secondary-action {
   width: 100%;
   min-width: 0;
+}
+
+.local-sync-panel {
+  padding-top: var(--space-2);
+  border-top: var(--hairline) solid var(--color-line);
+}
+
+.config-editor-toolbar .path-form .local-sync-panel .review-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.local-sync-panel .apply-lock {
+  border-radius: var(--radius-medium);
+}
+
+.local-sync-panel .apply-lock .primary-action {
+  width: 100%;
+}
+
+.config-review-results {
+  max-height: clamp(calc(var(--space-10) * 3), 34vh, calc(var(--space-10) * 6));
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: linear-gradient(180deg, var(--color-panel-strong), color-mix(in srgb, var(--color-paper-soft) 48%, var(--color-panel-strong)));
+  box-shadow: inset 0 var(--hairline) 0 var(--color-highlight-inset);
 }
 
 .config-editor-meta {
@@ -1683,13 +1752,8 @@ h3 {
     overflow: auto;
   }
 
-  .remote-config-form,
-  .remote-preview-stack {
+  .remote-config-form {
     overflow: visible;
-  }
-
-  .remote-preview-stack {
-    grid-template-rows: none;
   }
 
   .review-controls {
@@ -1730,7 +1794,8 @@ h3 {
     padding: var(--space-4);
   }
 
-  .config-editor-toolbar .review-actions {
+  .config-editor-toolbar .review-actions,
+  .config-editor-toolbar .path-form .local-sync-panel .review-actions {
     grid-template-columns: 1fr;
   }
 

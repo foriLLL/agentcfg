@@ -63,6 +63,8 @@ type TargetMode = AgentName | 'all' | '';
 
 type AppTab = 'connection' | 'remote' | 'config' | 'execute' | 'status';
 
+type RemoteConfigView = 'editor' | 'preview';
+
 type OhMyOpenAgentAssignmentKind = 'agents' | 'categories';
 
 type SchemaDocTreeNode = {
@@ -128,6 +130,7 @@ function App() {
   const [applyResults, setApplyResults] = useState<ApplyAgentResult[] | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
   const [activeTab, setActiveTab] = useState<AppTab>('connection');
+  const [remoteConfigView, setRemoteConfigView] = useState<RemoteConfigView>('editor');
   const [configFile, setConfigFile] = useState<ConfigFileRuntimeResponse | null>(null);
   const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
   const [configDraft, setConfigDraft] = useState('');
@@ -213,6 +216,10 @@ function App() {
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
   const configAgent = targetMode === 'codex' || targetMode === 'opencode' || targetMode === 'openclaw' || targetMode === 'claude' ? targetMode : null;
+  const canReviewLocalConfig = configAgent !== null && canReview;
+  const canApplyLocalConfig = configAgent !== null && canApply;
+  const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
+  const localSyncTargetLabel = configAgent === null ? '请选择单个本地配置目标' : `${agentLabel(configAgent)} / ${configPath.trim() === '' ? '默认检测路径' : configPath.trim()}`;
   const configBusy = isLoadingConfig || isSavingConfig;
   const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
   const isConfigAgentAvailable = configAgent === null ? false : configAvailabilityByAgent.get(configAgent)?.available === true;
@@ -941,6 +948,18 @@ function App() {
                   </div>
                   <div className="section-actions">
                     <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>{runtimeState?.gist.present ? '已绑定 Gist' : '保存时创建'}</StatusBadge>
+                    <button className="secondary-action secondary-action--compact" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
+                      {isLoadingRemote ? '正在加载...' : '加载远端配置'}
+                    </button>
+                    <button
+                      className="primary-action primary-action--compact"
+                      type={remoteConfigView === 'editor' ? 'submit' : 'button'}
+                      form={remoteConfigView === 'editor' ? 'remote-config-form' : undefined}
+                      onClick={remoteConfigView === 'editor' ? undefined : () => { void handleSaveRemoteConfig(); }}
+                      disabled={isSavingRemote}
+                    >
+                      {isSavingRemote ? '正在保存...' : '保存远端配置'}
+                    </button>
                     <button className="primary-action primary-action--compact" type="button" onClick={handlePull} disabled={isBusy}>
                       <span aria-hidden="true">↓</span>
                       {isPulling ? '正在拉取...' : '拉取远端'}
@@ -951,160 +970,163 @@ function App() {
                   <span>{remoteStatus}</span>
                   <strong>{runtimeState?.gist.id ?? '尚未绑定 Gist'}</strong>
                 </div>
-                <div className="remote-config-layout">
-                  <form className="remote-config-form" onSubmit={(event) => { event.preventDefault(); void handleSaveRemoteConfig(); }}>
-                    <section className="remote-editor-section remote-editor-section--full" aria-label="提供商列表">
-                      <div className="remote-subheading">
-                        <div>
-                          <p className="eyebrow">提供商</p>
-                          <h3>选择或新增提供商</h3>
-                        </div>
-                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteProvider} disabled={isSavingRemote}>
-                          添加提供商
-                        </button>
-                      </div>
-                      <div className="remote-entity-list" role="list" aria-label="已配置提供商">
-                        {remoteProviderIds.map((providerId) => (
-                          <button className={`remote-entity-chip ${providerId === selectedRemoteProviderId ? 'remote-entity-chip--active' : ''}`} type="button" key={providerId} onClick={() => handleSelectRemoteProvider(providerId)} disabled={isSavingRemote}>
-                            <strong>{providerId.trim() === '' ? '未命名提供商' : providerId}</strong>
-                            <small>{Object.keys(remoteDraft.providers[providerId]?.models ?? {}).length} 个模型</small>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="remote-editor-section" aria-label="提供商字段">
-                      <div className="remote-subheading">
-                        <div>
-                          <p className="eyebrow">提供商配置</p>
-                          <h3>端点与可见 API Key</h3>
-                        </div>
-                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteProvider} disabled={isSavingRemote || remoteProviderIds.length <= 1}>
-                          删除提供商
-                        </button>
-                      </div>
-                      <label htmlFor="remote-provider">
-                        提供商 ID
-                        <input id="remote-provider" value={selectedRemoteProviderId} onChange={(event) => handleRemoteProviderIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-base-url">
-                        Base URL
-                        <input id="remote-base-url" value={selectedRemoteProvider.baseURL} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, baseURL: event.target.value }))} autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-api-key">
-                        API Key
-                        <input id="remote-api-key" type="text" value={selectedRemoteProvider.apiKey.value} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, apiKey: { type: 'plain', value: event.target.value } }))} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-model-discovery-path">
-                        模型发现路径
-                        <input id="remote-model-discovery-path" value={selectedRemoteProvider.modelDiscovery?.path ?? ''} onChange={(event) => updateRemoteProvider((provider) => withModelDiscoveryPath(provider, event.target.value))} placeholder="/models（可选）" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                    </section>
-
-                    <section className="remote-editor-section" aria-label="模型字段">
-                      <div className="remote-subheading">
-                        <div>
-                          <p className="eyebrow">模型</p>
-                          <h3>当前提供商的模型目录</h3>
-                        </div>
-                        <div className="remote-inline-actions">
-                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteModel} disabled={isSavingRemote}>
-                            添加模型
-                          </button>
-                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteModel} disabled={isSavingRemote || remoteModelIds.length <= 1}>
-                            删除模型
+                <div className="remote-view-switch" role="group" aria-label="远端配置视图">
+                  <button id="remote-view-editor" className={`remote-view-switch__button ${remoteConfigView === 'editor' ? 'remote-view-switch__button--active' : ''}`} type="button" aria-pressed={remoteConfigView === 'editor'} onClick={() => setRemoteConfigView('editor')}>
+                    编辑表单
+                  </button>
+                  <button id="remote-view-preview" className={`remote-view-switch__button ${remoteConfigView === 'preview' ? 'remote-view-switch__button--active' : ''}`} type="button" aria-pressed={remoteConfigView === 'preview'} onClick={() => setRemoteConfigView('preview')}>
+                    预览内容
+                  </button>
+                </div>
+                <div className={`remote-config-layout remote-config-layout--${remoteConfigView}`}>
+                  {remoteConfigView === 'editor' ? (
+                    <form id="remote-config-form" className="remote-config-form" onSubmit={(event) => { event.preventDefault(); void handleSaveRemoteConfig(); }}>
+                      <section className="remote-editor-section remote-editor-section--full" aria-label="提供商列表">
+                        <div className="remote-subheading">
+                          <div>
+                            <p className="eyebrow">提供商</p>
+                            <h3>选择或新增提供商</h3>
+                          </div>
+                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteProvider} disabled={isSavingRemote}>
+                            添加提供商
                           </button>
                         </div>
-                      </div>
-                      <div className="remote-entity-list" role="list" aria-label="当前提供商的模型">
-                        {remoteModelIds.map((modelId) => (
-                          <button className={`remote-entity-chip ${modelId === selectedRemoteModelId ? 'remote-entity-chip--active' : ''}`} type="button" key={modelId} onClick={() => handleSelectRemoteModel(modelId)} disabled={isSavingRemote}>
-                            <strong>{modelId.trim() === '' ? '未命名模型' : modelId}</strong>
-                            <small>{modelMetadataCount(selectedRemoteProvider.models[modelId] ?? {})} 项元数据</small>
-                          </button>
-                        ))}
-                      </div>
-                      <label htmlFor="remote-model">
-                        模型 ID
-                        <input id="remote-model" value={selectedRemoteModelId} onChange={(event) => handleRemoteModelIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-model-variant">
-                        variant 元数据
-                        <input id="remote-model-variant" value={selectedRemoteModel.variant ?? ''} onChange={(event) => updateRemoteModel((model) => withOptionalString(model, 'variant', event.target.value))} placeholder="chat（可选）" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-model-context-window">
-                        Limit Context（上下文窗口）
-                        <input id="remote-model-context-window" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextWindow)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextWindow', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-model-context-tokens">
-                        Limit Input（输入预算）
-                        <input id="remote-model-context-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                      <label htmlFor="remote-model-max-tokens">
-                        Limit Output（输出上限）
-                        <input id="remote-model-max-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.maxTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'maxTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
-                      </label>
-                    </section>
-
-                    <section className="remote-editor-section remote-editor-section--full" aria-label="默认提供商和模型">
-                      <div className="remote-subheading">
-                        <div>
-                          <p className="eyebrow">默认项</p>
-                          <h3>显式默认提供商 / 模型</h3>
-                        </div>
-                      </div>
-                      <label htmlFor="remote-default-provider">
-                        默认提供商
-                        <select id="remote-default-provider" value={defaultProvider} onChange={(event) => handleDefaultRemoteProviderChange(event.target.value)} disabled={isSavingRemote}>
+                        <div className="remote-entity-list" role="list" aria-label="已配置提供商">
                           {remoteProviderIds.map((providerId) => (
-                            <option value={providerId} key={providerId}>{providerId.trim() === '' ? '未命名提供商' : providerId}</option>
+                            <button className={`remote-entity-chip ${providerId === selectedRemoteProviderId ? 'remote-entity-chip--active' : ''}`} type="button" key={providerId} onClick={() => handleSelectRemoteProvider(providerId)} disabled={isSavingRemote}>
+                              <strong>{providerId.trim() === '' ? '未命名提供商' : providerId}</strong>
+                              <small>{Object.keys(remoteDraft.providers[providerId]?.models ?? {}).length} 个模型</small>
+                            </button>
                           ))}
-                        </select>
-                      </label>
-                      <label htmlFor="remote-default-model">
-                        默认模型
-                        <select id="remote-default-model" value={remoteDraft.defaults.model} onChange={(event) => handleDefaultRemoteModelChange(event.target.value)} disabled={isSavingRemote}>
-                          {defaultProviderModelIds.map((modelId) => (
-                            <option value={modelId} key={modelId}>{modelId.trim() === '' ? '未命名模型' : modelId}</option>
+                        </div>
+                      </section>
+
+                      <section className="remote-editor-section" aria-label="提供商字段">
+                        <div className="remote-subheading">
+                          <div>
+                            <p className="eyebrow">提供商配置</p>
+                            <h3>端点与可见 API Key</h3>
+                          </div>
+                          <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteProvider} disabled={isSavingRemote || remoteProviderIds.length <= 1}>
+                            删除提供商
+                          </button>
+                        </div>
+                        <label htmlFor="remote-provider">
+                          提供商 ID
+                          <input id="remote-provider" value={selectedRemoteProviderId} onChange={(event) => handleRemoteProviderIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-base-url">
+                          Base URL
+                          <input id="remote-base-url" value={selectedRemoteProvider.baseURL} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, baseURL: event.target.value }))} autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-api-key">
+                          API Key
+                          <input id="remote-api-key" type="text" value={selectedRemoteProvider.apiKey.value} onChange={(event) => updateRemoteProvider((provider) => ({ ...provider, apiKey: { type: 'plain', value: event.target.value } }))} placeholder="最终写入 agentcfg.yaml 的 API Key" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-model-discovery-path">
+                          模型发现路径
+                          <input id="remote-model-discovery-path" value={selectedRemoteProvider.modelDiscovery?.path ?? ''} onChange={(event) => updateRemoteProvider((provider) => withModelDiscoveryPath(provider, event.target.value))} placeholder="/models（可选）" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                      </section>
+
+                      <section className="remote-editor-section" aria-label="模型字段">
+                        <div className="remote-subheading">
+                          <div>
+                            <p className="eyebrow">模型</p>
+                            <h3>当前提供商的模型目录</h3>
+                          </div>
+                          <div className="remote-inline-actions">
+                            <button className="secondary-action secondary-action--compact" type="button" onClick={handleAddRemoteModel} disabled={isSavingRemote}>
+                              添加模型
+                            </button>
+                            <button className="secondary-action secondary-action--compact" type="button" onClick={handleRemoveRemoteModel} disabled={isSavingRemote || remoteModelIds.length <= 1}>
+                              删除模型
+                            </button>
+                          </div>
+                        </div>
+                        <div className="remote-entity-list" role="list" aria-label="当前提供商的模型">
+                          {remoteModelIds.map((modelId) => (
+                            <button className={`remote-entity-chip ${modelId === selectedRemoteModelId ? 'remote-entity-chip--active' : ''}`} type="button" key={modelId} onClick={() => handleSelectRemoteModel(modelId)} disabled={isSavingRemote}>
+                              <strong>{modelId.trim() === '' ? '未命名模型' : modelId}</strong>
+                              <small>{modelMetadataCount(selectedRemoteProvider.models[modelId] ?? {})} 项元数据</small>
+                            </button>
                           ))}
-                        </select>
-                      </label>
-                    </section>
+                        </div>
+                        <label htmlFor="remote-model">
+                          模型 ID
+                          <input id="remote-model" value={selectedRemoteModelId} onChange={(event) => handleRemoteModelIdChange(event.target.value)} autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-model-variant">
+                          variant 元数据
+                          <input id="remote-model-variant" value={selectedRemoteModel.variant ?? ''} onChange={(event) => updateRemoteModel((model) => withOptionalString(model, 'variant', event.target.value))} placeholder="chat（可选）" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-model-context-window">
+                          Limit Context（上下文窗口）
+                          <input id="remote-model-context-window" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextWindow)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextWindow', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-model-context-tokens">
+                          Limit Input（输入预算）
+                          <input id="remote-model-context-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.contextTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'contextTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                        <label htmlFor="remote-model-max-tokens">
+                          Limit Output（输出上限）
+                          <input id="remote-model-max-tokens" type="number" min="1" step="1" value={formatOptionalNumber(selectedRemoteModel.maxTokens)} onChange={(event) => updateRemoteModel((model) => withOptionalNumber(model, 'maxTokens', event.target.value))} placeholder="可选正整数" autoComplete="off" disabled={isSavingRemote} />
+                        </label>
+                      </section>
 
-                    <OhMyOpenAgentMappingEditor
-                      config={remoteDraft}
-                      modelReferences={remoteModelReferenceOptions}
-                      isSavingRemote={isSavingRemote}
-                      onModelChange={handleOhMyOpenAgentModelChange}
-                      onVariantChange={handleOhMyOpenAgentVariantChange}
-                      onClear={handleClearOhMyOpenAgentAssignment}
-                    />
+                      <section className="remote-editor-section remote-editor-section--full" aria-label="默认提供商和模型">
+                        <div className="remote-subheading">
+                          <div>
+                            <p className="eyebrow">默认项</p>
+                            <h3>显式默认提供商 / 模型</h3>
+                          </div>
+                        </div>
+                        <label htmlFor="remote-default-provider">
+                          默认提供商
+                          <select id="remote-default-provider" value={defaultProvider} onChange={(event) => handleDefaultRemoteProviderChange(event.target.value)} disabled={isSavingRemote}>
+                            {remoteProviderIds.map((providerId) => (
+                              <option value={providerId} key={providerId}>{providerId.trim() === '' ? '未命名提供商' : providerId}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label htmlFor="remote-default-model">
+                          默认模型
+                          <select id="remote-default-model" value={remoteDraft.defaults.model} onChange={(event) => handleDefaultRemoteModelChange(event.target.value)} disabled={isSavingRemote}>
+                            {defaultProviderModelIds.map((modelId) => (
+                              <option value={modelId} key={modelId}>{modelId.trim() === '' ? '未命名模型' : modelId}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </section>
 
-                    <div className="remote-actions">
-                      <button className="secondary-action" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
-                        {isLoadingRemote ? '正在加载...' : '加载远端配置'}
-                      </button>
-                      <button className="primary-action" type="submit" disabled={isSavingRemote}>
-                        {isSavingRemote ? '正在保存...' : '保存远端配置'}
-                      </button>
-                    </div>
-                  </form>
-                  <aside className="remote-preview-stack" aria-label="agentcfg.yaml 预览">
-                    <section className="remote-preview-card">
-                      <div className="remote-preview-heading">
-                        <p className="eyebrow">原始预览</p>
-                        <h3>生成的 agentcfg.yaml</h3>
-                      </div>
-                      <pre id="remote-yaml-preview" className="remote-preview-block" aria-label="生成的 agentcfg.yaml"><code>{remoteYamlPreview}</code></pre>
-                    </section>
-                    <section className="remote-preview-card">
-                      <div className="remote-preview-heading">
-                        <p className="eyebrow">Schema 参考</p>
-                        <h3>当前字段说明</h3>
-                      </div>
-                      <SchemaReference />
-                    </section>
-                  </aside>
+                      <OhMyOpenAgentMappingEditor
+                        config={remoteDraft}
+                        modelReferences={remoteModelReferenceOptions}
+                        isSavingRemote={isSavingRemote}
+                        onModelChange={handleOhMyOpenAgentModelChange}
+                        onVariantChange={handleOhMyOpenAgentVariantChange}
+                        onClear={handleClearOhMyOpenAgentAssignment}
+                      />
+
+                    </form>
+                  ) : (
+                    <aside className="remote-preview-stack" aria-label="agentcfg.yaml 预览">
+                      <section className="remote-preview-card">
+                        <div className="remote-preview-heading">
+                          <p className="eyebrow">原始预览</p>
+                          <h3>生成的 agentcfg.yaml</h3>
+                        </div>
+                        <pre id="remote-yaml-preview" className="remote-preview-block" aria-label="生成的 agentcfg.yaml"><code>{remoteYamlPreview}</code></pre>
+                      </section>
+                      <section className="remote-preview-card">
+                        <div className="remote-preview-heading">
+                          <p className="eyebrow">Schema 参考</p>
+                          <h3>当前字段说明</h3>
+                        </div>
+                        <SchemaReference />
+                      </section>
+                    </aside>
+                  )}
                 </div>
               </article>
             </section>
@@ -1173,12 +1195,56 @@ function App() {
                         {isSavingConfig ? '正在保存...' : '保存配置'}
                       </button>
                     </div>
+                    <div className="local-sync-panel" aria-label="本地配置同步与应用">
+                      <div className="path-note">
+                        <span>同步目标</span>
+                        <strong>{localSyncTargetLabel}</strong>
+                        <p>拉取、diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。</p>
+                      </div>
+                      <div className="review-actions" aria-label="本地配置 Diff 与应用操作">
+                        <button className="secondary-action" type="button" onClick={handlePull} disabled={isBusy}>
+                          {isPulling ? '正在拉取...' : '拉取 OMO/agentcfg 配置'}
+                        </button>
+                        <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfig}>
+                          {isDiffing ? '正在 diff...' : '运行 diff'}
+                        </button>
+                        <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReviewLocalConfig}>
+                          {isPlanning ? '正在规划...' : '执行 dry-run'}
+                        </button>
+                      </div>
+                      <div className="apply-lock" aria-label="本地配置应用安全门禁">
+                        <div>
+                          <p className="eyebrow">强确认门禁</p>
+                          <h3>输入 APPLY 后应用当前本地目标。</h3>
+                          <p>只有所选本地配置目标与路径匹配最新 dry-run，应用才会解锁。</p>
+                        </div>
+                        <label htmlFor="local-apply-confirmation">
+                          确认文本
+                          <input
+                            id="local-apply-confirmation"
+                            value={confirmationText}
+                            onChange={(event) => setConfirmationText(event.target.value)}
+                            placeholder="APPLY"
+                            autoComplete="off"
+                            disabled={!canConfirmLocalConfig}
+                          />
+                        </label>
+                        <button className="primary-action" type="button" onClick={handleApply} disabled={!canApplyLocalConfig}>
+                          {isApplying ? '正在应用...' : '应用所选目标'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="config-editor-meta" role="status" aria-live="polite">
                   <span>{configStatus}</span>
                   {configFile !== null && <strong>{configFile.path}</strong>}
                 </div>
+                <section className="review-results config-review-results" aria-label="本地配置 Diff、dry-run 与应用结果">
+                  <DiffResults results={diffResponse?.results ?? null} />
+                  <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
+                  <ApplyResults results={applyResults} />
+                </section>
                 <div className="config-editor-body">
                   <textarea
                     id="config-editor"

@@ -45,6 +45,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
   const codexEnvPath = join(codexEnvDirectory, 'codex.env');
   const defaultOpenCodeDirectory = join(directory, '.config', 'opencode');
   const defaultOpenCodePath = join(defaultOpenCodeDirectory, 'opencode.json');
+  const allTargetsDirectory = join(directory, 'all-targets');
   const browserProfile = join(directory, 'chrome-profile');
   const lastStatePathFile = join(directory, 'last-state-path.json');
   const chromePort = await getFreePort();
@@ -81,10 +82,15 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
     await mkdir(defaultOpenCodeDirectory, { recursive: true });
     await mkdir(codexDirectory, { recursive: true });
     await mkdir(codexEnvDirectory, { recursive: true });
+    await mkdir(allTargetsDirectory, { recursive: true });
     await writeFile(defaultOpenCodePath, opencodeNativeJson(NATIVE_SECRET));
     await writeFile(nativePath, opencodeNativeJson(NATIVE_SECRET));
     await writeFile(codexNativePath, codexNativeToml());
     await writeFile(codexEnvPath, `AGENTCFG_OPENAI_API_KEY=${CACHED_SECRET}\n`);
+    await writeFile(join(allTargetsDirectory, 'input.config.toml'), codexNativeToml());
+    await writeFile(join(allTargetsDirectory, 'opencode.jsonc'), opencodeNativeJson(NATIVE_SECRET));
+    await writeFile(join(allTargetsDirectory, 'openclaw.json5'), openclawNativeJson(NATIVE_SECRET));
+    await writeFile(join(allTargetsDirectory, 'settings.json'), claudeNativeJson(NATIVE_SECRET));
     const cdp = await openCdpPage(chromePort, 'about:blank');
 
     try {
@@ -132,6 +138,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       });
 
       await cdp.waitForText('远端配置');
+      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '加载远端配置');
+      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存远端配置');
+      await assertNoRemoteBottomActions(cdp);
       await assertSelectorVisible(cdp, '#remote-provider');
       await assertSelectorVisible(cdp, '#remote-model');
       await assertSelectorVisible(cdp, '#remote-base-url');
@@ -146,6 +155,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertSelectorVisible(cdp, '#remote-ohmyopenagent-agents-oracle-model');
       await assertSelectorVisible(cdp, '#remote-ohmyopenagent-agents-oracle-variant');
       await assertSelectorVisible(cdp, '#remote-ohmyopenagent-categories-visual-engineering-model');
+      await assertRemoteEditorMode(cdp);
+      await switchRemoteConfigView(cdp, 'preview');
       await assertSelectorVisible(cdp, '#remote-yaml-preview');
       await assertSelectorVisible(cdp, '#remote-schema-preview');
       await assertRemotePreviewLayout(cdp);
@@ -163,6 +174,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.match(initialSchemaDocs, /plain 表示提供商 API Key 以明文存储在 agentcfg\.yaml 中，并按原值写入目标 Agent 配置/);
       assert.equal(initialSchemaDocs.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
       await assertSchemaReferenceTree(cdp);
+      await switchRemoteConfigView(cdp, 'editor');
       await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.setInputValue('#remote-model', 'gpt-4.1-mini');
       await cdp.setInputValue('#remote-base-url', 'https://api.openai.com/v1');
@@ -189,23 +201,28 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model', 'claude-3-5-sonnet-latest');
       await cdp.waitForText('模型 ID 已存在');
       await cdp.waitForFunction('document.querySelector("#remote-model") instanceof HTMLInputElement && document.querySelector("#remote-model").value === "claude-3-haiku"');
+      await switchRemoteConfigView(cdp, 'preview');
       const yamlPreviewAfterDuplicateModel = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewAfterDuplicateModel, /claude-3-5-sonnet-latest/);
       assert.match(yamlPreviewAfterDuplicateModel, /"claude-3-haiku": \{\}/);
       assert.match(yamlPreviewAfterDuplicateModel, /contextWindow: 200000/);
+      await switchRemoteConfigView(cdp, 'editor');
       await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.waitForText('提供商 ID 已存在');
       await cdp.waitForFunction('document.querySelector("#remote-provider") instanceof HTMLInputElement && document.querySelector("#remote-provider").value === "anthropic"');
+      await switchRemoteConfigView(cdp, 'preview');
       const yamlPreviewAfterDuplicateProvider = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewAfterDuplicateProvider, /openai/);
       assert.match(yamlPreviewAfterDuplicateProvider, /anthropic/);
       assert.equal(yamlPreviewAfterDuplicateProvider.includes(CACHED_SECRET), true, 'duplicate provider rename dropped the existing openai API key');
       assert.equal(yamlPreviewAfterDuplicateProvider.includes('sk-gui-visible-anthropic'), true, 'duplicate provider rename dropped the current anthropic API key');
+      await switchRemoteConfigView(cdp, 'editor');
       await cdp.selectValue('#remote-default-provider', 'openai');
       await cdp.selectValue('#remote-default-model', 'gpt-4.1-mini');
       assert.equal(await cdp.selectValue('#remote-ohmyopenagent-agents-oracle-model', 'openai/gpt-4.1-mini'), true, 'Oracle model route select was not editable');
       assert.equal(await cdp.selectValue('#remote-ohmyopenagent-agents-oracle-variant', 'high'), true, 'Oracle variant select was not editable');
       assert.equal(await cdp.selectValue('#remote-ohmyopenagent-categories-visual-engineering-model', 'anthropic/claude-3-5-sonnet-latest'), true, 'visual-engineering category model route select was not editable');
+      await switchRemoteConfigView(cdp, 'preview');
       const yamlPreviewWithSecretInput = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewWithSecretInput, /defaults:/);
       assert.match(yamlPreviewWithSecretInput, /providers:/);
@@ -227,6 +244,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const schemaDocsWithSecretInput = await cdp.textContent('#remote-schema-preview');
       assert.equal(schemaDocsWithSecretInput.includes(CACHED_SECRET), false, 'schema docs exposed the edited provider API key');
       assert.equal(schemaDocsWithSecretInput.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
+      await switchRemoteConfigView(cdp, 'editor');
       await cdp.clickButton('保存远端配置');
       await cdp.waitForText('远端配置已保存');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/save'), {
@@ -294,8 +312,10 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'baseURL'), false, 'remote save payload reintroduced flat baseURL');
       assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'apiKey'), false, 'remote save payload reintroduced flat apiKey');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the saved value after save');
+      await switchRemoteConfigView(cdp, 'preview');
       assert.equal((await cdp.bodyText()).includes(CACHED_SECRET), true, 'post-save DOM did not show provider API key');
       await assertDomHasNoGitHubToken(cdp, 'post-remote-save DOM');
+      await switchRemoteConfigView(cdp, 'editor');
 
       const secretsAfterSave = await readFile(join(directory, 'secrets.json'), 'utf8');
       assert.equal(secretsAfterSave.includes(GITHUB_TOKEN), true, 'remembered GitHub Token was not written to local secrets.json');
@@ -312,8 +332,10 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.clickButton('加载远端配置');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after load');
+      await switchRemoteConfigView(cdp, 'preview');
       assert.equal((await cdp.bodyText()).includes(CACHED_SECRET), true, 'post-load DOM did not show provider API key');
       await assertDomHasNoGitHubToken(cdp, 'post-remote-load DOM');
+      await switchRemoteConfigView(cdp, 'editor');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
       await cdp.send('Page.reload', { ignoreCache: true });
@@ -372,7 +394,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           leftStatusPresent: titleArea?.querySelector(':scope > span') !== null,
           headerButtonCount: headerActions?.querySelectorAll('button').length ?? -1,
           headerStatusPresent: headerActions?.querySelector('.status-badge') !== null,
-          remotePullPresent: remotePanel?.querySelector('.section-actions button')?.textContent?.includes('拉取远端') === true,
+          remotePullPresent: Array.from(remotePanel?.querySelectorAll('.section-actions button') ?? []).some((button) => button.textContent?.includes('拉取远端') === true),
         };
       })()`), {
         leftStatusPresent: false,
@@ -389,6 +411,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
 
       await cdp.clickButton('拉取远端');
       await cdp.waitForText('已拉取远端配置');
+      assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the pulled value after pull');
+      await switchRemoteConfigView(cdp, 'preview');
       await cdp.waitForText(CACHED_SECRET);
       await assertDomHasNoGitHubToken(cdp, 'post-pull DOM');
       assert.deepEqual(fakeGist.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
@@ -431,7 +455,14 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
       await assertConfigEditorLayout(cdp);
+      await assertButtonVisibleInPanel(cdp, '#config-panel', '拉取 OMO/agentcfg 配置');
+      await assertButtonVisibleInPanel(cdp, '#config-panel', '运行 diff');
+      await assertButtonVisibleInPanel(cdp, '#config-panel', '执行 dry-run');
+      await assertButtonVisibleInPanel(cdp, '#config-panel', '应用所选目标');
+      await assertSelectorVisible(cdp, '#local-apply-confirmation');
+      await cdp.waitForText('拉取、diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
       await cdp.setInputValue('#config-path-editor', nativePath);
+      await cdp.waitForText(nativePath);
       await cdp.clickButton('加载配置');
       await cdp.waitForText('配置已加载');
       await assertConfigEditorLayout(cdp);
@@ -446,11 +477,63 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('配置已保存');
       const nativeAfterEditorSave = await readFile(nativePath, 'utf8');
       assert.equal(nativeAfterEditorSave.includes('gui-editor-secret'), true);
+
+      const localDiffRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/diff').length;
+      assert.equal(await cdp.clickButton('运行 diff'), true, 'local config diff button was not clickable');
+      await cdp.waitForFunction(`(() => {
+        const requests = window.__agentcfgFetchBodies ?? [];
+        return requests.filter((request) => request.url === '/api/diff').length > ${localDiffRequestCountBefore};
+      })()`);
+      await cdp.waitForText('Diff 已就绪');
+      await assertPanelContainsText(cdp, '#config-panel', CACHED_SECRET);
+      await assertPanelContainsText(cdp, '#config-panel', 'gui-editor-secret');
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/diff'), { statePath, agent: 'opencode', configPath: nativePath });
+      await assertDomHasNoGitHubToken(cdp, 'post-local-diff DOM');
+
+      const localPlanRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/apply/plan').length;
+      assert.equal(await cdp.clickButton('执行 dry-run'), true, 'local config dry-run button was not clickable');
+      await cdp.waitForFunction(`(() => {
+        const requests = window.__agentcfgFetchBodies ?? [];
+        return requests.filter((request) => request.url === '/api/apply/plan').length > ${localPlanRequestCountBefore};
+      })()`);
+      await cdp.waitForText('Dry-run 完成');
+      await assertPanelContainsText(cdp, '#config-panel', '当前内容');
+      await assertPanelContainsText(cdp, '#config-panel', '应用后内容');
+      await assertSelectorVisible(cdp, '.file-diff-editor');
+      await assertContainedScrollableBlocks(cdp, '.file-diff-editor', 'local dry-run file diff editor');
+      const localDryRunDom = await cdp.bodyText();
+      assert.equal(localDryRunDom.includes('gui-editor-secret'), true, 'local dry-run preview did not show current config content');
+      assert.equal(localDryRunDom.includes(CACHED_SECRET), true, 'local dry-run preview did not show expected config content');
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, agent: 'opencode', configPath: nativePath });
+      assert.equal(await cdp.isButtonDisabled('应用所选目标'), true);
+
+      await cdp.setInputValue('#local-apply-confirmation', 'APPLY');
+      await cdp.waitForFunction(`(() => {
+        const buttons = Array.from(document.querySelectorAll('#config-panel button'));
+        const button = buttons.find((candidate) => candidate.textContent?.includes('应用所选目标'));
+        return button instanceof HTMLButtonElement && !button.disabled;
+      })()`);
+      const localApplyRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/apply').length;
+      assert.equal(await cdp.clickButton('应用所选目标'), true, 'local config apply button was not clickable');
+      await cdp.waitForFunction(`(() => {
+        const requests = window.__agentcfgFetchBodies ?? [];
+        return requests.filter((request) => request.url === '/api/apply').length > ${localApplyRequestCountBefore};
+      })()`);
+      await cdp.waitForText('应用完成');
+      await assertPanelContainsText(cdp, '#config-panel', '写入结果');
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply'), { statePath, agent: 'opencode', configPath: nativePath, confirm: 'APPLY' });
+      const nativeAfterLocalApply = await readFile(nativePath, 'utf8');
+      assert.equal(nativeAfterLocalApply.includes(CACHED_SECRET), true, 'local config apply did not write cached secret');
+      await assertDomHasNoGitHubToken(cdp, 'post-local-apply DOM');
+
+      await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-local-apply-secret'));
+      await cdp.clickButton('保存配置');
+      await cdp.waitForText('配置已保存');
       await cdp.clickButton('审阅与应用');
       await cdp.clickButton('运行 diff');
       await cdp.waitForText('Diff 已就绪');
       await cdp.waitForText(CACHED_SECRET);
-      await cdp.waitForText('gui-editor-secret');
+      await cdp.waitForText('gui-editor-after-local-apply-secret');
       await assertDomHasNoGitHubToken(cdp, 'post-diff DOM');
 
       await cdp.clickButton('执行 dry-run');
@@ -460,12 +543,12 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertSelectorVisible(cdp, '.file-diff-editor');
       await assertContainedScrollableBlocks(cdp, '.file-diff-editor', 'dry-run file diff editor');
       const dryRunDom = await cdp.bodyText();
-      assert.equal(dryRunDom.includes('gui-editor-secret'), true, 'dry-run preview did not show current config content');
+      assert.equal(dryRunDom.includes('gui-editor-after-local-apply-secret'), true, 'dry-run preview did not show current config content');
       assert.equal(dryRunDom.includes(CACHED_SECRET), true, 'dry-run preview did not show expected config content');
       assert.equal(await cdp.isButtonDisabled('应用所选目标'), true);
 
       const planApi = await postJsonText(webServer.url, '/api/apply/plan', { statePath, agent: 'opencode', configPath: nativePath });
-      assert.equal(planApi.includes('gui-editor-secret'), true, 'dry-run API response did not include current config content');
+      assert.equal(planApi.includes('gui-editor-after-local-apply-secret'), true, 'dry-run API response did not include current config content');
       assert.equal(planApi.includes(CACHED_SECRET), true, 'dry-run API response did not include expected config content');
       assertNoGitHubToken(planApi, 'dry-run API response');
 
@@ -497,6 +580,19 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const nativeAfterApply = await readFile(nativePath, 'utf8');
       assert.equal(nativeAfterApply.includes(CACHED_SECRET), true);
       assert.equal(nativeAfterApply.includes(NATIVE_SECRET), false);
+
+      await cdp.clickSelector('input[name="target-mode"][value="all"]');
+      await cdp.setInputValue('#config-path', allTargetsDirectory);
+      assert.equal(await cdp.clickButton('执行 dry-run'), true, 'all-agent dry-run button was not clickable');
+      await cdp.waitForText('Dry-run 完成');
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, allAgents: true, configPath: allTargetsDirectory });
+      assert.equal(await cdp.isButtonDisabled('应用所选目标'), true, 'all-agent apply unlocked before confirmation');
+      await cdp.clickButton('本地配置');
+      await assertSelectorVisible(cdp, '#local-apply-confirmation');
+      assert.equal(await cdp.inputDisabled('#local-apply-confirmation'), true, 'local confirmation accepted an all-agent dry-run plan');
+      assert.equal(await cdp.isButtonDisabled('应用所选目标'), true, 'local apply unlocked for an all-agent dry-run plan');
+      await cdp.clickButton('审阅与应用');
+      assert.equal(await cdp.isButtonDisabled('应用所选目标'), true, 'execute apply unlocked without direct confirmation after visiting local config');
 
       const codexDiffApi = JSON.parse(await postJsonText(webServer.url, '/api/diff', { statePath, agent: 'codex', configPath: codexNativePath })) as CodexNoticeApiEnvelope;
       assert.equal(codexDiffApi.ok, true, 'Codex diff API response failed');
@@ -987,6 +1083,80 @@ async function assertSelectorVisible(cdp: CdpPage, selector: string): Promise<vo
   assert.equal(await cdp.selectorVisible(selector), true, `${selector} was not visible`);
 }
 
+async function assertSelectorNotVisible(cdp: CdpPage, selector: string): Promise<void> {
+  assert.equal(await cdp.selectorVisible(selector), false, `${selector} should not be visible`);
+}
+
+async function assertButtonVisibleBeforeScroll(cdp: CdpPage, panelSelector: string, buttonText: string): Promise<void> {
+  const state = await cdp.evaluate<{ found: boolean; visible: boolean; top: number; bottom: number; viewportTop: number; viewportBottom: number }>(`(() => {
+    const viewport = document.querySelector('.tab-viewport');
+    if (viewport instanceof HTMLElement) {
+      viewport.scrollTop = 0;
+    }
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const button = Array.from(panel?.querySelectorAll('button') ?? []).find((candidate) => candidate.textContent?.includes(${JSON.stringify(buttonText)}));
+    const viewportRect = viewport instanceof HTMLElement ? viewport.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    if (!(button instanceof HTMLButtonElement)) {
+      return { found: false, visible: false, top: 0, bottom: 0, viewportTop: viewportRect.top, viewportBottom: viewportRect.bottom };
+    }
+    const rect = button.getBoundingClientRect();
+    const style = window.getComputedStyle(button);
+    const tolerance = 1;
+    return {
+      found: true,
+      visible: style.display !== 'none' && style.visibility !== 'hidden' && rect.top >= viewportRect.top - tolerance && rect.bottom <= viewportRect.bottom + tolerance,
+      top: rect.top,
+      bottom: rect.bottom,
+      viewportTop: viewportRect.top,
+      viewportBottom: viewportRect.bottom,
+    };
+  })()`);
+  assert.equal(state.found, true, `${buttonText} was not rendered in ${panelSelector}`);
+  assert.equal(state.visible, true, `${buttonText} was not visible before scrolling: ${JSON.stringify(state)}`);
+}
+
+async function assertButtonVisibleInPanel(cdp: CdpPage, panelSelector: string, buttonText: string): Promise<void> {
+  const visible = await cdp.evaluate<boolean>(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const button = Array.from(panel?.querySelectorAll('button') ?? []).find((candidate) => candidate.textContent?.includes(${JSON.stringify(buttonText)}));
+    if (!(button instanceof HTMLButtonElement)) return false;
+    const style = window.getComputedStyle(button);
+    return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
+  })()`);
+  assert.equal(visible, true, `${buttonText} was not visible in ${panelSelector}`);
+}
+
+async function assertPanelContainsText(cdp: CdpPage, panelSelector: string, text: string): Promise<void> {
+  await cdp.waitForFunction(`document.querySelector(${JSON.stringify(panelSelector)})?.textContent?.includes(${JSON.stringify(text)}) === true`);
+}
+
+async function assertNoRemoteBottomActions(cdp: CdpPage): Promise<void> {
+  const hasBottomActions = await cdp.evaluate<boolean>(`document.querySelector('.remote-config-form .remote-actions') !== null`);
+  assert.equal(hasBottomActions, false, 'remote load/save controls still rendered in the bottom remote-actions block');
+}
+
+async function switchRemoteConfigView(cdp: CdpPage, view: 'editor' | 'preview'): Promise<void> {
+  const selector = view === 'editor' ? '#remote-view-editor' : '#remote-view-preview';
+  assert.equal(await cdp.clickSelector(selector), true, `${selector} was not clickable`);
+  await cdp.waitForFunction(`document.querySelector(${JSON.stringify(selector)})?.getAttribute('aria-pressed') === 'true'`);
+  if (view === 'editor') {
+    await assertRemoteEditorMode(cdp);
+  } else {
+    await assertSelectorVisible(cdp, '#remote-yaml-preview');
+    await assertSelectorVisible(cdp, '#remote-schema-preview');
+    await assertSelectorNotVisible(cdp, '#remote-provider');
+  }
+}
+
+async function assertRemoteEditorMode(cdp: CdpPage): Promise<void> {
+  await assertSelectorVisible(cdp, '#remote-provider');
+  await assertSelectorVisible(cdp, '#remote-api-key');
+  await assertSelectorNotVisible(cdp, '#remote-yaml-preview');
+  await assertSelectorNotVisible(cdp, '#remote-schema-preview');
+  const activeEditor = await cdp.evaluate<boolean>(`document.querySelector('#remote-view-editor')?.getAttribute('aria-pressed') === 'true'`);
+  assert.equal(activeEditor, true, 'remote config did not default to editor mode');
+}
+
 async function assertFixtureRootControlHidden(cdp: CdpPage): Promise<void> {
   const fixtureControlPresent = await cdp.evaluate<boolean>(`document.body?.innerText.includes('Fixture root optional') === true || document.querySelector('#fixtures-root') !== null`);
   assert.equal(fixtureControlPresent, false, 'production GUI exposed a fixture root control');
@@ -1004,7 +1174,7 @@ async function assertNoDesktopFrame(cdp: CdpPage): Promise<void> {
 }
 
 async function assertRemotePreviewLayout(cdp: CdpPage): Promise<void> {
-  const preview = await cdp.evaluate<{ yamlHeight: number; schemaHeight: number; contained: boolean; overflowReady: boolean; details: string[] }>(`(() => {
+  const preview = await cdp.evaluate<{ yamlHeight: number; schemaHeight: number; contained: boolean; overflowReady: boolean; stacked: boolean; fullWidth: boolean; formHidden: boolean; details: string[] }>(`(() => {
     const rectContains = (parent, child) => {
       if (!(parent instanceof HTMLElement) || !(child instanceof HTMLElement)) return false;
       const parentRect = parent.getBoundingClientRect();
@@ -1014,11 +1184,20 @@ async function assertRemotePreviewLayout(cdp: CdpPage): Promise<void> {
     };
     const yaml = document.querySelector('#remote-yaml-preview');
     const schema = document.querySelector('#remote-schema-preview');
+    const stack = document.querySelector('.remote-preview-stack');
+    const layout = document.querySelector('.remote-config-layout');
+    const yamlRect = yaml instanceof HTMLElement ? yaml.getBoundingClientRect() : null;
+    const schemaRect = schema instanceof HTMLElement ? schema.getBoundingClientRect() : null;
+    const stackRect = stack instanceof HTMLElement ? stack.getBoundingClientRect() : null;
+    const layoutRect = layout instanceof HTMLElement ? layout.getBoundingClientRect() : null;
     const blocks = [yaml, schema].filter((block) => block instanceof HTMLElement);
     return {
-      yamlHeight: yaml instanceof HTMLElement ? yaml.getBoundingClientRect().height : 0,
-      schemaHeight: schema instanceof HTMLElement ? schema.getBoundingClientRect().height : 0,
+      yamlHeight: yamlRect?.height ?? 0,
+      schemaHeight: schemaRect?.height ?? 0,
       contained: blocks.every((block) => rectContains(block.parentElement, block)),
+      stacked: yamlRect !== null && schemaRect !== null && yamlRect.bottom <= schemaRect.top,
+      fullWidth: stackRect !== null && layoutRect !== null && stackRect.width >= layoutRect.width * 0.96,
+      formHidden: document.querySelector('#remote-provider') === null,
       details: blocks.map((block) => {
         const parentRect = block.parentElement?.getBoundingClientRect();
         const blockRect = block.getBoundingClientRect();
@@ -1040,6 +1219,9 @@ async function assertRemotePreviewLayout(cdp: CdpPage): Promise<void> {
   })()`);
   assert.equal(preview.yamlHeight > 0, true, 'remote YAML preview was not visible');
   assert.equal(preview.schemaHeight > 0, true, 'remote schema preview was not visible');
+  assert.equal(preview.formHidden, true, 'remote editor was visible alongside preview');
+  assert.equal(preview.stacked, true, 'remote YAML and schema previews were not stacked');
+  assert.equal(preview.fullWidth, true, 'remote preview did not expand to the full remote config width');
   assert.equal(preview.contained, true, `remote preview block visibly overflowed its card: ${preview.details.join(', ')}`);
   assert.equal(preview.overflowReady, true, 'remote preview block was not configured for internal scrolling');
 }
@@ -1346,6 +1528,45 @@ function opencodeNativeJson(apiKey: string): string {
             apiKey,
           },
         },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function openclawNativeJson(apiKey: string): string {
+  return `${JSON.stringify(
+    {
+      agents: {
+        defaults: {
+          model: {
+            primary: 'openai/gpt-3.5-turbo',
+          },
+        },
+      },
+      models: {
+        providers: {
+          openai: {
+            baseUrl: 'https://old.example.test/v1',
+            apiKey,
+          },
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function claudeNativeJson(apiKey: string): string {
+  return `${JSON.stringify(
+    {
+      theme: 'dark',
+      model: 'gpt-3.5-turbo',
+      env: {
+        ANTHROPIC_API_KEY: apiKey,
+        ANTHROPIC_BASE_URL: 'https://old.example.test/v1',
       },
     },
     null,
