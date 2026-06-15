@@ -10,6 +10,7 @@ import type {
   ManagedRuleFileRemote,
   ManagedRuleFileStatus,
   SyncOnceResult,
+  SyncServiceStatus,
 } from '../core';
 
 export type RuntimeApiErrorCode =
@@ -271,4 +272,13 @@ export type AutoSyncRuntimeResponse = {
 export type SyncNowRuntimeResponse = {
   state: RuntimeStateSummary;
   result: SyncOnceResult;
+};
+
+export type SyncServiceRuntimeRequest = RuntimeRequest & {
+  intervalMinutes?: number;
+};
+
+export type SyncServiceRuntimeResponse = {
+  state: RuntimeStateSummary;
+  service: SyncServiceStatus;
 };

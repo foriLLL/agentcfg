@@ -14,6 +14,7 @@ export * from './native-io';
 export * from './node-errors';
 export * from './schema';
 export * from './schema-docs';
+export * from './scheduler';
 export * from './secrets';
 export * from './state';
 export * from './sync';

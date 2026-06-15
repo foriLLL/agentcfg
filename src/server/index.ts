@@ -13,6 +13,7 @@ import {
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
+  getSyncServiceRuntime,
   initRuntime,
   initializeManagedRuleFileRuntime,
   loadManagedRuleFilesRuntime,
@@ -24,7 +25,9 @@ import {
   saveConfigFileRuntime,
   saveAutoSyncRuntime,
   setupRemoteConfigRuntime,
+  installSyncServiceRuntime,
   syncNowRuntime,
+  uninstallSyncServiceRuntime,
   type ApplyRuntimeResponse,
   type AutoSyncRuntimeResponse,
   type ClearSavedGitHubTokenRuntimeResponse,
@@ -47,6 +50,7 @@ import {
   type SaveRemoteConfigRuntimeResponse,
   type SetupRemoteConfigRuntimeResponse,
   type SyncNowRuntimeResponse,
+  type SyncServiceRuntimeResponse,
 } from '../api';
 import { isNodeErrorWithCode, readLastUsedStatePath, rememberLastUsedStatePath, resolveStatePath } from '../core';
 
@@ -100,6 +104,7 @@ type ApiHandlerResult =
   | ManagedRuleFilesApplyRuntimeResponse
   | AutoSyncRuntimeResponse
   | SyncNowRuntimeResponse
+  | SyncServiceRuntimeResponse
   | DiscoverProviderModelsRuntimeResponse
   | ConfigAvailabilityRuntimeResponse
   | DiffRuntimeResponse
@@ -350,6 +355,26 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/sync/now') {
     assertMethod(request, ['POST']);
     return syncNowRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/sync/service/status') {
+    assertMethod(request, ['GET']);
+    return getSyncServiceRuntime({
+      statePath: await resolveDefaultStatePath(
+        requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
+        options,
+      ),
+    });
+  }
+
+  if (requestUrl.pathname === '/api/sync/service/install') {
+    assertMethod(request, ['POST']);
+    return installSyncServiceRuntime(await readRuntimeRequest(request, options));
+  }
+
+  if (requestUrl.pathname === '/api/sync/service/uninstall') {
+    assertMethod(request, ['POST']);
+    return uninstallSyncServiceRuntime(await readRuntimeRequest(request, options));
   }
 
   throw new NotFoundError(`No API endpoint found for ${requestUrl.pathname}`);

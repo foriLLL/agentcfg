@@ -26,11 +26,14 @@ import {
   loadManagedRuleFilesFromGist,
   planManagedRuleFileApply,
   applyManagedRuleFilePlans,
+  getSyncServiceStatus,
+  installSyncService,
   updatePulledConfig,
   updateAutoSyncConfig,
   uploadManagedRuleFileFromLocal,
   updateGistAgentConfig,
   runSyncOnce,
+  uninstallSyncService,
   validateAgentConfig,
   writeLocalState,
   type AgentConfigValidationError,
@@ -97,6 +100,8 @@ import type {
   AutoSyncRuntimeRequest,
   AutoSyncRuntimeResponse,
   SyncNowRuntimeResponse,
+  SyncServiceRuntimeRequest,
+  SyncServiceRuntimeResponse,
 } from './types';
 
 export type RuntimeServiceOptions = {
@@ -560,6 +565,41 @@ export async function syncNowRuntime(
     });
     await rememberGitHubTokenIfRequested(request, token);
     return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), result };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function installSyncServiceRuntime(
+  request: SyncServiceRuntimeRequest = {},
+): Promise<SyncServiceRuntimeResponse> {
+  try {
+    const state = await readLocalState(request.statePath);
+    const intervalMinutes = request.intervalMinutes ?? state.autoSync?.intervalMinutes ?? 60;
+    const service = await installSyncService({ statePath: request.statePath, intervalMinutes });
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), service };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function uninstallSyncServiceRuntime(
+  request: SyncServiceRuntimeRequest = {},
+): Promise<SyncServiceRuntimeResponse> {
+  try {
+    const service = await uninstallSyncService({ statePath: request.statePath });
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), service };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function getSyncServiceRuntime(
+  request: SyncServiceRuntimeRequest = {},
+): Promise<SyncServiceRuntimeResponse> {
+  try {
+    const service = await getSyncServiceStatus();
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), service };
   } catch (error) {
     throw toRuntimeApiError(error);
   }

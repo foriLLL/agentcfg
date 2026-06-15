@@ -617,6 +617,36 @@ test('web server exposes managed rule file status and plan endpoints without lea
   }
 });
 
+test('web server saves auto-sync settings and reports service status', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-sync-settings-'));
+  const statePath = join(directory, 'state.json');
+  const server = await startWebServer({
+    host: '127.0.0.1',
+    port: 0,
+    statePath,
+    assetsDir: join(directory, 'missing-assets'),
+  });
+
+  try {
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1 }, null, 2)}\n`);
+
+    const settings = await requestJson(server.url, '/api/sync/settings', {
+      autoSync: { enabled: true, intervalMinutes: 45, targets: ['codex', 'ruleFiles'] },
+    });
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.ok, true);
+    assert.equal(JSON.stringify(settings.body).includes('"intervalMinutes":45'), true);
+
+    const service = await requestJson(server.url, '/api/sync/service/status');
+    assert.equal(service.status, 200);
+    assert.equal(service.body.ok, true);
+    assert.equal(JSON.stringify(service.body).includes('service'), true);
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('web server serves built assets with SPA fallback and blocks traversal', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-static-'));
   const assetsDir = join(directory, 'dist');

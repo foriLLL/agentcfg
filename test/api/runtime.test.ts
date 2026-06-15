@@ -20,7 +20,9 @@ import {
   planApplyRuntime,
   pullRuntime,
   saveConfigFileRuntime,
+  saveAutoSyncRuntime,
   saveRemoteConfigRuntime,
+  syncNowRuntime,
   setupRemoteConfigRuntime,
 } from '../../src/api';
 import { buildGistBody, startFakeGistServer } from '../helpers/fake-gist';
@@ -671,6 +673,54 @@ test('runtime initializes a remote managed rule file from local content', async 
     assert.equal(initialized.files[0]?.remote.status === 'available' ? initialized.files[0].remote.content : '', '# local gemini rules\n');
     assert.equal(patchBody.files?.['GEMINI.md']?.content, '# local gemini rules\n');
     assert.equal(JSON.stringify(initialized).includes('init-token'), false);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime saves auto-sync settings and syncs configured rule file targets', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-sync-now-'));
+  const statePath = join(directory, 'state.json');
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const localPath = join(directory, '.gemini', 'GEMINI.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'sync-now-revision', {
+      'AGENTS.md': { content: '# sync codex\n' },
+      'CLAUDE.md': { content: '# sync claude\n' },
+      'GEMINI.md': { content: '# sync gemini\n' },
+    }),
+  });
+
+  try {
+    await mkdir(join(directory, '.gemini'), { recursive: true });
+    await writeFile(localPath, '# stale gemini\n');
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'sync-now-gist' } }, null, 2)}\n`);
+
+    const saved = await saveAutoSyncRuntime({
+      statePath,
+      autoSync: { enabled: true, intervalMinutes: 30, targets: ['ruleFiles'] },
+    });
+    assert.equal(saved.state.autoSync?.enabled, true);
+    assert.deepEqual(saved.state.autoSync?.targets, ['ruleFiles']);
+
+    const synced = await syncNowRuntime(
+      { statePath, githubToken: 'sync-now-token' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as { lastSyncRun?: { status?: string } };
+
+    assert.equal(synced.result.status, 'success');
+    assert.equal(await readFile(localPath, 'utf8'), '# sync gemini\n');
+    assert.equal(state.lastSyncRun?.status, 'success');
+    assert.equal(JSON.stringify(synced).includes('sync-now-token'), false);
   } finally {
     if (previousHome === undefined) {
       delete process.env.HOME;

@@ -65,6 +65,14 @@ test('sync once applies managed rule files from Gist', async () => {
   }
 });
 
+test('sync service status reports without installing service', async () => {
+  const result = await runCli(['sync', 'service', 'status'], process.env);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Sync service/);
+  assert.match(result.stdout, /Platform:/);
+});
+
 async function runCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<CliResult> {
   return new Promise<CliResult>((resolvePromise) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], { env });

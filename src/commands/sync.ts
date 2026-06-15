@@ -1,9 +1,13 @@
 import { ADAPTER_NAMES, isAdapterName } from '../adapters';
 import {
   AUTO_SYNC_RULE_FILES_TARGET,
+  getSyncServiceStatus,
+  installSyncService,
   runSyncOnce,
+  uninstallSyncService,
   type FetchGistOptions,
   type SyncOnceResult,
+  type SyncServiceStatus,
   type SyncTarget,
 } from '../core';
 
@@ -17,13 +21,26 @@ type ParsedSyncOnceArgs = {
   targets: SyncTarget[];
 };
 
+type ParsedSyncServiceArgs = {
+  action: 'install' | 'uninstall' | 'status';
+  statePath?: string;
+  intervalMinutes: number;
+};
+
 export async function runSyncCommand(options: RunSyncCommandOptions): Promise<string> {
   const [subcommand, ...args] = options.args;
   if (subcommand === 'once') {
     return formatSyncOnceResult(await runSyncOnce({ ...parseSyncOnceArgs(args), gistOptions: options.gistOptions }));
   }
   if (subcommand === 'service') {
-    throw new Error('Usage: agentcfg sync service <install|uninstall|status> [options]');
+    const parsed = parseSyncServiceArgs(args);
+    if (parsed.action === 'install') {
+      return formatSyncServiceStatus(await installSyncService(parsed));
+    }
+    if (parsed.action === 'uninstall') {
+      return formatSyncServiceStatus(await uninstallSyncService(parsed));
+    }
+    return formatSyncServiceStatus(await getSyncServiceStatus());
   }
   throw new Error(buildSyncHelpText());
 }
@@ -41,6 +58,11 @@ export function buildSyncHelpText(): string {
     '  --all-agents',
     '  --rules',
     '  --state <path>',
+    '',
+    'sync service options:',
+    '  install --interval-minutes <minutes> [--state <path>]',
+    '  uninstall [--state <path>]',
+    '  status',
   ].join('\n');
 }
 
@@ -81,12 +103,46 @@ function parseSyncOnceArgs(args: readonly string[]): ParsedSyncOnceArgs {
   };
 }
 
+function parseSyncServiceArgs(args: readonly string[]): ParsedSyncServiceArgs {
+  const [action, ...options] = args;
+  if (action !== 'install' && action !== 'uninstall' && action !== 'status') {
+    throw new Error('Usage: agentcfg sync service <install|uninstall|status> [options]');
+  }
+
+  let statePath: string | undefined;
+  let intervalMinutes = 60;
+  for (let index = 0; index < options.length; index += 1) {
+    const option = options[index];
+    if (option === '--state') {
+      statePath = readOptionValue(options, index, '--state');
+      index += 1;
+      continue;
+    }
+    if (option === '--interval-minutes') {
+      intervalMinutes = parseIntervalMinutes(readOptionValue(options, index, '--interval-minutes'));
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown sync service option: ${option}`);
+  }
+
+  return { action, statePath, intervalMinutes };
+}
+
 function readOptionValue(args: readonly string[], index: number, option: string): string {
   const value = args[index + 1];
   if (value === undefined || value.startsWith('--')) {
     throw new Error(`${option} requires a value`);
   }
   return value;
+}
+
+function parseIntervalMinutes(value: string): number {
+  const intervalMinutes = Number(value);
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1) {
+    throw new Error('--interval-minutes must be a positive integer');
+  }
+  return intervalMinutes;
 }
 
 function formatSyncOnceResult(result: SyncOnceResult): string {
@@ -106,4 +162,13 @@ function formatSyncOnceResult(result: SyncOnceResult): string {
     lines.push(`Rule file ${file.gistFileName}: ${file.status}${file.error === undefined ? '' : ` (${file.error})`}`);
   }
   return lines.join('\n');
+}
+
+function formatSyncServiceStatus(status: SyncServiceStatus): string {
+  return [
+    `Sync service ${status.installed ? 'installed' : 'not installed'}.`,
+    `Platform: ${status.platform}`,
+    `Message: ${status.message}`,
+    ...status.paths.map((path) => `Path: ${path}`),
+  ].join('\n');
 }
