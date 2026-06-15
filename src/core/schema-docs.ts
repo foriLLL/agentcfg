@@ -16,7 +16,16 @@ export type AgentConfigSchemaFieldPath =
   | 'providers.<provider>.models.<model>.variant'
   | 'providers.<provider>.models.<model>.contextWindow'
   | 'providers.<provider>.models.<model>.contextTokens'
-  | 'providers.<provider>.models.<model>.maxTokens';
+  | 'providers.<provider>.models.<model>.maxTokens'
+  | 'ohMyOpenAgent'
+  | 'ohMyOpenAgent.agents'
+  | 'ohMyOpenAgent.agents.<agent>'
+  | 'ohMyOpenAgent.agents.<agent>.model'
+  | 'ohMyOpenAgent.agents.<agent>.variant'
+  | 'ohMyOpenAgent.categories'
+  | 'ohMyOpenAgent.categories.<category>'
+  | 'ohMyOpenAgent.categories.<category>.model'
+  | 'ohMyOpenAgent.categories.<category>.variant';
 
 export type AgentConfigSchemaDoc = {
   path: AgentConfigSchemaFieldPath;
@@ -67,7 +76,7 @@ export const AGENTCFG_SCHEMA_DOCS: readonly AgentConfigSchemaDoc[] = [
     label: '提供商配置',
     type: 'object',
     required: true,
-    description: '单个提供商的配置，包括端点、明文可见的 API Key、可选模型发现路径与模型目录。',
+    description: '单个提供商的配置，包括端点、明文可见的 API Key、可选模型发现路径与模型目录。提供商 ID 不能包含 /，以避免 OhMyOpenAgent provider/model 引用产生歧义。',
   },
   {
     path: 'providers.<provider>.baseURL',
@@ -152,5 +161,68 @@ export const AGENTCFG_SCHEMA_DOCS: readonly AgentConfigSchemaDoc[] = [
     type: 'positive integer',
     required: false,
     description: '可选的模型最大输出 token 数。提供时必须是正整数。',
+  },
+  {
+    path: 'ohMyOpenAgent',
+    label: 'OhMyOpenAgent 配置',
+    type: 'object',
+    required: false,
+    description: '专用于保存 OhMyOpenAgent 的官方模型路由配置，不与通用 provider/model 元数据混用。',
+  },
+  {
+    path: 'ohMyOpenAgent.agents',
+    label: 'OhMyOpenAgent Agents 配置',
+    type: 'object',
+    required: false,
+    description: '按官方内置 agent 名称索引的模型映射，例如 sisyphus、oracle、librarian、explore、metis、momus、atlas。',
+  },
+  {
+    path: 'ohMyOpenAgent.agents.<agent>',
+    label: 'Agent 模型映射',
+    type: 'object',
+    required: false,
+    description: '单个 OhMyOpenAgent agent 的模型配置。当前支持官方 model 与 variant 字段。',
+  },
+  {
+    path: 'ohMyOpenAgent.agents.<agent>.model',
+    label: 'Agent 模型',
+    type: 'provider/model string',
+    required: false,
+    description: 'OhMyOpenAgent 官方 model override，必须引用当前 providers 模型目录中的 provider/model。',
+  },
+  {
+    path: 'ohMyOpenAgent.agents.<agent>.variant',
+    label: 'Agent variant 档位',
+    type: 'max | high | medium | low | xhigh',
+    required: false,
+    description: 'OhMyOpenAgent 官方 variant override。仅在所选模型需要特定推理档位时填写。',
+  },
+  {
+    path: 'ohMyOpenAgent.categories',
+    label: 'OhMyOpenAgent 任务类别',
+    type: 'object',
+    required: false,
+    description: '按官方 task/delegate category 名称索引的模型映射，例如 quick、deep、ultrabrain、visual-engineering、writing。',
+  },
+  {
+    path: 'ohMyOpenAgent.categories.<category>',
+    label: '任务类别模型映射',
+    type: 'object',
+    required: false,
+    description: '单个 OhMyOpenAgent 任务类别的模型配置。用于 delegate_task/task category 的模型选择。',
+  },
+  {
+    path: 'ohMyOpenAgent.categories.<category>.model',
+    label: '任务类别模型',
+    type: 'provider/model string',
+    required: false,
+    description: 'OhMyOpenAgent 官方 category model override，必须引用当前 providers 模型目录中的 provider/model。',
+  },
+  {
+    path: 'ohMyOpenAgent.categories.<category>.variant',
+    label: '任务类别 variant',
+    type: 'max | high | medium | low | xhigh',
+    required: false,
+    description: 'OhMyOpenAgent 官方 category variant override。仅在所选任务模型需要特定推理档位时填写。',
   },
 ];

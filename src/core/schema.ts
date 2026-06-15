@@ -17,6 +17,47 @@ export type ModelConfig = {
   maxTokens?: number;
 };
 
+export const OH_MY_OPENAGENT_AGENT_NAMES = [
+  'sisyphus',
+  'hephaestus',
+  'prometheus',
+  'oracle',
+  'librarian',
+  'explore',
+  'multimodal-looker',
+  'metis',
+  'momus',
+  'atlas',
+  'sisyphus-junior',
+] as const;
+
+export const OH_MY_OPENAGENT_CATEGORY_NAMES = [
+  'visual-engineering',
+  'ultrabrain',
+  'deep',
+  'artistry',
+  'quick',
+  'unspecified-low',
+  'unspecified-high',
+  'writing',
+] as const;
+
+export const OH_MY_OPENAGENT_MODEL_VARIANTS = ['max', 'high', 'medium', 'low', 'xhigh'] as const;
+
+export type OhMyOpenAgentAgentName = (typeof OH_MY_OPENAGENT_AGENT_NAMES)[number];
+export type OhMyOpenAgentCategoryName = (typeof OH_MY_OPENAGENT_CATEGORY_NAMES)[number];
+export type OhMyOpenAgentModelVariant = (typeof OH_MY_OPENAGENT_MODEL_VARIANTS)[number];
+
+export type OhMyOpenAgentModelAssignment = {
+  model: string;
+  variant?: OhMyOpenAgentModelVariant;
+};
+
+export type OhMyOpenAgentConfig = {
+  agents?: Partial<Record<OhMyOpenAgentAgentName, OhMyOpenAgentModelAssignment>>;
+  categories?: Partial<Record<OhMyOpenAgentCategoryName, OhMyOpenAgentModelAssignment>>;
+};
+
 export type ProviderConfig = {
   baseURL: string;
   apiKey: PlainApiKey;
@@ -30,6 +71,7 @@ export type CanonicalAgentConfig = {
   schemaVersion: 1;
   defaults: AgentConfigDefaults;
   providers: Record<string, ProviderConfig>;
+  ohMyOpenAgent?: OhMyOpenAgentConfig;
 };
 
 export type SelectedProviderConfig = {
@@ -47,6 +89,7 @@ export type AgentConfigInput = {
   apiKey?: unknown;
   defaults?: unknown;
   providers?: unknown;
+  ohMyOpenAgent?: unknown;
 };
 
 export class AgentConfigValidationError extends Error {
@@ -100,6 +143,7 @@ export function serializeCanonicalAgentConfig(config: AgentConfigInput): string 
       model: canonicalConfig.defaults.model,
     },
     providers,
+    ...(canonicalConfig.ohMyOpenAgent === undefined ? {} : { ohMyOpenAgent: canonicalConfig.ohMyOpenAgent }),
   });
 }
 
@@ -136,6 +180,7 @@ function validateNestedAgentConfig(input: AgentConfigInput): CanonicalAgentConfi
 
   const defaults = validateDefaults(input.defaults, issues);
   const providers = validateProviders(input.providers, issues);
+  const ohMyOpenAgent = providers === undefined ? undefined : validateOhMyOpenAgentConfig(input.ohMyOpenAgent, providers, issues);
 
   if (defaults !== undefined && providers !== undefined) {
     const defaultProvider = providers[defaults.provider];
@@ -155,6 +200,7 @@ function validateNestedAgentConfig(input: AgentConfigInput): CanonicalAgentConfi
     schemaVersion: 1,
     defaults: defaults as AgentConfigDefaults,
     providers: providers as Record<string, ProviderConfig>,
+    ...(ohMyOpenAgent === undefined ? {} : { ohMyOpenAgent }),
   };
 }
 
@@ -247,6 +293,11 @@ function validateProviders(value: unknown, issues: string[]): Record<string, Pro
   for (const [providerId, providerValue] of providerEntries) {
     if (!isNonEmptyString(providerId)) {
       issues.push('providers must use non-empty provider IDs');
+      continue;
+    }
+
+    if (providerId.includes('/')) {
+      issues.push(`providers.${providerId} must not include / because OhMyOpenAgent model references use provider/model`);
       continue;
     }
 
@@ -408,6 +459,123 @@ function validateModelConfig(path: string, value: unknown, issues: string[]): Mo
   }
 
   return valid ? model : undefined;
+}
+
+function validateOhMyOpenAgentConfig(value: unknown, providers: Record<string, ProviderConfig>, issues: string[]): OhMyOpenAgentConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const path = 'ohMyOpenAgent';
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object when present`);
+    return undefined;
+  }
+
+  const agents = validateOhMyOpenAgentAssignments(
+    `${path}.agents`,
+    value.agents,
+    providers,
+    issues,
+    new Set(OH_MY_OPENAGENT_AGENT_NAMES),
+  ) as OhMyOpenAgentConfig['agents'];
+  const categories = validateOhMyOpenAgentAssignments(
+    `${path}.categories`,
+    value.categories,
+    providers,
+    issues,
+    new Set(OH_MY_OPENAGENT_CATEGORY_NAMES),
+  ) as OhMyOpenAgentConfig['categories'];
+  const config: OhMyOpenAgentConfig = {};
+
+  if (agents !== undefined) {
+    config.agents = agents;
+  }
+  if (categories !== undefined) {
+    config.categories = categories;
+  }
+
+  return config.agents === undefined && config.categories === undefined ? undefined : config;
+}
+
+function validateOhMyOpenAgentAssignments(
+  path: string,
+  value: unknown,
+  providers: Record<string, ProviderConfig>,
+  issues: string[],
+  allowedKeys: Set<string>,
+): Record<string, OhMyOpenAgentModelAssignment> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object when present`);
+    return undefined;
+  }
+
+  const assignments: Record<string, OhMyOpenAgentModelAssignment> = {};
+
+  for (const [key, assignmentValue] of Object.entries(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(`${path}.${key} must use a supported OhMyOpenAgent name`);
+      continue;
+    }
+
+    const assignment = validateOhMyOpenAgentAssignment(`${path}.${key}`, assignmentValue, providers, issues);
+    if (assignment !== undefined) {
+      assignments[key] = assignment;
+    }
+  }
+
+  return Object.keys(assignments).length === 0 ? undefined : assignments;
+}
+
+function validateOhMyOpenAgentAssignment(
+  path: string,
+  value: unknown,
+  providers: Record<string, ProviderConfig>,
+  issues: string[],
+): OhMyOpenAgentModelAssignment | undefined {
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object`);
+    return undefined;
+  }
+
+  if (!isNonEmptyString(value.model)) {
+    issues.push(`${path}.model is required and must be a non-empty provider/model string`);
+    return undefined;
+  }
+
+  const assignment: OhMyOpenAgentModelAssignment = { model: value.model };
+  if (!isKnownProviderModelReference(value.model, providers)) {
+    issues.push(`${path}.model must reference an existing providers.<provider>.models.<model> entry (received ${value.model})`);
+  }
+
+  if (value.variant !== undefined) {
+    if (!isOhMyOpenAgentModelVariant(value.variant)) {
+      issues.push(`${path}.variant must be one of ${OH_MY_OPENAGENT_MODEL_VARIANTS.join(', ')}`);
+    } else {
+      assignment.variant = value.variant;
+    }
+  }
+
+  return assignment;
+}
+
+function isKnownProviderModelReference(value: string, providers: Record<string, ProviderConfig>): boolean {
+  const separatorIndex = value.indexOf('/');
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    return false;
+  }
+
+  const providerId = value.slice(0, separatorIndex);
+  const modelId = value.slice(separatorIndex + 1);
+  return providers[providerId]?.models[modelId] !== undefined;
+}
+
+function isOhMyOpenAgentModelVariant(value: unknown): value is OhMyOpenAgentModelVariant {
+  return typeof value === 'string' && (OH_MY_OPENAGENT_MODEL_VARIANTS as readonly string[]).includes(value);
 }
 
 function normalizeSchemaVersion(value: unknown): number | undefined {

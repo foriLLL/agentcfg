@@ -63,6 +63,19 @@ const EXPECTED_CANONICAL_CONFIG = {
       },
     },
   },
+  ohMyOpenAgent: {
+    agents: {
+      oracle: {
+        model: 'openai/gpt-4.1-mini',
+        variant: 'high',
+      },
+    },
+    categories: {
+      'visual-engineering': {
+        model: 'anthropic/claude-3-5-sonnet-latest',
+      },
+    },
+  },
 };
 
 test('parses and normalizes the canonical multi-provider YAML fixture', () => {
@@ -168,10 +181,141 @@ test('requires visible provider API keys to be non-empty plain values', () => {
   );
 });
 
+test('rejects provider IDs containing slash so provider model references stay unambiguous', () => {
+  assert.throws(
+    () => validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      defaults: {
+        provider: 'open/router',
+        model: 'gpt-4.1-mini',
+      },
+      providers: {
+        'open/router': {
+          baseURL: 'https://openrouter.ai/api/v1',
+          apiKey: {
+            type: 'plain',
+            value: 'sk-test-visible-openrouter',
+          },
+          models: {
+            'anthropic/claude-3-5-sonnet-latest': {},
+          },
+        },
+      },
+      ohMyOpenAgent: undefined,
+    }),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /providers\.open\/router/);
+      assert.match(error.message, /must not include \/ because OhMyOpenAgent model references use provider\/model/);
+      return true;
+    },
+  );
+});
+
 test('accepts object input with nested defaults, providers, and model metadata', () => {
   const config = validateAgentConfig(EXPECTED_CANONICAL_CONFIG);
 
   assert.deepEqual(config, EXPECTED_CANONICAL_CONFIG);
+});
+
+test('validates OhMyOpenAgent agent and category model mappings', () => {
+  assert.throws(
+    () => validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      ohMyOpenAgent: {
+        agents: {
+          ghost: {
+            model: 'openai/gpt-4.1-mini',
+          },
+        },
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /ohMyOpenAgent\.agents\.ghost/);
+      assert.match(error.message, /supported OhMyOpenAgent name/);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      ohMyOpenAgent: {
+        categories: {
+          background: {
+            model: 'openai/gpt-4.1-mini',
+          },
+        },
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /ohMyOpenAgent\.categories\.background/);
+      assert.match(error.message, /supported OhMyOpenAgent name/);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      ohMyOpenAgent: {
+        agents: {
+          oracle: {
+            model: 'openai/missing-model',
+          },
+        },
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /ohMyOpenAgent\.agents\.oracle\.model/);
+      assert.match(error.message, /existing providers\.<provider>\.models\.<model>/);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      ohMyOpenAgent: {
+        categories: {
+          'visual-engineering': {
+            model: 'anthropic/claude-3-5-sonnet-latest',
+            variant: 'turbo',
+          },
+        },
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /ohMyOpenAgent\.categories\.visual-engineering\.variant/);
+      assert.match(error.message, /max, high, medium, low, xhigh/);
+      return true;
+    },
+  );
+});
+
+test('omits empty OhMyOpenAgent mappings from normalized and serialized config', () => {
+  for (const ohMyOpenAgent of [{}, { agents: {} }, { categories: {} }, { agents: {}, categories: {} }]) {
+    const config = validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      ohMyOpenAgent,
+    });
+
+    assert.equal(config.ohMyOpenAgent, undefined);
+  }
+
+  const serialized = serializeCanonicalAgentConfig({
+    ...EXPECTED_CANONICAL_CONFIG,
+    ohMyOpenAgent: {
+      agents: {},
+      categories: {},
+    },
+  });
+
+  assert.doesNotMatch(serialized, /ohMyOpenAgent/);
 });
 
 test('documents every canonical agentcfg.yaml schema field', () => {
@@ -196,6 +340,15 @@ test('documents every canonical agentcfg.yaml schema field', () => {
     'providers.<provider>.models.<model>.contextWindow',
     'providers.<provider>.models.<model>.contextTokens',
     'providers.<provider>.models.<model>.maxTokens',
+    'ohMyOpenAgent',
+    'ohMyOpenAgent.agents',
+    'ohMyOpenAgent.agents.<agent>',
+    'ohMyOpenAgent.agents.<agent>.model',
+    'ohMyOpenAgent.agents.<agent>.variant',
+    'ohMyOpenAgent.categories',
+    'ohMyOpenAgent.categories.<category>',
+    'ohMyOpenAgent.categories.<category>.model',
+    'ohMyOpenAgent.categories.<category>.variant',
   ]);
   assert.equal(new Set(fieldPaths).size, fieldPaths.length);
 

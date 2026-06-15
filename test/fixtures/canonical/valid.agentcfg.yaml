@@ -27,3 +27,11 @@ providers:
         contextWindow: 200000
         contextTokens: 180000
         maxTokens: 8192
+ohMyOpenAgent:
+  agents:
+    oracle:
+      model: openai/gpt-4.1-mini
+      variant: high
+  categories:
+    visual-engineering:
+      model: anthropic/claude-3-5-sonnet-latest
