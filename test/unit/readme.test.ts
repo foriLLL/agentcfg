@@ -94,8 +94,10 @@ test('readme documents the required agentcfg MVP sections', () => {
   assert.ok(readme.includes("including each planned file's current content and post-apply content."));
   assert.ok(readme.includes('Saved GitHub Tokens are different'));
   assert.ok(readme.includes('docs/testing-capability.md'));
-  assert.ok(readme.includes('OpenCode, OpenClaw, and Claude Code'));
-  assert.ok(readme.includes('--agent <codex|opencode|openclaw|claude>'));
+  assert.ok(readme.includes('OpenCode, OpenClaw, Claude Code, and OhMyOpenAgent'));
+  assert.ok(readme.includes('--agent <codex|opencode|openclaw|claude|ohmyopenagent>'));
+  assert.ok(readme.includes('~/.config/opencode/oh-my-openagent.json'));
+  assert.ok(readme.includes('agents.<name>.model'));
   assert.ok(readme.includes('Codex has no confirmed upstream full config validator'));
   assert.ok(readme.includes('AGENTCFG_DOCKER_CODEX_STRICT=1'));
   assert.ok(readme.includes('default host is loopback-only'));

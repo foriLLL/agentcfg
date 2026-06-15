@@ -77,7 +77,8 @@ const TARGET_OPTIONS: Array<{ value: Exclude<TargetMode, ''>; title: string; cop
   { value: 'opencode', title: 'OpenCode', copy: '检查一个 OpenCode JSON 或 JSONC 配置。' },
   { value: 'openclaw', title: 'OpenClaw', copy: '检查一个 OpenClaw JSON 或 JSON5 配置。' },
   { value: 'claude', title: 'Claude Code', copy: '检查 Claude Code settings.json 配置。' },
-  { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode、OpenClaw 与 Claude Code。' },
+  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '检查 OhMyOpenAgent 模型路由配置。' },
+  { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode、OpenClaw、Claude Code 与 OhMyOpenAgent。' },
 ];
 
 const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: string }> = [
@@ -85,6 +86,7 @@ const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: stri
   { value: 'opencode', title: 'OpenCode', copy: '查看 OpenCode JSON/JSONC 配置原文。' },
   { value: 'openclaw', title: 'OpenClaw', copy: '查看 OpenClaw JSON/JSON5 配置原文。' },
   { value: 'claude', title: 'Claude Code', copy: '查看 Claude Code settings.json 配置原文。' },
+  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '查看 OhMyOpenAgent JSON 路由配置原文。' },
 ];
 
 const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
@@ -215,7 +217,7 @@ function App() {
   const isBusy = isSubmittingInit || isPulling || isDiffing || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
-  const configAgent = targetMode === 'codex' || targetMode === 'opencode' || targetMode === 'openclaw' || targetMode === 'claude' ? targetMode : null;
+  const configAgent = targetMode === '' || targetMode === 'all' ? null : targetMode;
   const canReviewLocalConfig = configAgent !== null && canReview;
   const canApplyLocalConfig = configAgent !== null && canApply;
   const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
@@ -248,7 +250,7 @@ function App() {
   useEffect(() => {
     setConfigFile(null);
     setConfigDraft('');
-    setConfigStatus(configAgent === null ? '请选择 Codex、OpenCode、OpenClaw 或 Claude Code 后再加载配置文件。' : configAvailabilityByAgent.get(configAgent)?.available === false ? '此 Agent 未找到可编辑的配置文件。' : '尚未加载配置文件。');
+    setConfigStatus(configAgent === null ? '请选择单个 Agent 后再加载配置文件。' : configAvailabilityByAgent.get(configAgent)?.available === false ? '此 Agent 未找到可编辑的配置文件。' : '尚未加载配置文件。');
   }, [configAgent, configAvailabilityByAgent, configPath, requestStatePath]);
 
   useEffect(() => {

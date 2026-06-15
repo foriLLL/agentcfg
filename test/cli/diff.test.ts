@@ -45,6 +45,23 @@ const METADATA_CONFIG = {
   },
 };
 
+const OH_MY_OPENAGENT_CONFIG = {
+  ...CANONICAL_CONFIG,
+  ohMyOpenAgent: {
+    agents: {
+      oracle: {
+        model: 'openai/gpt-4.1-mini',
+        variant: 'high',
+      },
+    },
+    categories: {
+      quick: {
+        model: 'openai/gpt-4.1-mini',
+      },
+    },
+  },
+};
+
 type CliResult = {
   status: number | null;
   stdout: string;
@@ -210,6 +227,32 @@ test('diff reports OpenClaw metadata-only drift without mutating files', async (
   }
 });
 
+test('diff reports OhMyOpenAgent route drift without mutating files', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-ohmyopenagent-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'oh-my-openagent.json');
+
+  try {
+    await writeState(statePath, OH_MY_OPENAGENT_CONFIG);
+    await writeFile(nativePath, ohMyOpenAgentDriftNativeJson());
+    const stateBefore = await readFile(statePath, 'utf8');
+    const nativeBefore = await readFile(nativePath, 'utf8');
+
+    const result = await runCli(['diff', '--agent', 'ohmyopenagent', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Agent: ohmyopenagent/);
+    assert.match(result.stdout, /ohMyOpenAgent\.agents\.oracle\.model: anthropic\/claude-3-5-sonnet -> openai\/gpt-4\.1-mini/);
+    assert.match(result.stdout, /ohMyOpenAgent\.agents\.oracle\.variant: low -> high/);
+    assert.match(result.stdout, /ohMyOpenAgent\.categories\.quick\.model: anthropic\/claude-3-5-sonnet -> openai\/gpt-4\.1-mini/);
+    assert.match(result.stdout, /ohMyOpenAgent\.categories\.quick\.variant: medium -> <missing>/);
+    assert.equal(await readFile(statePath, 'utf8'), stateBefore);
+    assert.equal(await readFile(nativePath, 'utf8'), nativeBefore);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('diff supports fixtures root for all adapters without mutating state or native fixtures', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-all-'));
   const homeDirectory = join(directory, 'home');
@@ -228,6 +271,7 @@ test('diff supports fixtures root for all adapters without mutating state or nat
       join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
       join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
       join(fixturesRoot, 'claude', 'input.settings.json'),
+      join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'),
     ]);
 
     const result = await runCli(['diff', '--all-agents', '--state', statePath, '--fixtures-root', fixturesRoot], {
@@ -239,6 +283,7 @@ test('diff supports fixtures root for all adapters without mutating state or nat
     assert.match(result.stdout, /Agent: opencode\n  No managed diffs\./);
     assert.match(result.stdout, /Agent: openclaw\n  No managed diffs\./);
     assert.match(result.stdout, /Agent: claude\n  No managed diffs\./);
+    assert.match(result.stdout, /Agent: ohmyopenagent\n  No managed diffs\./);
     assert.equal(result.stdout.includes(CACHED_SECRET), false);
     assert.deepEqual(await snapshotFiles(Object.keys(before)), before);
   } finally {
@@ -322,6 +367,7 @@ test('Codex diff fails closed when the env file exists but is unreadable', async
       join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
       join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
       join(fixturesRoot, 'claude', 'input.settings.json'),
+      join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'),
     ]);
     await chmod(envPath, 0o000);
 
@@ -420,6 +466,7 @@ async function writeNativeFixtures(fixturesRoot: string, apiKey: string): Promis
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
   await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'ohmyopenagent'), { recursive: true });
 
   await writeFile(
     join(fixturesRoot, 'codex', 'input.config.toml'),
@@ -470,6 +517,7 @@ async function writeNativeFixtures(fixturesRoot: string, apiKey: string): Promis
       },
     })}\n`,
   );
+  await writeFile(join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'), ohMyOpenAgentNativeJson());
 }
 
 function codexNativeToml(): string {
@@ -482,6 +530,45 @@ function codexNativeToml(): string {
     'env_key = "AGENTCFG_OPENAI_API_KEY"',
     '',
   ].join('\n');
+}
+
+function ohMyOpenAgentNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      disabled_hooks: ['no-sisyphus-gpt'],
+      agents: {
+        sisyphus: {
+          prompt_append: 'Keep local prompt.',
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function ohMyOpenAgentDriftNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      disabled_hooks: ['no-sisyphus-gpt'],
+      agents: {
+        oracle: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'low',
+          prompt_append: 'Keep oracle prompt.',
+        },
+      },
+      categories: {
+        quick: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'medium',
+          notes: 'Keep quick metadata.',
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {

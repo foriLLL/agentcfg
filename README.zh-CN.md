@@ -2,7 +2,7 @@
 
 语言：[English](README.md) | 中文
 
-agentcfg 是一个 CLI，用来让 Codex、OpenCode、OpenClaw 和 Claude Code 在多台设备之间保持配置一致。它使用存储在私有 GitHub Gist 中的一个规范化 `agentcfg.yaml` 作为统一配置来源。
+agentcfg 是一个 CLI，用来让 Codex、OpenCode、OpenClaw、Claude Code 和 OhMyOpenAgent 在多台设备之间保持配置一致。它使用存储在私有 GitHub Gist 中的一个规范化 `agentcfg.yaml` 作为统一配置来源。
 
 它适合希望通过一条安全同步路径管理多个 Agent 配置文件，而不是手动编辑多份配置的人。
 
@@ -182,7 +182,7 @@ PATH="/opt/homebrew/bin:$PATH" npm run test:docker
 
 必须且只能使用一个 target selector：
 
-- `--agent <codex|opencode|openclaw|claude>`
+- `--agent <codex|opencode|openclaw|claude|ohmyopenagent>`
 - `--all-agents`
 
 常用 flags：
@@ -242,6 +242,14 @@ agentcfg 会更新 nested provider/default model fields，以及 `models.provide
 Claude Code 使用 `settings.json`。
 
 agentcfg 会更新 Anthropic-compatible Claude Code settings 中的所选 model 和 provider environment variables，同时按结构保留无关设置。
+
+### OhMyOpenAgent
+
+OhMyOpenAgent 默认使用 `~/.config/opencode/oh-my-openagent.json` 中的 JSON 配置。
+
+agentcfg 会根据规范化配置中的 `ohMyOpenAgent` 区块，更新官方路由字段：`agents.<name>.model`、`agents.<name>.variant`、`categories.<name>.model` 和 `categories.<name>.variant`。hooks、prompts、background task settings 和自定义 routes 等无关 OhMyOpenAgent 字段会被保留。
+
+如果规范化配置移除了某个路由，agentcfg 只会移除受支持官方路由名下受管理的 `model` 和 `variant` 字段；当该 route object 仍包含其他本地字段时，会保留这个对象。
 
 ## Managed and unmanaged fields
 

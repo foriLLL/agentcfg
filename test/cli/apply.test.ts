@@ -46,6 +46,23 @@ const METADATA_CONFIG = {
   },
 };
 
+const OH_MY_OPENAGENT_CONFIG = {
+  ...CANONICAL_CONFIG,
+  ohMyOpenAgent: {
+    agents: {
+      oracle: {
+        model: 'openai/gpt-4.1-mini',
+        variant: 'high',
+      },
+    },
+    categories: {
+      quick: {
+        model: 'openai/gpt-4.1-mini',
+      },
+    },
+  },
+};
+
 type CliResult = {
   status: number | null;
   stdout: string;
@@ -188,6 +205,49 @@ test('apply yes writes Claude Code settings and is idempotent', async () => {
 
     const afterFirst = await readFile(nativePath, 'utf8');
     const second = await runCli(['apply', '--agent', 'claude', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(second.status, 0, second.stderr);
+    assert.match(second.stdout, /Status: unchanged/);
+    assert.equal(await readFile(nativePath, 'utf8'), afterFirst);
+    assert.deepEqual(await backupFiles(directory), backupsAfterFirst);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('apply yes writes OhMyOpenAgent route config and is idempotent', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-apply-ohmyopenagent-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'oh-my-openagent.json');
+  const original = ohMyOpenAgentDriftNativeJson();
+
+  try {
+    await writeState(statePath, OH_MY_OPENAGENT_CONFIG);
+    await writeFile(nativePath, original);
+
+    const first = await runCli(['apply', '--agent', 'ohmyopenagent', '--yes', '--state', statePath, '--config-path', nativePath]);
+
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /Apply complete/);
+    assert.match(first.stdout, /Agent: ohmyopenagent/);
+    assert.match(first.stdout, /Status: applied/);
+    assert.match(first.stdout, /ohMyOpenAgent\.agents\.oracle\.model: anthropic\/claude-3-5-sonnet -> openai\/gpt-4\.1-mini/);
+    assert.match(first.stdout, /ohMyOpenAgent\.agents\.oracle\.variant: low -> high/);
+    const rendered = JSON.parse(await readFile(nativePath, 'utf8')) as Record<string, unknown>;
+    assert.deepEqual(rendered.disabled_hooks, ['no-sisyphus-gpt']);
+    assert.equal(readNestedString(rendered, ['agents', 'oracle', 'model']), 'openai/gpt-4.1-mini');
+    assert.equal(readNestedString(rendered, ['agents', 'oracle', 'variant']), 'high');
+    assert.equal(readNestedString(rendered, ['agents', 'oracle', 'prompt_append']), 'Keep oracle prompt.');
+    assert.equal(readNestedString(rendered, ['categories', 'quick', 'model']), 'openai/gpt-4.1-mini');
+    assert.equal(readNestedString(rendered, ['categories', 'quick', 'variant']), undefined);
+    assert.equal(readNestedString(rendered, ['categories', 'quick', 'notes']), 'Keep quick metadata.');
+    assert.equal((await stat(nativePath)).mode & 0o777, 0o600);
+    const backupsAfterFirst = await backupFiles(directory);
+    assert.equal(backupsAfterFirst.length, 1);
+    assert.equal(await readFile(join(directory, backupsAfterFirst[0]), 'utf8'), original);
+
+    const afterFirst = await readFile(nativePath, 'utf8');
+    const second = await runCli(['apply', '--agent', 'ohmyopenagent', '--yes', '--state', statePath, '--config-path', nativePath]);
 
     assert.equal(second.status, 0, second.stderr);
     assert.match(second.stdout, /Status: unchanged/);
@@ -385,6 +445,7 @@ test('apply all-agents validates all selected agents before any write', async ()
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),
+    ohmyopenagent: join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'),
   };
 
   try {
@@ -402,6 +463,7 @@ test('apply all-agents validates all selected agents before any write', async ()
     assert.match(result.stderr, /Status: failed/);
     assert.match(result.stderr, /Agent: openclaw/);
     assert.match(result.stderr, /Agent: claude/);
+    assert.match(result.stderr, /Agent: ohmyopenagent/);
     assert.equal(result.stderr.includes(CACHED_SECRET), false);
     assert.equal(result.stderr.includes(NATIVE_SECRET), false);
     assert.deepEqual(await snapshotFiles(Object.values(paths)), before);
@@ -409,6 +471,7 @@ test('apply all-agents validates all selected agents before any write', async ()
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'opencode')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'openclaw')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'claude')), []);
+    assert.deepEqual(await backupFiles(join(fixturesRoot, 'ohmyopenagent')), []);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }
@@ -424,6 +487,7 @@ test('apply all-agents rejects a read-only later target before writing earlier a
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),
+    ohmyopenagent: join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'),
   };
 
   try {
@@ -443,6 +507,7 @@ test('apply all-agents rejects a read-only later target before writing earlier a
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'opencode')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'openclaw')), []);
     assert.deepEqual(await backupFiles(join(fixturesRoot, 'claude')), []);
+    assert.deepEqual(await backupFiles(join(fixturesRoot, 'ohmyopenagent')), []);
   } finally {
     await chmod(paths.openclaw, 0o644).catch(() => undefined);
     await rm(directory, { force: true, recursive: true });
@@ -560,11 +625,13 @@ async function writeNativeFixtures(fixturesRoot: string): Promise<void> {
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
   await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'ohmyopenagent'), { recursive: true });
   await writeFile(join(fixturesRoot, 'codex', 'input.config.toml'), codexNativeToml());
   await writeFile(join(fixturesRoot, 'codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
   await writeFile(join(fixturesRoot, 'opencode', 'input.opencode.jsonc'), opencodeNativeJson(NATIVE_SECRET));
   await writeFile(join(fixturesRoot, 'openclaw', 'input.openclaw.json5'), openclawNativeJson(NATIVE_SECRET));
   await writeFile(join(fixturesRoot, 'claude', 'input.settings.json'), claudeNativeJson(NATIVE_SECRET));
+  await writeFile(join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'), ohMyOpenAgentNativeJson());
 }
 
 function codexNativeToml(): string {
@@ -631,6 +698,45 @@ function claudeNativeJson(apiKey: string): string {
         KEEP_ME: 'yes',
         ANTHROPIC_API_KEY: apiKey,
         ANTHROPIC_BASE_URL: 'https://old.example.test/v1',
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function ohMyOpenAgentNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      disabled_hooks: ['no-sisyphus-gpt'],
+      agents: {
+        sisyphus: {
+          prompt_append: 'Keep local prompt.',
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function ohMyOpenAgentDriftNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      disabled_hooks: ['no-sisyphus-gpt'],
+      agents: {
+        oracle: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'low',
+          prompt_append: 'Keep oracle prompt.',
+        },
+      },
+      categories: {
+        quick: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'medium',
+          notes: 'Keep quick metadata.',
+        },
       },
     },
     null,

@@ -1,5 +1,5 @@
 import { CLI_COMMANDS } from './core';
-import { isAdapterName, type AdapterName } from './adapters';
+import { ADAPTER_NAMES, isAdapterName, type AdapterName } from './adapters';
 import { runApplyCommand } from './commands/apply';
 import { runDiffCommand } from './commands/diff';
 import { runInitCommand } from './commands/init';
@@ -170,7 +170,7 @@ function parseDiffArgs(args: string[]): ParsedDiffArgs {
     if (arg === '--agent') {
       const agent = readOptionValue(args, index, '--agent');
       if (!isAdapterName(agent)) {
-        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, openclaw, or claude`);
+        throw new Error(`Unsupported agent '${agent}'. Expected ${formatAgentNames()}`);
       }
       parsed.agent = agent;
       index += 1;
@@ -209,7 +209,7 @@ function parseApplyArgs(args: string[]): ParsedApplyArgs {
     if (arg === '--agent') {
       const agent = readOptionValue(args, index, '--agent');
       if (!isAdapterName(agent)) {
-        throw new Error(`Unsupported agent '${agent}'. Expected codex, opencode, openclaw, or claude`);
+        throw new Error(`Unsupported agent '${agent}'. Expected ${formatAgentNames()}`);
       }
       parsed.agent = agent;
       index += 1;
@@ -296,4 +296,8 @@ function readOptionValue(args: string[], index: number, option: string): string 
     throw new Error(`${option} requires a value`);
   }
   return value;
+}
+
+function formatAgentNames(): string {
+  return ADAPTER_NAMES.join(', ');
 }

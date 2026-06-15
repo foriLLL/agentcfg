@@ -1,8 +1,10 @@
 export const MANAGED_DIFF_FIELDS = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'] as const;
 
-export type ManagedDiffField = (typeof MANAGED_DIFF_FIELDS)[number];
+export type OhMyOpenAgentManagedDiffField = `ohMyOpenAgent.${'agents' | 'categories'}.${string}.${'model' | 'variant'}`;
 
-export type ManagedDiffSnapshot = Partial<Record<ManagedDiffField, string>>;
+export type ManagedDiffField = (typeof MANAGED_DIFF_FIELDS)[number] | OhMyOpenAgentManagedDiffField;
+
+export type ManagedDiffSnapshot = Partial<Record<(typeof MANAGED_DIFF_FIELDS)[number], string>>;
 
 export type ManagedDiffChange = {
   field: ManagedDiffField;

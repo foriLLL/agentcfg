@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "disabled_hooks": [
+    "no-sisyphus-gpt"
+  ],
+  "agents": {
+    "oracle": {
+      "model": "openai/gpt-4.1-mini",
+      "variant": "high",
+      "prompt_append": "Keep local oracle prompt."
+    },
+    "sisyphus": {
+      "prompt_append": "Keep local sisyphus prompt."
+    },
+    "custom-agent": {
+      "model": "local/custom",
+      "variant": "high"
+    }
+  },
+  "categories": {
+    "visual-engineering": {
+      "model": "anthropic/claude-3-5-sonnet-latest",
+      "notes": "Keep local category metadata."
+    }
+  },
+  "background_task": {
+    "providerConcurrency": {
+      "openai": 10
+    }
+  }
+}

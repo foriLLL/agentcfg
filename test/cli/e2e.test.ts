@@ -23,6 +23,14 @@ const CANONICAL_YAML = [
   '    models:',
   '      gpt-4.1-mini: {}',
   '      gpt-4.1: {}',
+  'ohMyOpenAgent:',
+  '  agents:',
+  '    oracle:',
+  '      model: openai/gpt-4.1-mini',
+  '      variant: high',
+  '  categories:',
+  '    quick:',
+  '      model: openai/gpt-4.1',
   '',
 ].join('\n');
 
@@ -38,6 +46,7 @@ type NativePaths = {
   opencode: string;
   openclaw: string;
   claude: string;
+  ohmyopenagent: string;
 };
 
 test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', async () => {
@@ -85,6 +94,7 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(diff.stdout, /Agent: opencode/);
     assert.match(diff.stdout, /Agent: openclaw/);
     assert.match(diff.stdout, /Agent: claude/);
+    assert.match(diff.stdout, /Agent: ohmyopenagent/);
     assert.match(diff.stdout, /apiKey: \*\*\*MASKED\*\*\* -> \*\*\*MASKED\*\*\*/);
     assertNoSecretOutput(diff);
     assert.deepEqual(await snapshotFiles(Object.values(nativePaths)), nativeBefore);
@@ -110,17 +120,19 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(firstApply.stdout, /Agent: opencode/);
     assert.match(firstApply.stdout, /Agent: openclaw/);
     assert.match(firstApply.stdout, /Agent: claude/);
+    assert.match(firstApply.stdout, /Agent: ohmyopenagent/);
     assert.match(firstApply.stdout, /Status: applied/);
     assertNoSecretOutput(firstApply);
 
     await assertAppliedNativeFiles(nativePaths);
     const backupsAfterFirst = await allBackupFiles(fixturesRoot);
-    assert.equal(backupsAfterFirst.length, 5);
+    assert.equal(backupsAfterFirst.length, 6);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.codex), 'utf8'), nativeBefore[nativePaths.codex]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.codexEnv), 'utf8'), nativeBefore[nativePaths.codexEnv]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.opencode), 'utf8'), nativeBefore[nativePaths.opencode]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.openclaw), 'utf8'), nativeBefore[nativePaths.openclaw]);
     assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.claude), 'utf8'), nativeBefore[nativePaths.claude]);
+    assert.equal(await readFile(backupFileFor(backupsAfterFirst, nativePaths.ohmyopenagent), 'utf8'), nativeBefore[nativePaths.ohmyopenagent]);
     const afterFirst = await snapshotFiles(Object.values(nativePaths));
 
     const secondApply = await runCli(
@@ -142,6 +154,7 @@ test('E2E init, pull, diff, dry-run apply, real apply, and idempotent apply', as
     assert.match(cleanDiff.stdout, /Agent: opencode\n  No managed diffs\./);
     assert.match(cleanDiff.stdout, /Agent: openclaw\n  No managed diffs\./);
     assert.match(cleanDiff.stdout, /Agent: claude\n  No managed diffs\./);
+    assert.match(cleanDiff.stdout, /Agent: ohmyopenagent\n  No managed diffs\./);
     assertNoSecretOutput(cleanDiff);
   } finally {
     await server.close();
@@ -387,16 +400,19 @@ async function writeNativeFixtures(fixturesRoot: string): Promise<NativePaths> {
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),
+    ohmyopenagent: join(fixturesRoot, 'ohmyopenagent', 'input.oh-my-openagent.json'),
   };
   await mkdir(join(fixturesRoot, 'codex'), { recursive: true });
   await mkdir(join(fixturesRoot, 'opencode'), { recursive: true });
   await mkdir(join(fixturesRoot, 'openclaw'), { recursive: true });
   await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
+  await mkdir(join(fixturesRoot, 'ohmyopenagent'), { recursive: true });
   await writeFile(paths.codex, codexNativeToml());
   await writeFile(paths.codexEnv, `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
   await writeFile(paths.opencode, opencodeNativeJson());
   await writeFile(paths.openclaw, openclawNativeJson());
   await writeFile(paths.claude, claudeNativeJson());
+  await writeFile(paths.ohmyopenagent, ohMyOpenAgentNativeJson());
   return paths;
 }
 
@@ -479,6 +495,30 @@ function claudeNativeJson(): string {
   )}\n`;
 }
 
+function ohMyOpenAgentNativeJson(): string {
+  return `${JSON.stringify(
+    {
+      disabled_hooks: ['no-sisyphus-gpt'],
+      agents: {
+        oracle: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'low',
+          prompt_append: 'Keep oracle prompt.',
+        },
+      },
+      categories: {
+        quick: {
+          model: 'anthropic/claude-3-5-sonnet',
+          variant: 'medium',
+          notes: 'Keep quick metadata.',
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 async function assertCachedState(statePath: string): Promise<void> {
   const state = JSON.parse(await readFile(statePath, 'utf8')) as Record<string, unknown>;
   assert.deepEqual(state.gist, { id: 'e2e-gist-id' });
@@ -528,6 +568,16 @@ async function assertAppliedNativeFiles(paths: NativePaths): Promise<void> {
   assert.equal(readNestedString(claude, ['env', 'ANTHROPIC_API_KEY']), TEST_SECRET);
   assert.equal(readNestedString(claude, ['env', 'ANTHROPIC_BASE_URL']), 'https://api.openai.com/v1');
   assert.equal((await stat(paths.claude)).mode & 0o777, 0o600);
+
+  const ohmyopenagent = JSON.parse(await readFile(paths.ohmyopenagent, 'utf8')) as Record<string, unknown>;
+  assert.deepEqual(ohmyopenagent.disabled_hooks, ['no-sisyphus-gpt']);
+  assert.equal(readNestedString(ohmyopenagent, ['agents', 'oracle', 'model']), 'openai/gpt-4.1-mini');
+  assert.equal(readNestedString(ohmyopenagent, ['agents', 'oracle', 'variant']), 'high');
+  assert.equal(readNestedString(ohmyopenagent, ['agents', 'oracle', 'prompt_append']), 'Keep oracle prompt.');
+  assert.equal(readNestedString(ohmyopenagent, ['categories', 'quick', 'model']), 'openai/gpt-4.1');
+  assert.equal(readNestedString(ohmyopenagent, ['categories', 'quick', 'variant']), undefined);
+  assert.equal(readNestedString(ohmyopenagent, ['categories', 'quick', 'notes']), 'Keep quick metadata.');
+  assert.equal((await stat(paths.ohmyopenagent)).mode & 0o777, 0o600);
 }
 
 async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {
@@ -539,7 +589,7 @@ async function snapshotFiles(paths: string[]): Promise<Record<string, string>> {
 }
 
 async function allBackupFiles(fixturesRoot: string): Promise<string[]> {
-  const directories = ['codex', 'opencode', 'openclaw', 'claude'].map((agent) => join(fixturesRoot, agent));
+  const directories = ['codex', 'opencode', 'openclaw', 'claude', 'ohmyopenagent'].map((agent) => join(fixturesRoot, agent));
   const backups: string[] = [];
   for (const directory of directories) {
     for (const entry of await readdir(directory)) {

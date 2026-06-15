@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { renderCodexConfig } from '../../src/adapters/codex';
+import { renderOhMyOpenAgentConfigText } from '../../src/adapters/ohmyopenagent';
 import { renderOpenCodeConfigText } from '../../src/adapters/opencode';
 import { renderOpenClawConfigText } from '../../src/adapters/openclaw';
 import { parseCanonicalAgentConfig, type CanonicalAgentConfig } from '../../src/core';
@@ -69,4 +70,18 @@ test('opencode fixture renders canonical config into normalized native JSON', ()
   );
 
   assert.equal(rendered, readFileSync(resolve(fixtureDirectory, 'expected.opencode.json'), 'utf8'));
+});
+
+test('ohmyopenagent fixture renders canonical route overrides into normalized native JSON', () => {
+  const fixtureDirectory = resolve(process.cwd(), 'test/fixtures/ohmyopenagent');
+  const canonical = parseCanonicalAgentConfig(
+    readFileSync(resolve(process.cwd(), 'test/fixtures/canonical/valid.agentcfg.yaml'), 'utf8'),
+  );
+
+  const rendered = renderOhMyOpenAgentConfigText(
+    canonical,
+    readFileSync(resolve(fixtureDirectory, 'input.oh-my-openagent.json'), 'utf8'),
+  );
+
+  assert.equal(rendered, readFileSync(resolve(fixtureDirectory, 'expected.oh-my-openagent.json'), 'utf8'));
 });

@@ -16,10 +16,14 @@ import {
 } from '../core';
 import { codexEnvKeyForProvider, renderCodexConfig, resolveCodexEnvPath } from './codex';
 import { renderClaudeCodeConfigObject } from './claude';
+import {
+  diffOhMyOpenAgentConfigObject,
+  resolveOhMyOpenAgentConfigPath,
+} from './ohmyopenagent';
 import { renderOpenClawConfigObject, resolveOpenClawConfigPath } from './openclaw';
 import { renderOpenCodeConfigObject } from './opencode';
 
-export const ADAPTER_NAMES = ['codex', 'opencode', 'openclaw', 'claude'] as const;
+export const ADAPTER_NAMES = ['codex', 'opencode', 'openclaw', 'claude', 'ohmyopenagent'] as const;
 
 export type AdapterName = (typeof ADAPTER_NAMES)[number];
 
@@ -63,6 +67,12 @@ export const adapters: Readonly<Record<AdapterName, AdapterRegistryEntry>> = Obj
     configFileCandidates: ['settings.json', 'settings.local.json', 'input.settings.json'],
     defaultConfigPath: () => join(homedir(), '.claude', 'settings.json'),
     diff: diffClaude,
+  }),
+  ohmyopenagent: Object.freeze({
+    name: 'ohmyopenagent',
+    configFileCandidates: ['oh-my-openagent.json', 'input.oh-my-openagent.json'],
+    defaultConfigPath: () => resolveOhMyOpenAgentConfigPath(),
+    diff: diffOhMyOpenAgent,
   }),
 });
 
@@ -143,6 +153,18 @@ async function diffClaude(config: CanonicalAgentConfig, options: AdapterDiffOpti
   return {
     agent: 'claude',
     changes: diffManagedSnapshots(claudeSnapshot(current), claudeSnapshot(expected)),
+    notices: [],
+  };
+}
+
+async function diffOhMyOpenAgent(config: CanonicalAgentConfig, options: AdapterDiffOptions = {}): Promise<AgentDiffResult> {
+  const paths = await resolveNativePath(adapters.ohmyopenagent, options);
+  const currentText = await readNativeText(paths.configPath, 'ohmyopenagent');
+  const current = assertNativeObject(parseNativeConfig(currentText, 'json'), 'OhMyOpenAgent config');
+
+  return {
+    agent: 'ohmyopenagent',
+    changes: diffOhMyOpenAgentConfigObject(config, current),
     notices: [],
   };
 }

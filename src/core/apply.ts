@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { resolveAdapterConfigPath, type AdapterName } from '../adapters/registry';
 import { renderClaudeCodeConfigObject } from '../adapters/claude';
 import { codexEnvKeyForProvider, renderCodexConfig } from '../adapters/codex';
+import { diffOhMyOpenAgentConfigObject, renderOhMyOpenAgentConfigObject } from '../adapters/ohmyopenagent';
 import { renderOpenClawConfigObject } from '../adapters/openclaw';
 import { renderOpenCodeConfigObject } from '../adapters/opencode';
 import { atomicWriteFile, type AtomicWriteFileOptions, type AtomicWriteFileResult } from './atomic-write';
@@ -171,6 +172,9 @@ async function planAgentApply(
   if (agent === 'claude') {
     return planClaudeApply(config, options);
   }
+  if (agent === 'ohmyopenagent') {
+    return planOhMyOpenAgentApply(config, options);
+  }
   return planOpenClawApply(config, options);
 }
 
@@ -260,6 +264,26 @@ async function planClaudeApply(config: CanonicalAgentConfig, options: ApplyPlanO
 
   return {
     agent: 'claude',
+    configPath,
+    changes,
+    notices: [],
+    operations:
+      changes.length === 0
+        ? []
+        : [{ path: configPath, content: serializeNativeConfig(expected, format), mode: 0o600, kind: 'native' }],
+  };
+}
+
+async function planOhMyOpenAgentApply(config: CanonicalAgentConfig, options: ApplyPlanOptions): Promise<ApplyAgentPlan> {
+  const configPath = await resolveAdapterConfigPath('ohmyopenagent', options);
+  const format = detectNativeConfigFormat(configPath);
+  const currentText = await readNativeText(configPath, 'ohmyopenagent');
+  const current = assertNativeObject(parseNativeConfig(currentText, format), 'OhMyOpenAgent config');
+  const expected = renderOhMyOpenAgentConfigObject(config, current);
+  const changes = diffOhMyOpenAgentConfigObject(config, current);
+
+  return {
+    agent: 'ohmyopenagent',
     configPath,
     changes,
     notices: [],

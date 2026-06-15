@@ -408,12 +408,14 @@ test('web server reports native config availability for every known agent', asyn
       { agent: 'opencode', available: true, status: 'available' },
       { agent: 'openclaw', available: false, status: 'missing' },
       { agent: 'claude', available: false, status: 'missing' },
+      { agent: 'ohmyopenagent', available: false, status: 'missing' },
     ]);
     assert.equal(availability.body.data.agents[1].path, opencodePath);
     assert.equal(availability.body.data.agents[1].format, 'json');
     assert.match(availability.body.data.agents[0].reason, /Missing codex native config/);
     assert.match(availability.body.data.agents[2].reason, /Missing openclaw native config/);
     assert.match(availability.body.data.agents[3].reason, /Missing claude native config/);
+    assert.match(availability.body.data.agents[4].reason, /Missing ohmyopenagent native config/);
   } finally {
     if (previousHome === undefined) {
       delete process.env.HOME;

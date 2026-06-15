@@ -652,14 +652,14 @@ function selectAgents(request: { agent?: AdapterName; allAgents?: boolean }): Ad
   if (request.agent !== undefined && request.allAgents === true) {
     throw new RuntimeApiError(
       'invalid-request',
-      'Choose exactly one target selector: agent <codex|opencode|openclaw> or allAgents.',
+      `Choose exactly one target selector: agent <${ADAPTER_NAMES.join('|')}> or allAgents.`,
     );
   }
 
   if (request.agent === undefined && request.allAgents !== true) {
     throw new RuntimeApiError(
       'invalid-request',
-      'Choose exactly one target selector: agent <codex|opencode|openclaw> or allAgents.',
+      `Choose exactly one target selector: agent <${ADAPTER_NAMES.join('|')}> or allAgents.`,
     );
   }
 
@@ -668,10 +668,10 @@ function selectAgents(request: { agent?: AdapterName; allAgents?: boolean }): Ad
 
 function requireSingleAgent(agent: string | undefined): AdapterName {
   if (agent === undefined) {
-    throw new RuntimeApiError('invalid-request', 'Choose exactly one agent: codex, opencode, or openclaw.');
+    throw new RuntimeApiError('invalid-request', `Choose exactly one agent: ${ADAPTER_NAMES.join(', ')}.`);
   }
   if (!isAdapterName(agent)) {
-    throw new RuntimeApiError('invalid-request', 'agent must be one of codex, opencode, or openclaw.');
+    throw new RuntimeApiError('invalid-request', `agent must be one of ${ADAPTER_NAMES.join(', ')}.`);
   }
   return agent;
 }

@@ -78,9 +78,17 @@ export type RuntimeStateSummary = {
   };
 };
 
-export type AgentName = 'codex' | 'opencode' | 'openclaw' | 'claude';
+export type AgentName = 'codex' | 'opencode' | 'openclaw' | 'claude' | 'ohmyopenagent';
 
-export type ManagedField = 'provider' | 'model' | 'baseURL' | 'apiKey' | 'contextWindow' | 'contextTokens' | 'maxTokens';
+export type ManagedField =
+  | 'provider'
+  | 'model'
+  | 'baseURL'
+  | 'apiKey'
+  | 'contextWindow'
+  | 'contextTokens'
+  | 'maxTokens'
+  | `ohMyOpenAgent.${'agents' | 'categories'}.${string}.${'model' | 'variant'}`;
 
 export type ManagedDiffChange = {
   field: ManagedField;

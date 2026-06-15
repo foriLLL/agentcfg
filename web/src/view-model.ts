@@ -194,6 +194,10 @@ export function formatFileMode(mode: number): string {
 }
 
 export function fieldLabel(field: ManagedField): string {
+  const ohMyOpenAgentLabel = ohMyOpenAgentFieldLabel(field);
+  if (ohMyOpenAgentLabel !== null) {
+    return ohMyOpenAgentLabel;
+  }
   if (field === 'baseURL') {
     return 'Base URL';
   }
@@ -219,6 +223,9 @@ export function fieldLabel(field: ManagedField): string {
 }
 
 export function agentLabel(agent: AgentName): string {
+  if (agent === 'ohmyopenagent') {
+    return 'OhMyOpenAgent';
+  }
   if (agent === 'claude') {
     return 'Claude Code';
   }
@@ -229,6 +236,22 @@ export function agentLabel(agent: AgentName): string {
     return 'OpenClaw';
   }
   return 'Codex';
+}
+
+function ohMyOpenAgentFieldLabel(field: ManagedField): string | null {
+  if (!field.startsWith('ohMyOpenAgent.')) {
+    return null;
+  }
+
+  const segments = field.split('.');
+  if (segments.length !== 4) {
+    return field;
+  }
+
+  const [, group, name, leaf] = segments;
+  const groupLabel = group === 'agents' ? 'Agent' : group === 'categories' ? 'Category' : group;
+  const leafLabel = leaf === 'model' ? '模型' : leaf === 'variant' ? 'Variant' : leaf;
+  return `OhMyOpenAgent ${groupLabel} ${name} ${leafLabel}`;
 }
 
 export function extractApplyResults(error: unknown): ApplyAgentResult[] | undefined {

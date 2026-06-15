@@ -2,7 +2,7 @@
 
 Language: English | [中文](README.zh-CN.md)
 
-agentcfg is a CLI for keeping Codex, OpenCode, OpenClaw, and Claude Code aligned across devices from one canonical `agentcfg.yaml` stored in a private GitHub Gist.
+agentcfg is a CLI for keeping Codex, OpenCode, OpenClaw, Claude Code, and OhMyOpenAgent aligned across devices from one canonical `agentcfg.yaml` stored in a private GitHub Gist.
 
 It is built for people who want one safe sync path instead of hand editing several agent config files.
 
@@ -182,7 +182,7 @@ Shows masked managed-field differences only.
 
 Use exactly one target selector:
 
-- `--agent <codex|opencode|openclaw|claude>`
+- `--agent <codex|opencode|openclaw|claude|ohmyopenagent>`
 - `--all-agents`
 
 Common flags:
@@ -242,6 +242,14 @@ For the selected canonical model, agentcfg writes official OpenClaw model metada
 Claude Code uses `settings.json`.
 
 agentcfg updates the selected model and provider environment variables for Anthropic-compatible Claude Code settings while preserving unrelated settings structurally.
+
+### OhMyOpenAgent
+
+OhMyOpenAgent uses JSON at `~/.config/opencode/oh-my-openagent.json` by default.
+
+agentcfg updates official route fields under `agents.<name>.model`, `agents.<name>.variant`, `categories.<name>.model`, and `categories.<name>.variant` from the canonical `ohMyOpenAgent` section. It preserves unrelated OhMyOpenAgent fields such as hooks, prompts, background task settings, and custom routes.
+
+If a canonical route is removed, agentcfg removes only the managed `model` and `variant` fields for supported official route names. It keeps the route object when other local fields remain.
 
 ## Managed and unmanaged fields
 

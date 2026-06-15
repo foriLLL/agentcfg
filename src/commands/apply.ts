@@ -65,11 +65,11 @@ export async function runApplyCommand(options: RunApplyCommandOptions): Promise<
 
 function selectApplyAgents(options: RunApplyCommandOptions): AdapterName[] {
   if (options.agent !== undefined && options.allAgents === true) {
-    throw new Error('Choose exactly one target selector: --agent <codex|opencode|openclaw|claude> or --all-agents');
+    throw new Error(`Choose exactly one target selector: --agent <${ADAPTER_NAMES.join('|')}> or --all-agents`);
   }
 
   if (options.agent === undefined && options.allAgents !== true) {
-    throw new Error('Choose exactly one target selector: --agent <codex|opencode|openclaw|claude> or --all-agents');
+    throw new Error(`Choose exactly one target selector: --agent <${ADAPTER_NAMES.join('|')}> or --all-agents`);
   }
 
   return options.agent === undefined ? [...ADAPTER_NAMES] : [options.agent];
