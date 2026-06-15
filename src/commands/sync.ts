@@ -18,7 +18,7 @@ export type RunSyncCommandOptions = {
 
 type ParsedSyncOnceArgs = {
   statePath?: string;
-  targets: SyncTarget[];
+  targets?: SyncTarget[];
 };
 
 type ParsedSyncServiceArgs = {
@@ -99,7 +99,7 @@ function parseSyncOnceArgs(args: readonly string[]): ParsedSyncOnceArgs {
 
   return {
     statePath,
-    targets: [...new Set(targets)],
+    ...(targets.length === 0 ? {} : { targets: [...new Set(targets)] }),
   };
 }
 

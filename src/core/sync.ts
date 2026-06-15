@@ -64,7 +64,27 @@ export async function runSyncOnce(options: SyncOnceOptions = {}): Promise<SyncOn
     throw new SyncTargetError('Run agentcfg init --gist <gist-id> before sync.');
   }
 
-  const selectedTargets = resolveSyncTargets(options.targets ?? state.autoSync?.targets);
+  if (options.targets === undefined && state.autoSync?.enabled === false) {
+    const completedAt = (options.now ?? (() => new Date()))().toISOString();
+    const result: SyncOnceResult = {
+      status: 'success',
+      startedAt,
+      completedAt,
+      targets: [],
+      agents: [],
+      ruleFiles: [],
+      message: 'Auto-sync is disabled.',
+    };
+    await updateLastSyncRun(options.statePath, {
+      status: result.status,
+      startedAt,
+      completedAt,
+      message: result.message,
+    });
+    return result;
+  }
+
+  const selectedTargets = resolveSyncTargets(options.targets ?? state.autoSync?.targets ?? defaultAutoSyncTargets());
   const agentTargets = selectedTargets.filter(isAdapterName);
   const shouldSyncRuleFiles = selectedTargets.includes(AUTO_SYNC_RULE_FILES_TARGET);
   let agents: ApplyAgentResult[] = [];

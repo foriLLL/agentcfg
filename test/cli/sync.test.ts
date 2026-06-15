@@ -65,6 +65,96 @@ test('sync once applies managed rule files from Gist', async () => {
   }
 });
 
+test('sync once uses configured auto-sync targets when no target flags are passed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-cli-sync-configured-'));
+  const statePath = join(directory, 'state.json');
+  const localPath = join(directory, '.gemini', 'GEMINI.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'cli-sync-configured-revision', {
+      'AGENTS.md': { content: '# configured codex rules\n' },
+      'CLAUDE.md': { content: '# configured claude rules\n' },
+      'GEMINI.md': { content: '# configured gemini rules\n' },
+    }),
+  });
+
+  try {
+    await mkdir(join(directory, '.gemini'), { recursive: true });
+    await writeFile(localPath, '# configured local gemini rules\n');
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          gist: { id: 'cli-sync-configured-gist' },
+          autoSync: { enabled: true, intervalMinutes: 15, targets: ['ruleFiles'] },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runCli(['sync', 'once', '--state', statePath], {
+      ...process.env,
+      HOME: directory,
+      AGENTCFG_GIST_API_BASE_URL: server.apiBaseUrl,
+      GITHUB_TOKEN: 'cli-sync-configured-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Targets: ruleFiles/);
+    assert.match(result.stdout, /Rule file GEMINI\.md: applied/);
+    assert.equal(await readFile(localPath, 'utf8'), '# configured gemini rules\n');
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('sync once skips configured targets when auto-sync is disabled', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-cli-sync-disabled-'));
+  const statePath = join(directory, 'state.json');
+  const localPath = join(directory, '.codex', 'AGENTS.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'cli-sync-disabled-revision', {
+      'AGENTS.md': { content: '# disabled remote rules\n' },
+    }),
+  });
+
+  try {
+    await mkdir(join(directory, '.codex'), { recursive: true });
+    await writeFile(localPath, '# disabled local rules\n');
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          gist: { id: 'cli-sync-disabled-gist' },
+          autoSync: { enabled: false, intervalMinutes: 15, targets: ['ruleFiles'] },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runCli(['sync', 'once', '--state', statePath], {
+      ...process.env,
+      HOME: directory,
+      AGENTCFG_GIST_API_BASE_URL: server.apiBaseUrl,
+      GITHUB_TOKEN: 'cli-sync-disabled-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Auto-sync is disabled/);
+    assert.equal(await readFile(localPath, 'utf8'), '# disabled local rules\n');
+    assert.equal(server.requests.length, 0);
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('sync service status reports without installing service', async () => {
   const result = await runCli(['sync', 'service', 'status'], process.env);
 
