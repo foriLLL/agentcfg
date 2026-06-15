@@ -1216,7 +1216,7 @@ function App() {
                       </div>
                       <div className="review-actions" aria-label="本地配置 Diff 与应用操作">
                         <button className="secondary-action" type="button" onClick={handlePull} disabled={isBusy}>
-                          {isPulling ? '正在拉取...' : '拉取 OMO/agentcfg 配置'}
+                          {isPulling ? '正在刷新...' : '刷新远端配置缓存'}
                         </button>
                         {showLocalConfigDiffButton && (
                           <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfigManagedDiff}>

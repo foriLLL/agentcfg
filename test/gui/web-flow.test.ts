@@ -455,7 +455,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
       await assertConfigEditorLayout(cdp);
-      await assertButtonVisibleInPanel(cdp, '#config-panel', '拉取 OMO/agentcfg 配置');
+      await assertButtonVisibleInPanel(cdp, '#config-panel', '刷新远端配置缓存');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '运行 diff');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '执行 dry-run');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '应用所选目标');
