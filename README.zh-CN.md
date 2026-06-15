@@ -24,6 +24,8 @@ MVP 管理私有 Gist 中的一个规范化配置文件，并从以下 provider 
 - `providers.<provider>.apiKey`
 - `providers.<provider>.models.<model>` metadata
 - 可选的 `providers.<provider>.modelDiscovery.path`
+- 可选的 `ohMyOpenAgent.agents.<agent>.model` / `variant`
+- 可选的 `ohMyOpenAgent.categories.<category>.model` / `variant`
 
 Source of truth 的规则是：Gist 对受管理字段生效，本地原生配置保留其他所有内容。
 
@@ -54,7 +56,19 @@ providers:
         contextWindow: 1047576
         contextTokens: 1047576
         maxTokens: 32768
+ohMyOpenAgent:
+  agents:
+    oracle:
+      model: openai/gpt-4.1-mini
+      variant: high
+  categories:
+    visual-engineering:
+      model: openai/gpt-4.1-mini
 ```
+
+`ohMyOpenAgent` 是 OhMyOpenAgent 官方模型路由的可选专用区块。`model` 必须用 `provider/model` 引用上方 provider catalog；空映射不会写入生成的 YAML。
+
+Provider ID 不能包含 `/`，因为 `ohMyOpenAgent` 使用 `/` 作为 `provider/model` 分隔符。Model ID 仍然可以包含 `/`，例如 OpenRouter 风格的模型名。
 
 `examples/agentcfg.yaml` 中的示例文件使用相同结构。
 
