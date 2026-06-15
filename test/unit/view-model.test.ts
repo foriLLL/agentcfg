@@ -6,10 +6,10 @@ import test from 'node:test';
 import {
   agentSupportsManagedFieldDiff,
   buildRemoteYamlPreview,
+  localReviewActionCopyForAgent,
   remoteAccessWarningForHostname,
   statusLabel,
   statusTone,
-  syncActionCopyForAgent,
 } from '../../web/src/view-model';
 import type { EditableAgentConfig, RuntimeStateSummary } from '../../web/src/api';
 
@@ -174,8 +174,8 @@ test('OhMyOpenAgent uses dry-run instead of field-level diff in the web flow', (
   assert.equal(agentSupportsManagedFieldDiff('openclaw'), true);
   assert.equal(agentSupportsManagedFieldDiff('claude'), true);
   assert.equal(agentSupportsManagedFieldDiff('ohmyopenagent'), false);
-  assert.equal(syncActionCopyForAgent('ohmyopenagent'), '拉取、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
-  assert.equal(syncActionCopyForAgent('opencode'), '拉取、diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+  assert.equal(localReviewActionCopyForAgent('ohmyopenagent'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+  assert.equal(localReviewActionCopyForAgent('opencode'), 'diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
 });
 
 test('App wires the remote access warning helper into a visible banner', async () => {

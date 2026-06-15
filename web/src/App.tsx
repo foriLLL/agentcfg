@@ -48,10 +48,10 @@ import {
   formatFileMode,
   formatManagedValue,
   formatStatus,
+  localReviewActionCopyForAgent,
   remoteAccessWarningForHostname,
   statusLabel,
   statusTone,
-  syncActionCopyForAgent,
   type Step,
 } from './view-model';
 
@@ -1212,12 +1212,9 @@ function App() {
                       <div className="path-note">
                         <span>同步目标</span>
                         <strong>{localSyncTargetLabel}</strong>
-                        <p>{syncActionCopyForAgent(configAgent)}</p>
+                        <p>{localReviewActionCopyForAgent(configAgent)}</p>
                       </div>
                       <div className="review-actions" aria-label="本地配置 Diff 与应用操作">
-                        <button className="secondary-action" type="button" onClick={handlePull} disabled={isBusy}>
-                          {isPulling ? '正在刷新...' : '刷新远端配置缓存'}
-                        </button>
                         {showLocalConfigDiffButton && (
                           <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfigManagedDiff}>
                             {isDiffing ? '正在 diff...' : '运行 diff'}

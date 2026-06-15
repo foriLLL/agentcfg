@@ -455,12 +455,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
       await assertConfigEditorLayout(cdp);
-      await assertButtonVisibleInPanel(cdp, '#config-panel', '刷新远端配置缓存');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '运行 diff');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '执行 dry-run');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '应用所选目标');
       await assertSelectorVisible(cdp, '#local-apply-confirmation');
-      await cdp.waitForText('拉取、diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+      await cdp.waitForText('diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
       await cdp.setInputValue('#config-path-editor', nativePath);
       await cdp.waitForText(nativePath);
       await cdp.clickButton('加载配置');
