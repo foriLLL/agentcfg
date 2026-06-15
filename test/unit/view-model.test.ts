@@ -49,6 +49,19 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
         },
       },
     },
+    ohMyOpenAgent: {
+      agents: {
+        oracle: {
+          model: 'openai/gpt-4.1-mini',
+          variant: 'high',
+        },
+      },
+      categories: {
+        'visual-engineering': {
+          model: 'anthropic/claude-3-5-sonnet-latest',
+        },
+      },
+    },
   };
 
   const preview = buildRemoteYamlPreview(config);
@@ -70,6 +83,46 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
   assert.match(preview, /maxTokens: 32768/);
   assert.match(preview, /"gpt-4\.1": \{\}/);
   assert.match(preview, /"claude-3-haiku": \{\}/);
+  assert.match(preview, /ohMyOpenAgent:/);
+  assert.match(preview, /agents:/);
+  assert.match(preview, /"oracle":/);
+  assert.match(preview, /model: "openai\/gpt-4\.1-mini"/);
+  assert.match(preview, /variant: "high"/);
+  assert.match(preview, /categories:/);
+  assert.match(preview, /"visual-engineering":/);
+  assert.match(preview, /model: "anthropic\/claude-3-5-sonnet-latest"/);
+});
+
+test('buildRemoteYamlPreview omits empty OhMyOpenAgent mappings', () => {
+  const config: EditableAgentConfig = {
+    schemaVersion: 1,
+    defaults: {
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+    },
+    providers: {
+      openai: {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: 'sk-visible-openai-preview',
+        },
+        models: {
+          'gpt-4.1-mini': {},
+        },
+      },
+    },
+    ohMyOpenAgent: {
+      agents: {},
+      categories: {},
+    },
+  };
+
+  const preview = buildRemoteYamlPreview(config);
+  const parsed = parseYaml(preview);
+
+  assert.equal(parsed.ohMyOpenAgent, undefined);
+  assert.doesNotMatch(preview, /ohMyOpenAgent/);
 });
 
 test('status copy treats stored remote baseline metadata as cache-ready state', () => {

@@ -88,10 +88,13 @@ export function formatDate(value: string | undefined): string {
 }
 
 export function configToDraft(config: AgentConfig): EditableAgentConfig {
+  const ohMyOpenAgent = config.ohMyOpenAgent === undefined ? undefined : cloneOhMyOpenAgentConfig(config.ohMyOpenAgent);
+
   return {
     schemaVersion: config.schemaVersion,
     defaults: { ...config.defaults },
     providers: cloneProviders(config.providers),
+    ...(ohMyOpenAgent === undefined ? {} : { ohMyOpenAgent }),
   };
 }
 
@@ -121,6 +124,23 @@ export function buildRemoteYamlPreview(config: EditableAgentConfig): string {
 
     for (const [modelId, model] of Object.entries(provider.models)) {
       lines.push(`      ${yamlScalar(modelId)}:${modelLines(model)}`);
+    }
+  }
+
+  const hasOhMyOpenAgentAgents = config.ohMyOpenAgent?.agents !== undefined && Object.keys(config.ohMyOpenAgent.agents).length > 0;
+  const hasOhMyOpenAgentCategories = config.ohMyOpenAgent?.categories !== undefined && Object.keys(config.ohMyOpenAgent.categories).length > 0;
+
+  if (hasOhMyOpenAgentAgents || hasOhMyOpenAgentCategories) {
+    lines.push('ohMyOpenAgent:');
+
+    if (hasOhMyOpenAgentAgents) {
+      lines.push('  agents:');
+      appendOhMyOpenAgentAssignments(lines, config.ohMyOpenAgent?.agents ?? {}, 4);
+    }
+
+    if (hasOhMyOpenAgentCategories) {
+      lines.push('  categories:');
+      appendOhMyOpenAgentAssignments(lines, config.ohMyOpenAgent?.categories ?? {}, 4);
     }
   }
 
@@ -251,6 +271,42 @@ function cloneProviders(providers: AgentConfig['providers']): EditableAgentConfi
   }
 
   return draftProviders;
+}
+
+function cloneOhMyOpenAgentConfig(config: NonNullable<AgentConfig['ohMyOpenAgent']>): EditableAgentConfig['ohMyOpenAgent'] {
+  const agents = cloneOhMyOpenAgentAssignments(config.agents);
+  const categories = cloneOhMyOpenAgentAssignments(config.categories);
+
+  if (agents === undefined && categories === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(agents === undefined ? {} : { agents }),
+    ...(categories === undefined ? {} : { categories }),
+  };
+}
+
+function cloneOhMyOpenAgentAssignments(assignments: NonNullable<AgentConfig['ohMyOpenAgent']>['agents']): Record<string, { model: string; variant?: 'max' | 'high' | 'medium' | 'low' | 'xhigh' }> | undefined {
+  const cloned: Record<string, { model: string; variant?: 'max' | 'high' | 'medium' | 'low' | 'xhigh' }> = {};
+
+  for (const [key, assignment] of Object.entries(assignments ?? {})) {
+    cloned[key] = { ...assignment };
+  }
+
+  return Object.keys(cloned).length === 0 ? undefined : cloned;
+}
+
+function appendOhMyOpenAgentAssignments(lines: string[], assignments: Record<string, { model: string; variant?: string }>, indent: number): void {
+  const baseIndent = ' '.repeat(indent);
+  const fieldIndent = ' '.repeat(indent + 2);
+
+  for (const [name, assignment] of Object.entries(assignments)) {
+    lines.push(`${baseIndent}${yamlScalar(name)}:`, `${fieldIndent}model: ${yamlScalar(assignment.model)}`);
+    if (assignment.variant !== undefined) {
+      lines.push(`${fieldIndent}variant: ${yamlScalar(assignment.variant)}`);
+    }
+  }
 }
 
 function modelLines(model: EditableAgentConfig['providers'][string]['models'][string]): string {

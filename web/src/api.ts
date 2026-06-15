@@ -2,12 +2,14 @@ export type AgentConfig = {
   schemaVersion: 1;
   defaults: AgentConfigDefaults;
   providers: Record<string, ProviderConfig>;
+  ohMyOpenAgent?: OhMyOpenAgentConfig;
 };
 
 export type EditableAgentConfig = {
   schemaVersion: 1;
   defaults: AgentConfigDefaults;
   providers: Record<string, ProviderConfig>;
+  ohMyOpenAgent?: OhMyOpenAgentConfig;
 };
 
 export type AgentConfigDefaults = {
@@ -32,6 +34,18 @@ export type ModelConfig = {
   contextWindow?: number;
   contextTokens?: number;
   maxTokens?: number;
+};
+
+export type OhMyOpenAgentModelVariant = 'max' | 'high' | 'medium' | 'low' | 'xhigh';
+
+export type OhMyOpenAgentModelAssignment = {
+  model: string;
+  variant?: OhMyOpenAgentModelVariant;
+};
+
+export type OhMyOpenAgentConfig = {
+  agents?: Record<string, OhMyOpenAgentModelAssignment>;
+  categories?: Record<string, OhMyOpenAgentModelAssignment>;
 };
 
 export type RemoteRevisionMetadata = {
