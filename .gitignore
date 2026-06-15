@@ -4,6 +4,7 @@ release/
 /.agentcfg-state.json
 /secrets.json
 /.agentcfg/
+/.omo/
 /state.json
 /last-state-path.json
 .DS_Store
