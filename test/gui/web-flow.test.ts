@@ -97,6 +97,24 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.installFetchRecorder();
       await assertFixtureRootControlHidden(cdp);
       await assertNoDesktopFrame(cdp);
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 638, deviceScaleFactor: 1, mobile: false });
+      await cdp.waitForFunction(`(() => {
+        const appShell = document.querySelector('.app-shell');
+        const header = document.querySelector('.app-header');
+        const tabViewport = document.querySelector('.tab-viewport');
+        const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+        if (!(appShell instanceof HTMLElement) || !(header instanceof HTMLElement) || !(tabViewport instanceof HTMLElement) || tabButtons.length === 0) {
+          return false;
+        }
+        const appShellRect = appShell.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const shellIsFlush = Math.abs(appShellRect.left) <= 1 && Math.abs(window.innerWidth - appShellRect.right) <= 1 && Math.abs(appShellRect.top) <= 1;
+        const tabsStaySingleLine = tabButtons.every((button) => button instanceof HTMLElement && window.getComputedStyle(button).whiteSpace === 'nowrap');
+        const headerUsesDesktopColumns = window.getComputedStyle(header).gridTemplateColumns.split(' ').filter(Boolean).length === 3;
+        const viewportOwnsScroll = ['auto', 'scroll'].includes(window.getComputedStyle(tabViewport).overflowY);
+        return shellIsFlush && tabsStaySingleLine && headerUsesDesktopColumns && headerRect.height < 120 && viewportOwnsScroll;
+      })()`);
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await assertDomHasNoGitHubToken(cdp, 'initial DOM');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'initial browser storage');
 
@@ -125,6 +143,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertSelectorVisible(cdp, '#remote-model-max-tokens');
       await assertSelectorVisible(cdp, '#remote-default-provider');
       await assertSelectorVisible(cdp, '#remote-default-model');
+      await assertSelectorVisible(cdp, '#remote-ohmyopenagent-agents-oracle-model');
+      await assertSelectorVisible(cdp, '#remote-ohmyopenagent-agents-oracle-variant');
+      await assertSelectorVisible(cdp, '#remote-ohmyopenagent-categories-visual-engineering-model');
       await assertSelectorVisible(cdp, '#remote-yaml-preview');
       await assertSelectorVisible(cdp, '#remote-schema-preview');
       await assertRemotePreviewLayout(cdp);
@@ -136,6 +157,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.match(initialSchemaDocs, /providers\.<provider>\.apiKey\.value/);
       assert.match(initialSchemaDocs, /providers\.<provider>\.modelDiscovery\.path/);
       assert.match(initialSchemaDocs, /providers\.<provider>\.models\.<model>\.contextWindow/);
+      assert.match(initialSchemaDocs, /ohMyOpenAgent\.agents\.<agent>\.model/);
+      assert.match(initialSchemaDocs, /ohMyOpenAgent\.categories\.<category>\.model/);
       assert.match(initialSchemaDocs, /plain/);
       assert.match(initialSchemaDocs, /plain 表示提供商 API Key 以明文存储在 agentcfg\.yaml 中，并按原值写入目标 Agent 配置/);
       assert.equal(initialSchemaDocs.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
@@ -149,6 +172,10 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model-context-window', '1047576');
       await cdp.setInputValue('#remote-model-context-tokens', '1040000');
       await cdp.setInputValue('#remote-model-max-tokens', '32768');
+      await cdp.setInputValue('#remote-provider', 'open/router');
+      await cdp.clickButton('保存远端配置');
+      await cdp.waitForText('提供商 ID 不能包含 /');
+      await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.clickButton('添加提供商');
       await cdp.setInputValue('#remote-provider', 'anthropic');
       await cdp.setInputValue('#remote-base-url', 'https://api.anthropic.com/v1');
@@ -176,6 +203,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(yamlPreviewAfterDuplicateProvider.includes('sk-gui-visible-anthropic'), true, 'duplicate provider rename dropped the current anthropic API key');
       await cdp.selectValue('#remote-default-provider', 'openai');
       await cdp.selectValue('#remote-default-model', 'gpt-4.1-mini');
+      assert.equal(await cdp.selectValue('#remote-ohmyopenagent-agents-oracle-model', 'openai/gpt-4.1-mini'), true, 'Oracle model route select was not editable');
+      assert.equal(await cdp.selectValue('#remote-ohmyopenagent-agents-oracle-variant', 'high'), true, 'Oracle variant select was not editable');
+      assert.equal(await cdp.selectValue('#remote-ohmyopenagent-categories-visual-engineering-model', 'anthropic/claude-3-5-sonnet-latest'), true, 'visual-engineering category model route select was not editable');
       const yamlPreviewWithSecretInput = await cdp.textContent('#remote-yaml-preview');
       assert.match(yamlPreviewWithSecretInput, /defaults:/);
       assert.match(yamlPreviewWithSecretInput, /providers:/);
@@ -186,11 +216,17 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.match(yamlPreviewWithSecretInput, /claude-3-5-sonnet-latest/);
       assert.match(yamlPreviewWithSecretInput, /"claude-3-haiku": \{\}/);
       assert.match(yamlPreviewWithSecretInput, /contextWindow: 200000/);
+      assert.match(yamlPreviewWithSecretInput, /ohMyOpenAgent:/);
+      assert.match(yamlPreviewWithSecretInput, /"?oracle"?:/);
+      assert.match(yamlPreviewWithSecretInput, /model: "openai\/gpt-4\.1-mini"/);
+      assert.match(yamlPreviewWithSecretInput, /variant: "high"/);
+      assert.match(yamlPreviewWithSecretInput, /"?visual-engineering"?:/);
+      assert.match(yamlPreviewWithSecretInput, /model: "anthropic\/claude-3-5-sonnet-latest"/);
       assert.equal(yamlPreviewWithSecretInput.includes(CACHED_SECRET), true, 'raw YAML preview did not show the edited API key');
       assert.equal(yamlPreviewWithSecretInput.includes('sk-gui-visible-anthropic'), true, 'raw YAML preview did not show the non-selected provider API key');
       const schemaDocsWithSecretInput = await cdp.textContent('#remote-schema-preview');
       assert.equal(schemaDocsWithSecretInput.includes(CACHED_SECRET), false, 'schema docs exposed the edited provider API key');
-      assert.doesNotMatch(schemaDocsWithSecretInput, /当前/);
+      assert.equal(schemaDocsWithSecretInput.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
       await cdp.clickButton('保存远端配置');
       await cdp.waitForText('远端配置已保存');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/save'), {
@@ -233,6 +269,19 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
                   maxTokens: 8192,
                 },
                 'claude-3-haiku': {},
+              },
+            },
+          },
+          ohMyOpenAgent: {
+            agents: {
+              oracle: {
+                model: 'openai/gpt-4.1-mini',
+                variant: 'high',
+              },
+            },
+            categories: {
+              'visual-engineering': {
+                model: 'anthropic/claude-3-5-sonnet-latest',
               },
             },
           },

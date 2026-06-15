@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
+import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
 import { FileDiffViewer } from './FileDiffViewer';
 import {
   type EditableAgentConfig,
@@ -27,6 +28,8 @@ import {
   type DiffRuntimeResponse,
   type ManagedDiffChange,
   type ManagedDiffNotice,
+  type OhMyOpenAgentModelAssignment,
+  type OhMyOpenAgentModelVariant,
   type PlanApplyRuntimeResponse,
   type RuntimeStateSummary,
   type RuntimeTargetRequest,
@@ -59,6 +62,8 @@ type Notice = {
 type TargetMode = AgentName | 'all' | '';
 
 type AppTab = 'connection' | 'remote' | 'config' | 'execute' | 'status';
+
+type OhMyOpenAgentAssignmentKind = 'agents' | 'categories';
 
 type SchemaDocTreeNode = {
   field: AgentConfigSchemaDoc;
@@ -226,6 +231,7 @@ function App() {
   const selectedRemoteModel = modelDraft(selectedRemoteProvider, selectedRemoteModelId);
   const defaultProvider = remoteDraft.providers[remoteDraft.defaults.provider] === undefined ? selectedRemoteProviderId : remoteDraft.defaults.provider;
   const defaultProviderModelIds = Object.keys(providerDraft(remoteDraft, defaultProvider).models);
+  const remoteModelReferenceOptions = useMemo(() => buildRemoteModelReferenceOptions(remoteDraft), [remoteDraft]);
   const remoteAccessWarning = useMemo(() => remoteAccessWarningForHostname(typeof window === 'undefined' ? undefined : window.location.hostname), []);
 
   useEffect(() => {
@@ -502,7 +508,7 @@ function App() {
       setRemoteEditorProviderId(nextProviderId);
       setRemoteEditorModelId(nextModelId);
 
-      return { ...currentDraft, defaults, providers };
+      return removeUnknownOhMyOpenAgentReferences({ ...currentDraft, defaults, providers });
     });
   }
 
@@ -564,14 +570,14 @@ function App() {
 
       setRemoteEditorModelId(nextModelId);
 
-      return {
+      return removeUnknownOhMyOpenAgentReferences({
         ...currentDraft,
         defaults,
         providers: {
           ...currentDraft.providers,
           [providerId]: { ...provider, models },
         },
-      };
+      });
     });
   }
 
@@ -608,6 +614,18 @@ function App() {
       ...currentDraft,
       defaults: { ...currentDraft.defaults, model: modelId },
     }));
+  }
+
+  function handleOhMyOpenAgentModelChange(kind: OhMyOpenAgentAssignmentKind, name: string, modelReference: string): void {
+    setRemoteDraft((currentDraft) => withOhMyOpenAgentModel(currentDraft, kind, name, modelReference));
+  }
+
+  function handleOhMyOpenAgentVariantChange(kind: OhMyOpenAgentAssignmentKind, name: string, variant: string): void {
+    setRemoteDraft((currentDraft) => withOhMyOpenAgentVariant(currentDraft, kind, name, variant));
+  }
+
+  function handleClearOhMyOpenAgentAssignment(kind: OhMyOpenAgentAssignmentKind, name: string): void {
+    setRemoteDraft((currentDraft) => withOhMyOpenAgentAssignment(currentDraft, kind, name, undefined));
   }
 
   async function handleDiff(): Promise<void> {
@@ -1053,6 +1071,15 @@ function App() {
                       </label>
                     </section>
 
+                    <OhMyOpenAgentMappingEditor
+                      config={remoteDraft}
+                      modelReferences={remoteModelReferenceOptions}
+                      isSavingRemote={isSavingRemote}
+                      onModelChange={handleOhMyOpenAgentModelChange}
+                      onVariantChange={handleOhMyOpenAgentVariantChange}
+                      onClear={handleClearOhMyOpenAgentAssignment}
+                    />
+
                     <div className="remote-actions">
                       <button className="secondary-action" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
                         {isLoadingRemote ? '正在加载...' : '加载远端配置'}
@@ -1376,6 +1403,124 @@ function ConfigSummary({ config }: { config: AgentConfig }) {
   );
 }
 
+function OhMyOpenAgentMappingEditor({
+  config,
+  isSavingRemote,
+  modelReferences,
+  onClear,
+  onModelChange,
+  onVariantChange,
+}: {
+  config: EditableAgentConfig;
+  isSavingRemote: boolean;
+  modelReferences: string[];
+  onClear: (kind: OhMyOpenAgentAssignmentKind, name: string) => void;
+  onModelChange: (kind: OhMyOpenAgentAssignmentKind, name: string, modelReference: string) => void;
+  onVariantChange: (kind: OhMyOpenAgentAssignmentKind, name: string, variant: string) => void;
+}) {
+  return (
+    <section className="remote-editor-section remote-editor-section--full ohmy-openagent-editor" aria-label="OhMyOpenAgent 模型路由">
+      <div className="remote-subheading">
+        <div>
+          <p className="eyebrow">OhMyOpenAgent</p>
+          <h3>为官方 agent 与 task category 指定模型</h3>
+        </div>
+      </div>
+      <p className="helper-copy ohmy-openagent-editor__copy">
+        选项来自上方 providers 模型目录，并保存到专用 <code>ohMyOpenAgent</code> 字段；留空表示继续使用 OhMyOpenAgent 默认路由。
+      </p>
+      <div className="ohmy-openagent-editor__groups">
+        <OhMyOpenAgentMappingGroup
+          kind="agents"
+          title="Agents"
+          names={OH_MY_OPENAGENT_AGENT_NAMES}
+          assignments={config.ohMyOpenAgent?.agents ?? {}}
+          modelReferences={modelReferences}
+          isSavingRemote={isSavingRemote}
+          onModelChange={onModelChange}
+          onVariantChange={onVariantChange}
+          onClear={onClear}
+        />
+        <OhMyOpenAgentMappingGroup
+          kind="categories"
+          title="Task categories"
+          names={OH_MY_OPENAGENT_CATEGORY_NAMES}
+          assignments={config.ohMyOpenAgent?.categories ?? {}}
+          modelReferences={modelReferences}
+          isSavingRemote={isSavingRemote}
+          onModelChange={onModelChange}
+          onVariantChange={onVariantChange}
+          onClear={onClear}
+        />
+      </div>
+    </section>
+  );
+}
+
+function OhMyOpenAgentMappingGroup({
+  assignments,
+  isSavingRemote,
+  kind,
+  modelReferences,
+  names,
+  onClear,
+  onModelChange,
+  onVariantChange,
+  title,
+}: {
+  assignments: Record<string, OhMyOpenAgentModelAssignment>;
+  isSavingRemote: boolean;
+  kind: OhMyOpenAgentAssignmentKind;
+  modelReferences: string[];
+  names: readonly string[];
+  onClear: (kind: OhMyOpenAgentAssignmentKind, name: string) => void;
+  onModelChange: (kind: OhMyOpenAgentAssignmentKind, name: string, modelReference: string) => void;
+  onVariantChange: (kind: OhMyOpenAgentAssignmentKind, name: string, variant: string) => void;
+  title: string;
+}) {
+  return (
+    <section className="ohmy-openagent-group" aria-label={`OhMyOpenAgent ${title}`}>
+      <h4>{title}</h4>
+      <div className="ohmy-openagent-rows">
+        {names.map((name) => {
+          const assignment = assignments[name];
+          const modelSelectId = `remote-ohmyopenagent-${kind}-${name}-model`;
+          const variantSelectId = `remote-ohmyopenagent-${kind}-${name}-variant`;
+          return (
+            <div className="ohmy-openagent-row" key={name}>
+              <div className="ohmy-openagent-row__name">
+                <strong>{name}</strong>
+                <small>{assignment?.model ?? '使用默认路由'}</small>
+              </div>
+              <label htmlFor={modelSelectId}>
+                模型
+                <select id={modelSelectId} value={assignment?.model ?? ''} onChange={(event) => onModelChange(kind, name, event.target.value)} disabled={isSavingRemote}>
+                  <option value="">OhMyOpenAgent 默认</option>
+                  {modelReferences.map((modelReference) => (
+                    <option value={modelReference} key={modelReference}>{modelReference}</option>
+                  ))}
+                </select>
+              </label>
+              <label htmlFor={variantSelectId}>
+                variant
+                <select id={variantSelectId} value={assignment?.variant ?? ''} onChange={(event) => onVariantChange(kind, name, event.target.value)} disabled={isSavingRemote || assignment === undefined}>
+                  <option value="">不指定</option>
+                  {OH_MY_OPENAGENT_MODEL_VARIANTS.map((variant) => (
+                    <option value={variant} key={variant}>{variant}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary-action secondary-action--compact" type="button" onClick={() => onClear(kind, name)} disabled={isSavingRemote || assignment === undefined}>
+                清除
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function providerDraft(config: EditableAgentConfig, providerId: string): EditableAgentConfig['providers'][string] {
   return config.providers[providerId] ?? emptyProviderDraft(config.defaults.model);
 }
@@ -1421,6 +1566,7 @@ function renameProviderDraft(config: EditableAgentConfig, previousProviderId: st
     ...config,
     defaults: config.defaults.provider === previousProviderId ? { ...config.defaults, provider: nextProviderId } : config.defaults,
     providers,
+    ohMyOpenAgent: remapOhMyOpenAgentProviderReference(config.ohMyOpenAgent, previousProviderId, nextProviderId),
   };
 }
 
@@ -1446,7 +1592,135 @@ function renameModelDraft(config: EditableAgentConfig, providerId: string, previ
       ...config.providers,
       [providerId]: { ...provider, models },
     },
+    ohMyOpenAgent: remapOhMyOpenAgentModelReference(config.ohMyOpenAgent, providerId, previousModelId, nextModelId),
   };
+}
+
+function buildRemoteModelReferenceOptions(config: EditableAgentConfig): string[] {
+  return Object.entries(config.providers).flatMap(([providerId, provider]) => (
+    Object.keys(provider.models).map((modelId) => `${providerId}/${modelId}`)
+  ));
+}
+
+function withOhMyOpenAgentModel(config: EditableAgentConfig, kind: OhMyOpenAgentAssignmentKind, name: string, modelReference: string): EditableAgentConfig {
+  if (modelReference === '') {
+    return withOhMyOpenAgentAssignment(config, kind, name, undefined);
+  }
+
+  const currentAssignment = config.ohMyOpenAgent?.[kind]?.[name];
+  return withOhMyOpenAgentAssignment(config, kind, name, {
+    model: modelReference,
+    ...(currentAssignment?.variant === undefined ? {} : { variant: currentAssignment.variant }),
+  });
+}
+
+function withOhMyOpenAgentVariant(config: EditableAgentConfig, kind: OhMyOpenAgentAssignmentKind, name: string, variant: string): EditableAgentConfig {
+  const currentAssignment = config.ohMyOpenAgent?.[kind]?.[name];
+  if (currentAssignment === undefined) {
+    return config;
+  }
+
+  return withOhMyOpenAgentAssignment(config, kind, name, {
+    model: currentAssignment.model,
+    ...(variant === '' ? {} : { variant: normalizeOhMyOpenAgentVariant(variant) }),
+  });
+}
+
+function withOhMyOpenAgentAssignment(config: EditableAgentConfig, kind: OhMyOpenAgentAssignmentKind, name: string, assignment: OhMyOpenAgentModelAssignment | undefined): EditableAgentConfig {
+  const existingConfig = config.ohMyOpenAgent ?? {};
+  const assignments = { ...(existingConfig[kind] ?? {}) };
+
+  if (assignment === undefined) {
+    delete assignments[name];
+  } else {
+    assignments[name] = assignment;
+  }
+
+  const nextOhMyOpenAgent = compactOhMyOpenAgentConfig({
+    ...existingConfig,
+    ...(Object.keys(assignments).length === 0 ? { [kind]: undefined } : { [kind]: assignments }),
+  });
+
+  return {
+    ...config,
+    ...(nextOhMyOpenAgent === undefined ? { ohMyOpenAgent: undefined } : { ohMyOpenAgent: nextOhMyOpenAgent }),
+  };
+}
+
+function removeUnknownOhMyOpenAgentReferences(config: EditableAgentConfig): EditableAgentConfig {
+  if (config.ohMyOpenAgent === undefined) {
+    return config;
+  }
+
+  const knownReferences = new Set(buildRemoteModelReferenceOptions(config));
+  const agents = filterKnownOhMyOpenAgentAssignments(config.ohMyOpenAgent.agents, knownReferences);
+  const categories = filterKnownOhMyOpenAgentAssignments(config.ohMyOpenAgent.categories, knownReferences);
+  const ohMyOpenAgent = compactOhMyOpenAgentConfig({ agents, categories });
+
+  return {
+    ...config,
+    ...(ohMyOpenAgent === undefined ? { ohMyOpenAgent: undefined } : { ohMyOpenAgent }),
+  };
+}
+
+function remapOhMyOpenAgentProviderReference(config: EditableAgentConfig['ohMyOpenAgent'], previousProviderId: string, nextProviderId: string): EditableAgentConfig['ohMyOpenAgent'] {
+  return compactOhMyOpenAgentConfig({
+    agents: remapOhMyOpenAgentAssignments(config?.agents, (assignment) => remapProviderModelReference(assignment, `${previousProviderId}/`, `${nextProviderId}/`)),
+    categories: remapOhMyOpenAgentAssignments(config?.categories, (assignment) => remapProviderModelReference(assignment, `${previousProviderId}/`, `${nextProviderId}/`)),
+  });
+}
+
+function remapOhMyOpenAgentModelReference(config: EditableAgentConfig['ohMyOpenAgent'], providerId: string, previousModelId: string, nextModelId: string): EditableAgentConfig['ohMyOpenAgent'] {
+  const previousReference = `${providerId}/${previousModelId}`;
+  const nextReference = `${providerId}/${nextModelId}`;
+  return compactOhMyOpenAgentConfig({
+    agents: remapOhMyOpenAgentAssignments(config?.agents, (assignment) => (assignment.model === previousReference ? { ...assignment, model: nextReference } : assignment)),
+    categories: remapOhMyOpenAgentAssignments(config?.categories, (assignment) => (assignment.model === previousReference ? { ...assignment, model: nextReference } : assignment)),
+  });
+}
+
+function remapProviderModelReference(assignment: OhMyOpenAgentModelAssignment, previousPrefix: string, nextPrefix: string): OhMyOpenAgentModelAssignment {
+  return assignment.model.startsWith(previousPrefix)
+    ? { ...assignment, model: `${nextPrefix}${assignment.model.slice(previousPrefix.length)}` }
+    : assignment;
+}
+
+function remapOhMyOpenAgentAssignments(
+  assignments: Record<string, OhMyOpenAgentModelAssignment> | undefined,
+  remapAssignment: (assignment: OhMyOpenAgentModelAssignment) => OhMyOpenAgentModelAssignment,
+): Record<string, OhMyOpenAgentModelAssignment> | undefined {
+  if (assignments === undefined) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(assignments).map(([name, assignment]) => [name, remapAssignment(assignment)]));
+}
+
+function filterKnownOhMyOpenAgentAssignments(assignments: Record<string, OhMyOpenAgentModelAssignment> | undefined, knownReferences: Set<string>): Record<string, OhMyOpenAgentModelAssignment> | undefined {
+  if (assignments === undefined) {
+    return undefined;
+  }
+
+  const filteredAssignments = Object.fromEntries(Object.entries(assignments).filter(([, assignment]) => knownReferences.has(assignment.model)));
+  return Object.keys(filteredAssignments).length === 0 ? undefined : filteredAssignments;
+}
+
+function compactOhMyOpenAgentConfig(config: EditableAgentConfig['ohMyOpenAgent']): EditableAgentConfig['ohMyOpenAgent'] {
+  const agents = config?.agents === undefined || Object.keys(config.agents).length === 0 ? undefined : config.agents;
+  const categories = config?.categories === undefined || Object.keys(config.categories).length === 0 ? undefined : config.categories;
+
+  if (agents === undefined && categories === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(agents === undefined ? {} : { agents }),
+    ...(categories === undefined ? {} : { categories }),
+  };
+}
+
+function normalizeOhMyOpenAgentVariant(variant: string): OhMyOpenAgentModelVariant | undefined {
+  return (OH_MY_OPENAGENT_MODEL_VARIANTS as readonly string[]).includes(variant) ? (variant as OhMyOpenAgentModelVariant) : undefined;
 }
 
 function emptyProviderDraft(modelId: string): EditableAgentConfig['providers'][string] {
@@ -1526,6 +1800,9 @@ function validateRemoteDraft(config: EditableAgentConfig): string | null {
     if (providerId.trim() === '') {
       return '提供商 ID 不能为空。';
     }
+    if (providerId.includes('/')) {
+      return `${providerLabel} 的提供商 ID 不能包含 /，因为 OhMyOpenAgent model 使用 provider/model 引用格式。`;
+    }
     if (provider.baseURL.trim() === '') {
       return `${providerLabel} 的 Base URL 不能为空。`;
     }
@@ -1553,6 +1830,42 @@ function validateRemoteDraft(config: EditableAgentConfig): string | null {
         if (model[field] !== undefined && (!Number.isInteger(model[field]) || model[field] <= 0)) {
           return `${providerLabel}/${modelLabel} 的 ${field} 必须留空或填写正整数。`;
         }
+      }
+    }
+  }
+
+  const ohMyOpenAgentValidation = validateOhMyOpenAgentDraft(config);
+  if (ohMyOpenAgentValidation !== null) {
+    return ohMyOpenAgentValidation;
+  }
+
+  return null;
+}
+
+function validateOhMyOpenAgentDraft(config: EditableAgentConfig): string | null {
+  if (config.ohMyOpenAgent === undefined) {
+    return null;
+  }
+
+  const knownReferences = new Set(buildRemoteModelReferenceOptions(config));
+  const allowedAgentNames = new Set<string>(OH_MY_OPENAGENT_AGENT_NAMES);
+  const allowedCategoryNames = new Set<string>(OH_MY_OPENAGENT_CATEGORY_NAMES);
+  const variantNames = new Set<string>(OH_MY_OPENAGENT_MODEL_VARIANTS);
+  const groups: Array<{ assignments: Record<string, OhMyOpenAgentModelAssignment> | undefined; allowedNames: Set<string>; label: string }> = [
+    { assignments: config.ohMyOpenAgent.agents, allowedNames: allowedAgentNames, label: 'agent' },
+    { assignments: config.ohMyOpenAgent.categories, allowedNames: allowedCategoryNames, label: 'task category' },
+  ];
+
+  for (const group of groups) {
+    for (const [name, assignment] of Object.entries(group.assignments ?? {})) {
+      if (!group.allowedNames.has(name)) {
+        return `OhMyOpenAgent ${group.label} "${name}" 不是当前支持的官方名称。`;
+      }
+      if (!knownReferences.has(assignment.model)) {
+        return `OhMyOpenAgent ${group.label} "${name}" 的模型必须来自当前 providers 模型目录。`;
+      }
+      if (assignment.variant !== undefined && !variantNames.has(assignment.variant)) {
+        return `OhMyOpenAgent ${group.label} "${name}" 的 variant 必须是 max、high、medium、low 或 xhigh。`;
       }
     }
   }

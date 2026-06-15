@@ -133,10 +133,10 @@ a {
 .app-shell {
   display: flex;
   flex-direction: column;
-  width: min(100% - var(--space-7), var(--content-max));
+  width: 100%;
   height: 100%;
   margin: 0 auto;
-  padding: var(--space-4) 0;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -144,7 +144,7 @@ a {
   position: relative;
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(var(--panel-min), 1fr) auto minmax(var(--panel-min), 1fr);
+  grid-template-columns: minmax(9rem, 1fr) auto minmax(8rem, 1fr);
   gap: var(--space-4);
   align-items: center;
   min-height: calc(var(--control-height) + var(--space-7));
@@ -509,7 +509,9 @@ h3 {
   gap: var(--space-1);
   align-items: center;
   width: fit-content;
+  max-width: 100%;
   padding: var(--space-1);
+  overflow-x: auto;
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-pill);
   background: var(--color-segment);
@@ -517,6 +519,7 @@ h3 {
 }
 
 .tab-button {
+  flex: 0 0 auto;
   min-height: calc(var(--control-height) - var(--space-1));
   padding: 0 var(--space-5);
   border: var(--hairline) solid transparent;
@@ -524,6 +527,7 @@ h3 {
   color: var(--color-coffee);
   font: inherit;
   font-weight: 800;
+  white-space: nowrap;
   background: transparent;
   transition: border-color var(--motion-fast), color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
 }
@@ -860,6 +864,96 @@ h3 {
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
+}
+
+.ohmy-openagent-editor {
+  gap: var(--space-4);
+}
+
+.ohmy-openagent-editor__copy {
+  margin: 0;
+}
+
+.ohmy-openagent-editor__copy code {
+  color: var(--color-link);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+.ohmy-openagent-editor__groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.ohmy-openagent-group {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  background: var(--color-paper-soft);
+}
+
+.ohmy-openagent-group h4 {
+  margin: 0;
+  color: var(--color-cocoa);
+  font-size: var(--text-body);
+}
+
+.ohmy-openagent-rows {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ohmy-openagent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: stretch;
+  min-width: 0;
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-small);
+  background: var(--color-panel-strong);
+}
+
+.ohmy-openagent-row label,
+.ohmy-openagent-row select {
+  min-width: 0;
+}
+
+.ohmy-openagent-row select {
+  width: 100%;
+}
+
+.ohmy-openagent-row .secondary-action {
+  width: 100%;
+}
+
+.ohmy-openagent-row__name {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ohmy-openagent-row__name strong,
+.ohmy-openagent-row__name small {
+  overflow-wrap: anywhere;
+}
+
+.ohmy-openagent-row__name strong {
+  color: var(--color-cocoa);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+.ohmy-openagent-row__name small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
 }
 
 .remote-actions {
@@ -1558,7 +1652,7 @@ h3 {
   border-color: color-mix(in srgb, var(--color-rust) 32%, var(--color-line));
 }
 
-@media (max-width: 68rem) {
+@media (max-width: 56rem) {
   .app-header {
     grid-template-columns: 1fr;
   }
@@ -1579,6 +1673,7 @@ h3 {
   .dashboard-grid,
   .setup-form,
   .remote-config-layout,
+  .ohmy-openagent-editor__groups,
   .config-editor-toolbar,
   .review-layout {
     grid-template-columns: 1fr;
@@ -1617,8 +1712,8 @@ h3 {
 
 @media (max-width: 42rem) {
   .app-shell {
-    width: min(100% - var(--space-4), var(--content-max));
-    padding-top: var(--space-4);
+    width: 100%;
+    padding-top: 0;
   }
 
   .card,
@@ -1649,6 +1744,14 @@ h3 {
 
   .remote-config-form {
     grid-template-columns: 1fr;
+  }
+
+  .ohmy-openagent-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ohmy-openagent-row .secondary-action {
+    width: 100%;
   }
 
   .remote-actions {
