@@ -4,7 +4,7 @@ import { CLI_COMMANDS } from '../../src/core';
 import { buildHelpText, buildVersionText } from '../../src/cli';
 
 test('scaffold exports the planned commands', () => {
-  assert.deepEqual(CLI_COMMANDS, ['init', 'pull', 'diff', 'apply', 'web']);
+  assert.deepEqual(CLI_COMMANDS, ['init', 'pull', 'diff', 'apply', 'sync', 'web']);
 });
 
 test('help text includes the planned commands', () => {

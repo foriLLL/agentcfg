@@ -17,6 +17,12 @@ export type FetchedGistConfig = {
   metadata: GistRevisionMetadata;
 };
 
+export type FetchedGistFile = {
+  filename: string;
+  content: string;
+  metadata: GistRevisionMetadata;
+};
+
 export type GistHttpHeaders = {
   get(name: string): string | null;
 };
@@ -59,6 +65,26 @@ export class GistError extends Error {
   }
 }
 
+export class GistFileNotFoundError extends GistError {
+  readonly filename: string;
+
+  constructor(filename: string) {
+    super(`Gist file ${filename} is missing from the Gist response`);
+    this.name = 'GistFileNotFoundError';
+    this.filename = filename;
+  }
+}
+
+export class GistFileTruncatedError extends GistError {
+  readonly filename: string;
+
+  constructor(filename: string) {
+    super(`Gist file ${filename} content is truncated in the Gist response`);
+    this.name = 'GistFileTruncatedError';
+    this.filename = filename;
+  }
+}
+
 export async function fetchGistAgentConfig(
   gistId: string,
   options: FetchGistOptions = {},
@@ -81,6 +107,34 @@ export async function fetchGistAgentConfig(
       revision: extractGistRevision(body),
       etag: response.headers.get('etag') ?? response.headers.get('ETag') ?? undefined,
     },
+  };
+}
+
+export async function fetchGistFile(
+  gistId: string,
+  filename: string,
+  options: FetchGistOptions = {},
+): Promise<FetchedGistFile> {
+  const normalizedGistId = gistId.trim();
+  const normalizedFilename = filename.trim();
+  if (normalizedGistId === '') {
+    throw new GistError('Gist ID is required');
+  }
+  if (normalizedFilename === '') {
+    throw new GistError('Gist filename is required');
+  }
+
+  const response = await requestGistApi(buildGistUrl(normalizedGistId, options.apiBaseUrl), options);
+
+  if (!response.ok) {
+    throw new GistError(await formatGistHttpError('fetch', response));
+  }
+
+  const body = await response.json();
+  return {
+    filename: normalizedFilename,
+    content: extractGistFileContent(body, normalizedFilename),
+    metadata: extractGistMetadata(body, response),
   };
 }
 
@@ -136,16 +190,29 @@ export async function updateGistAgentConfig(
   content: string,
   options: FetchGistOptions = {},
 ): Promise<{ id: string; metadata: GistRevisionMetadata }> {
+  return updateGistFile(gistId, GIST_AGENTCFG_FILE, content, options);
+}
+
+export async function updateGistFile(
+  gistId: string,
+  filename: string,
+  content: string,
+  options: FetchGistOptions = {},
+): Promise<{ id: string; metadata: GistRevisionMetadata }> {
   const normalizedGistId = gistId.trim();
+  const normalizedFilename = filename.trim();
   if (normalizedGistId === '') {
     throw new GistError('Gist ID is required');
+  }
+  if (normalizedFilename === '') {
+    throw new GistError('Gist filename is required');
   }
 
   const response = await requestGistApi(buildGistUrl(normalizedGistId, options.apiBaseUrl), options, {
     method: 'PATCH',
     body: JSON.stringify({
       files: {
-        [GIST_AGENTCFG_FILE]: { content },
+        [normalizedFilename]: { content },
       },
     }),
   });
@@ -278,22 +345,24 @@ async function defaultCommandRunner(command: string, args: string[]): Promise<{ 
 }
 
 function extractAgentConfigContent(body: unknown): string {
+  return extractGistFileContent(body, GIST_AGENTCFG_FILE);
+}
+
+function extractGistFileContent(body: unknown, filename: string): string {
   if (!isRecord(body) || !isRecord(body.files)) {
     throw new GistError('GitHub Gist response did not include files');
   }
 
-  const fileNames = Object.keys(body.files);
-  if (fileNames.length !== 1 || fileNames[0] !== GIST_AGENTCFG_FILE) {
-    throw new GistError(`Gist must contain exactly one file named ${GIST_AGENTCFG_FILE}`);
+  const file = body.files[filename];
+  if (file === undefined) {
+    throw new GistFileNotFoundError(filename);
   }
-
-  const file = body.files[GIST_AGENTCFG_FILE];
   if (!isRecord(file) || typeof file.content !== 'string') {
-    throw new GistError(`${GIST_AGENTCFG_FILE} content is missing from the Gist response`);
+    throw new GistError(`${filename} content is missing from the Gist response`);
   }
 
   if (file.truncated === true) {
-    throw new GistError(`${GIST_AGENTCFG_FILE} content is truncated in the Gist response`);
+    throw new GistFileTruncatedError(filename);
   }
 
   return file.content;

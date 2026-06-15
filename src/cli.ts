@@ -4,6 +4,7 @@ import { runApplyCommand } from './commands/apply';
 import { runDiffCommand } from './commands/diff';
 import { runInitCommand } from './commands/init';
 import { runPullCommand } from './commands/pull';
+import { buildSyncHelpText, runSyncCommand } from './commands/sync';
 import { buildWebHelpText, runWebCommand } from './commands/web';
 
 const VERSION = '0.0.0';
@@ -43,6 +44,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 0;
   }
 
+  if (command === 'sync' && (commandArgs.includes('--help') || commandArgs.includes('-h'))) {
+    console.log(buildSyncHelpText());
+    return 0;
+  }
+
   try {
     if (command === 'init') {
       console.log(await runInitCommand(parseInitArgs(commandArgs)));
@@ -69,6 +75,19 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
     if (command === 'apply') {
       console.log(await runApplyCommand(parseApplyArgs(commandArgs)));
+      return 0;
+    }
+
+    if (command === 'sync') {
+      console.log(
+        await runSyncCommand({
+          args: commandArgs,
+          gistOptions: {
+            apiBaseUrl: process.env.AGENTCFG_GIST_API_BASE_URL,
+            env: process.env,
+          },
+        }),
+      );
       return 0;
     }
 

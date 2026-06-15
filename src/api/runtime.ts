@@ -20,9 +20,17 @@ import {
   STATE_SCHEMA_VERSION,
   storeGistIdentity,
   clearSavedGitHubToken,
+  defaultAutoSyncTargets,
+  getManagedRuleFileStatuses,
   isNodeErrorWithCode,
+  loadManagedRuleFilesFromGist,
+  planManagedRuleFileApply,
+  applyManagedRuleFilePlans,
   updatePulledConfig,
+  updateAutoSyncConfig,
+  uploadManagedRuleFileFromLocal,
   updateGistAgentConfig,
+  runSyncOnce,
   validateAgentConfig,
   writeLocalState,
   type AgentConfigValidationError,
@@ -31,6 +39,7 @@ import {
   type CanonicalAgentConfig,
   type FetchGistOptions,
   type ManagedDiffChange,
+  type ManagedRuleFileError,
 } from '../core';
 import {
   ApplyValidationError,
@@ -65,6 +74,11 @@ import type {
   GetRuntimeStateResponse,
   InitRuntimeRequest,
   InitRuntimeResponse,
+  ManagedRuleFilesApplyRuntimeResponse,
+  ManagedRuleFilesPlanRuntimeResponse,
+  ManagedRuleFilesRemoteRuntimeResponse,
+  ManagedRuleFilesRuntimeRequest,
+  ManagedRuleFilesStatusRuntimeResponse,
   PlanApplyRuntimeRequest,
   PlanApplyRuntimeResponse,
   PullRuntimeRequest,
@@ -80,6 +94,9 @@ import type {
   RuntimeStateSummary,
   SaveConfigFileRuntimeRequest,
   SaveConfigFileRuntimeResponse,
+  AutoSyncRuntimeRequest,
+  AutoSyncRuntimeResponse,
+  SyncNowRuntimeResponse,
 } from './types';
 
 export type RuntimeServiceOptions = {
@@ -427,6 +444,127 @@ export async function saveConfigFileRuntime(request: SaveConfigFileRuntimeReques
   }
 }
 
+export async function getManagedRuleFilesRuntime(
+  request: GetRuntimeStateRequest = {},
+): Promise<ManagedRuleFilesStatusRuntimeResponse> {
+  try {
+    return {
+      state: await summarizeState(await readLocalState(request.statePath), request.statePath),
+      files: await getManagedRuleFileStatuses(),
+    };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function loadManagedRuleFilesRuntime(
+  request: ManagedRuleFilesRuntimeRequest = {},
+  options: RuntimeServiceOptions = {},
+): Promise<ManagedRuleFilesRemoteRuntimeResponse> {
+  try {
+    const state = await requireGistState(request.statePath);
+    const token = await resolveRequiredGitHubToken(request);
+    const files = await loadManagedRuleFilesFromGist(state.gist.id, withRequiredRequestToken(options.gistOptions, token));
+    await rememberGitHubTokenIfRequested(request, token);
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), files };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function initializeManagedRuleFileRuntime(
+  request: ManagedRuleFilesRuntimeRequest,
+  options: RuntimeServiceOptions = {},
+): Promise<ManagedRuleFilesRemoteRuntimeResponse> {
+  try {
+    const id = requireManagedRuleFileId(request.id);
+    const state = await requireGistState(request.statePath);
+    const token = await resolveRequiredGitHubToken(request);
+    const file = await uploadManagedRuleFileFromLocal(
+      state.gist.id,
+      id,
+      withRequiredRequestToken(options.gistOptions, token),
+    );
+    await rememberGitHubTokenIfRequested(request, token);
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), files: [file] };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function planManagedRuleFilesRuntime(
+  request: ManagedRuleFilesRuntimeRequest,
+  options: RuntimeServiceOptions = {},
+): Promise<ManagedRuleFilesPlanRuntimeResponse> {
+  try {
+    const state = await requireGistState(request.statePath);
+    const token = await resolveRequiredGitHubToken(request);
+    const plans = await planManagedRuleFileApply(
+      state.gist.id,
+      normalizeManagedRuleFileIds(request),
+      withRequiredRequestToken(options.gistOptions, token),
+    );
+    await rememberGitHubTokenIfRequested(request, token);
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), plans };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function applyManagedRuleFilesRuntime(
+  request: ManagedRuleFilesRuntimeRequest,
+  options: RuntimeServiceOptions = {},
+): Promise<ManagedRuleFilesApplyRuntimeResponse> {
+  try {
+    if (request.confirm !== 'APPLY') {
+      throw new RuntimeApiError('invalid-request', 'Rule file apply requires confirm: "APPLY".');
+    }
+    const state = await requireGistState(request.statePath);
+    const token = await resolveRequiredGitHubToken(request);
+    const plans = await planManagedRuleFileApply(
+      state.gist.id,
+      normalizeManagedRuleFileIds(request),
+      withRequiredRequestToken(options.gistOptions, token),
+    );
+    const results = await applyManagedRuleFilePlans(plans, options.applyWriteOptions);
+    await rememberGitHubTokenIfRequested(request, token);
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), results };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function saveAutoSyncRuntime(request: AutoSyncRuntimeRequest): Promise<AutoSyncRuntimeResponse> {
+  try {
+    if (request.autoSync === undefined) {
+      throw new RuntimeApiError('invalid-request', 'autoSync is required.');
+    }
+    const state = await updateAutoSyncConfig(request.statePath, request.autoSync);
+    return { state: await summarizeState(state, request.statePath) };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
+export async function syncNowRuntime(
+  request: AutoSyncRuntimeRequest = {},
+  options: RuntimeServiceOptions = {},
+): Promise<SyncNowRuntimeResponse> {
+  try {
+    const token = await resolveGitHubToken(request);
+    const result = await runSyncOnce({
+      statePath: request.statePath,
+      targets: request.targets,
+      gistOptions: withRequestToken(options.gistOptions, token),
+      applyWriteOptions: options.applyWriteOptions,
+    });
+    await rememberGitHubTokenIfRequested(request, token);
+    return { state: await summarizeState(await readLocalState(request.statePath), request.statePath), result };
+  } catch (error) {
+    throw toRuntimeApiError(error);
+  }
+}
+
 async function summarizeState(state: AgentCfgState, statePath?: string): Promise<RuntimeStateSummary> {
   return {
     statePath: resolveStatePath(statePath),
@@ -450,7 +588,44 @@ async function summarizeState(state: AgentCfgState, statePath?: string): Promise
       baseETag: state.conflict?.baseETag,
       baseConfig: state.conflict?.baseConfig,
     },
+    autoSync: state.autoSync ?? {
+      enabled: false,
+      intervalMinutes: 60,
+      targets: defaultAutoSyncTargets(),
+    },
+    lastSyncRun: state.lastSyncRun,
   };
+}
+
+async function requireGistState(statePath: string | undefined): Promise<AgentCfgState & { gist: { id: string } }> {
+  const state = await readLocalState(statePath);
+  if (state.gist === undefined) {
+    throw new RuntimeApiError('state-error', 'Run remote setup or init before syncing rule files.');
+  }
+  return { ...state, gist: state.gist };
+}
+
+function requireManagedRuleFileId(id: string | undefined): string {
+  if (id === undefined || id.trim() === '') {
+    throw new RuntimeApiError('invalid-request', 'id is required.');
+  }
+  return id;
+}
+
+function normalizeManagedRuleFileIds(request: ManagedRuleFilesRuntimeRequest): string[] {
+  if (request.id !== undefined && request.ids !== undefined) {
+    throw new RuntimeApiError('invalid-request', 'Choose id or ids, not both.');
+  }
+  if (request.id !== undefined) {
+    return [request.id];
+  }
+  if (request.ids === undefined) {
+    return [];
+  }
+  if (!Array.isArray(request.ids) || !request.ids.every((id) => typeof id === 'string' && id.trim() !== '')) {
+    throw new RuntimeApiError('invalid-request', 'ids must be an array of non-empty strings.');
+  }
+  return request.ids;
 }
 
 async function resolveConfigEditorPath(agent: AdapterName, request: ConfigFileRuntimeRequest): Promise<string> {
@@ -605,12 +780,15 @@ async function writeRemoteConfigState(
   metadata: { revision?: string; etag?: string },
 ): Promise<AgentCfgState> {
   const updatedAt = new Date().toISOString();
+  const existingState = await readLocalState(statePath);
   const state: AgentCfgState = {
     schemaVersion: STATE_SCHEMA_VERSION,
     gist: { id: gistId },
     remote: omitUndefined({ revision: metadata.revision, etag: metadata.etag, pulledAt: updatedAt }),
     cache: { config, updatedAt },
     conflict: omitUndefined({ baseConfig: config, baseRevision: metadata.revision, baseETag: metadata.etag }),
+    autoSync: existingState.autoSync,
+    lastSyncRun: existingState.lastSyncRun,
   };
   await writeLocalState(state, statePath);
   return state;
@@ -734,6 +912,9 @@ function toRuntimeApiError(error: unknown): RuntimeApiError {
       results: error.results,
     });
   }
+  if (isManagedRuleFileError(error)) {
+    return new RuntimeApiError('apply-error', error.message);
+  }
   if (error instanceof Error) {
     return new RuntimeApiError('apply-error', error.message);
   }
@@ -742,6 +923,10 @@ function toRuntimeApiError(error: unknown): RuntimeApiError {
 
 function isAgentConfigValidationError(error: unknown): error is AgentConfigValidationError {
   return error instanceof Error && error.name === 'AgentConfigValidationError';
+}
+
+function isManagedRuleFileError(error: unknown): error is ManagedRuleFileError {
+  return error instanceof Error && error.name === 'ManagedRuleFileError';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

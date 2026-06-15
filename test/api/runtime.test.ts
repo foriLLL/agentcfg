@@ -9,11 +9,14 @@ import {
   clearSavedGitHubTokenRuntime,
   diffRuntime,
   discoverProviderModelsRuntime,
+  applyManagedRuleFilesRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
+  initializeManagedRuleFileRuntime,
   getRuntimeState,
   initRuntime,
   loadRemoteConfigRuntime,
+  planManagedRuleFilesRuntime,
   planApplyRuntime,
   pullRuntime,
   saveConfigFileRuntime,
@@ -106,7 +109,9 @@ test('runtime state init and pull responses show provider API keys', async () =>
   const server = await startFakeGistServer({
     status: 200,
     etag: 'W/"api-etag"',
-    body: buildGistBody(VALID_AGENTCFG_YAML, 'api-revision'),
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'api-revision', {
+      'AGENTS.md': { content: '# codex rules\n' },
+    }),
   });
 
   try {
@@ -583,6 +588,96 @@ test('runtime config editor reads and atomically saves native config files', asy
     );
     assert.equal(await readFile(nativePath, 'utf8'), edited);
   } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime managed rule files plan and apply from Gist with backup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-rule-files-'));
+  const statePath = join(directory, 'state.json');
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const localPath = join(directory, '.codex', 'AGENTS.md');
+  const server = await startFakeGistServer([
+    {
+      status: 200,
+      body: buildGistBody(VALID_AGENTCFG_YAML, 'rules-plan-revision', {
+        'AGENTS.md': { content: '# remote codex rules\n' },
+      }),
+    },
+    {
+      status: 200,
+      body: buildGistBody(VALID_AGENTCFG_YAML, 'rules-apply-revision', {
+        'AGENTS.md': { content: '# remote codex rules\n' },
+      }),
+    },
+  ]);
+
+  try {
+    await mkdir(join(directory, '.codex'), { recursive: true });
+    await writeFile(localPath, '# local codex rules\n');
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'rules-gist' } }, null, 2)}\n`);
+
+    const planned = await planManagedRuleFilesRuntime(
+      { statePath, id: 'codex-agents', githubToken: 'rules-token' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    assert.equal(planned.plans[0]?.status, 'would-change');
+    assert.equal(planned.plans[0]?.currentContent, '# local codex rules\n');
+    assert.equal(planned.plans[0]?.expectedContent, '# remote codex rules\n');
+
+    const applied = await applyManagedRuleFilesRuntime(
+      { statePath, id: 'codex-agents', githubToken: 'rules-token', confirm: 'APPLY' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    assert.equal(applied.results[0]?.status, 'applied');
+    assert.equal(applied.results[0]?.backupPath !== undefined, true);
+    assert.equal(await readFile(localPath, 'utf8'), '# remote codex rules\n');
+    assert.deepEqual(server.requests.map(({ authorization }) => authorization), ['Bearer rules-token', 'Bearer rules-token']);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime initializes a remote managed rule file from local content', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-rule-init-'));
+  const statePath = join(directory, 'state.json');
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const localPath = join(directory, '.gemini', 'GEMINI.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: { id: 'rules-gist', ...buildGistBody('', 'rules-init-revision') },
+  });
+
+  try {
+    await mkdir(join(directory, '.gemini'), { recursive: true });
+    await writeFile(localPath, '# local gemini rules\n');
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'rules-gist' } }, null, 2)}\n`);
+
+    const initialized = await initializeManagedRuleFileRuntime(
+      { statePath, id: 'gemini-context', githubToken: 'init-token' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    const patchBody = JSON.parse(server.requests[0]?.body ?? '{}') as { files?: Record<string, { content?: string }> };
+
+    assert.equal(initialized.files[0]?.remote.status, 'available');
+    assert.equal(initialized.files[0]?.remote.status === 'available' ? initialized.files[0].remote.content : '', '# local gemini rules\n');
+    assert.equal(patchBody.files?.['GEMINI.md']?.content, '# local gemini rules\n');
+    assert.equal(JSON.stringify(initialized).includes('init-token'), false);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await server.close();
     await rm(directory, { force: true, recursive: true });
   }
 });

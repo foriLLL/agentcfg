@@ -30,12 +30,27 @@ export type ConflictMetadata = {
   baseETag?: string;
 };
 
+export type AutoSyncConfig = {
+  enabled: boolean;
+  intervalMinutes: number;
+  targets: string[];
+};
+
+export type LastSyncRunSummary = {
+  status: 'success' | 'partial' | 'failed';
+  startedAt: string;
+  completedAt: string;
+  message?: string;
+};
+
 export type AgentCfgState = {
   schemaVersion: typeof STATE_SCHEMA_VERSION;
   gist?: GistIdentity;
   remote?: RemoteRevisionMetadata;
   cache?: CachedAgentConfig;
   conflict?: ConflictMetadata;
+  autoSync?: AutoSyncConfig;
+  lastSyncRun?: LastSyncRunSummary;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -134,7 +149,12 @@ export async function storeGistIdentity(gistId: string, statePath?: string): Pro
   const state: AgentCfgState =
     existingState.gist?.id === normalizedGistId
       ? { ...existingState, gist: { id: normalizedGistId } }
-      : { schemaVersion: STATE_SCHEMA_VERSION, gist: { id: normalizedGistId } };
+      : {
+          schemaVersion: STATE_SCHEMA_VERSION,
+          gist: { id: normalizedGistId },
+          autoSync: existingState.autoSync,
+          lastSyncRun: existingState.lastSyncRun,
+        };
 
   await writeLocalState(state, statePath);
   return state;
@@ -168,8 +188,36 @@ export async function updatePulledConfig(
       baseRevision: metadata.revision,
       baseETag: metadata.etag,
     }),
+    autoSync: existingState.autoSync,
+    lastSyncRun: existingState.lastSyncRun,
   };
 
+  await writeLocalState(state, statePath);
+  return state;
+}
+
+export async function updateAutoSyncConfig(
+  statePath: string | undefined,
+  autoSync: AutoSyncConfig,
+): Promise<AgentCfgState> {
+  const existingState = await readLocalState(statePath);
+  const state: AgentCfgState = {
+    ...existingState,
+    autoSync: normalizeAutoSyncConfig(autoSync),
+  };
+  await writeLocalState(state, statePath);
+  return state;
+}
+
+export async function updateLastSyncRun(
+  statePath: string | undefined,
+  lastSyncRun: LastSyncRunSummary,
+): Promise<AgentCfgState> {
+  const existingState = await readLocalState(statePath);
+  const state: AgentCfgState = {
+    ...existingState,
+    lastSyncRun,
+  };
   await writeLocalState(state, statePath);
   return state;
 }
@@ -203,6 +251,8 @@ function parseStateJson(json: string, path: string): AgentCfgState {
     remote: parseRemoteMetadata(parsed.remote, path),
     cache: parseCachedConfig(parsed.cache, path),
     conflict: parseConflictMetadata(parsed.conflict, path),
+    autoSync: parseAutoSyncConfig(parsed.autoSync, path),
+    lastSyncRun: parseLastSyncRunSummary(parsed.lastSyncRun, path),
   });
 }
 
@@ -257,6 +307,56 @@ function parseConflictMetadata(value: unknown, path: string): ConflictMetadata |
   });
 }
 
+function parseAutoSyncConfig(value: unknown, path: string): AutoSyncConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value) || typeof value.enabled !== 'boolean') {
+    throw new StateError(`Invalid agentcfg state at ${path}: autoSync.enabled must be a boolean`);
+  }
+  const intervalMinutes = value.intervalMinutes;
+  if (typeof intervalMinutes !== 'number' || !Number.isInteger(intervalMinutes) || intervalMinutes < 1) {
+    throw new StateError(`Invalid agentcfg state at ${path}: autoSync.intervalMinutes must be a positive integer`);
+  }
+  if (!Array.isArray(value.targets) || !value.targets.every(isNonEmptyString)) {
+    throw new StateError(`Invalid agentcfg state at ${path}: autoSync.targets must be an array of non-empty strings`);
+  }
+  return {
+    enabled: value.enabled,
+    intervalMinutes,
+    targets: [...value.targets],
+  };
+}
+
+function parseLastSyncRunSummary(value: unknown, path: string): LastSyncRunSummary | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value) || !isSyncStatus(value.status)) {
+    throw new StateError(`Invalid agentcfg state at ${path}: lastSyncRun.status is invalid`);
+  }
+  if (!isNonEmptyString(value.startedAt) || !isNonEmptyString(value.completedAt)) {
+    throw new StateError(`Invalid agentcfg state at ${path}: lastSyncRun timestamps must be non-empty strings`);
+  }
+  return omitUndefined({
+    status: value.status,
+    startedAt: value.startedAt,
+    completedAt: value.completedAt,
+    message: parseOptionalString(value.message, 'lastSyncRun.message', path),
+  });
+}
+
+function normalizeAutoSyncConfig(value: AutoSyncConfig): AutoSyncConfig {
+  if (!Number.isInteger(value.intervalMinutes) || value.intervalMinutes < 1) {
+    throw new StateError('autoSync.intervalMinutes must be a positive integer');
+  }
+  return {
+    enabled: value.enabled,
+    intervalMinutes: value.intervalMinutes,
+    targets: [...new Set(value.targets.map((target) => target.trim()).filter((target) => target !== ''))],
+  };
+}
+
 function parseOptionalString(value: unknown, field: string, path: string): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -265,6 +365,10 @@ function parseOptionalString(value: unknown, field: string, path: string): strin
     throw new StateError(`Invalid agentcfg state at ${path}: ${field} must be a non-empty string`);
   }
   return value;
+}
+
+function isSyncStatus(value: unknown): value is LastSyncRunSummary['status'] {
+  return value === 'success' || value === 'partial' || value === 'failed';
 }
 
 function omitUndefined<T extends JsonRecord>(value: T): T {

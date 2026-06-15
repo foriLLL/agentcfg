@@ -23,13 +23,27 @@ export type FakeGistResponse = {
   etag?: string;
 };
 
-export function buildGistBody(content: string, revision = 'test-revision'): Record<string, unknown> {
+export function buildGistBody(
+  content: string,
+  revision = 'test-revision',
+  files: Record<string, { content: string; truncated?: boolean }> = {},
+): Record<string, unknown> {
   return {
     files: {
       'agentcfg.yaml': {
         filename: 'agentcfg.yaml',
         content,
       },
+      ...Object.fromEntries(
+        Object.entries(files).map(([filename, file]) => [
+          filename,
+          {
+            filename,
+            content: file.content,
+            ...(file.truncated === true ? { truncated: true } : {}),
+          },
+        ]),
+      ),
     },
     history: [{ version: revision }],
   };

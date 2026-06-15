@@ -3,7 +3,14 @@ import type { ApplyAgentResult } from '../core/apply';
 import type { ManagedDiffField, ManagedDiffNotice } from '../core/diff';
 import type { NativeConfigFormat } from '../core/native-io';
 import type { AgentConfigInput, CanonicalAgentConfig } from '../core/schema';
-import type { RemoteRevisionMetadata } from '../core/state';
+import type { AutoSyncConfig, LastSyncRunSummary, RemoteRevisionMetadata } from '../core/state';
+import type {
+  ManagedRuleFileApplyResult,
+  ManagedRuleFilePlan,
+  ManagedRuleFileRemote,
+  ManagedRuleFileStatus,
+  SyncOnceResult,
+} from '../core';
 
 export type RuntimeApiErrorCode =
   | 'invalid-request'
@@ -44,6 +51,8 @@ export type RuntimeStateSummary = {
     baseETag?: string;
     baseConfig?: CanonicalAgentConfig;
   };
+  autoSync?: AutoSyncConfig;
+  lastSyncRun?: LastSyncRunSummary;
 };
 
 export type GetRuntimeStateRequest = RuntimeRequest;
@@ -222,4 +231,44 @@ export type SaveConfigFileRuntimeRequest = ConfigFileRuntimeRequest & {
 
 export type SaveConfigFileRuntimeResponse = ConfigFileRuntimeResponse & {
   backupPath?: string;
+};
+
+export type ManagedRuleFilesRuntimeRequest = RemoteConfigRuntimeRequest & {
+  id?: string;
+  ids?: string[];
+  confirm?: 'APPLY' | string;
+};
+
+export type ManagedRuleFilesStatusRuntimeResponse = {
+  state: RuntimeStateSummary;
+  files: ManagedRuleFileStatus[];
+};
+
+export type ManagedRuleFilesRemoteRuntimeResponse = {
+  state: RuntimeStateSummary;
+  files: ManagedRuleFileRemote[];
+};
+
+export type ManagedRuleFilesPlanRuntimeResponse = {
+  state: RuntimeStateSummary;
+  plans: ManagedRuleFilePlan[];
+};
+
+export type ManagedRuleFilesApplyRuntimeResponse = {
+  state: RuntimeStateSummary;
+  results: ManagedRuleFileApplyResult[];
+};
+
+export type AutoSyncRuntimeRequest = RemoteConfigRuntimeRequest & {
+  autoSync?: AutoSyncConfig;
+  targets?: string[];
+};
+
+export type AutoSyncRuntimeResponse = {
+  state: RuntimeStateSummary;
+};
+
+export type SyncNowRuntimeResponse = {
+  state: RuntimeStateSummary;
+  result: SyncOnceResult;
 };

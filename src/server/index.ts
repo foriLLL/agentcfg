@@ -8,17 +8,25 @@ import {
   clearSavedGitHubTokenRuntime,
   diffRuntime,
   discoverProviderModelsRuntime,
+  applyManagedRuleFilesRuntime,
+  getManagedRuleFilesRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
   initRuntime,
+  initializeManagedRuleFileRuntime,
+  loadManagedRuleFilesRuntime,
   loadRemoteConfigRuntime,
+  planManagedRuleFilesRuntime,
   planApplyRuntime,
   pullRuntime,
   saveRemoteConfigRuntime,
   saveConfigFileRuntime,
+  saveAutoSyncRuntime,
   setupRemoteConfigRuntime,
+  syncNowRuntime,
   type ApplyRuntimeResponse,
+  type AutoSyncRuntimeResponse,
   type ClearSavedGitHubTokenRuntimeResponse,
   type ConfigAvailabilityRuntimeResponse,
   type ConfigFileRuntimeResponse,
@@ -27,6 +35,10 @@ import {
   type GetRuntimeStateResponse,
   type InitRuntimeResponse,
   type LoadRemoteConfigRuntimeResponse,
+  type ManagedRuleFilesApplyRuntimeResponse,
+  type ManagedRuleFilesPlanRuntimeResponse,
+  type ManagedRuleFilesRemoteRuntimeResponse,
+  type ManagedRuleFilesStatusRuntimeResponse,
   type PlanApplyRuntimeResponse,
   type PullRuntimeResponse,
   type RuntimeApiErrorDetails,
@@ -34,6 +46,7 @@ import {
   type SaveConfigFileRuntimeResponse,
   type SaveRemoteConfigRuntimeResponse,
   type SetupRemoteConfigRuntimeResponse,
+  type SyncNowRuntimeResponse,
 } from '../api';
 import { isNodeErrorWithCode, readLastUsedStatePath, rememberLastUsedStatePath, resolveStatePath } from '../core';
 
@@ -81,6 +94,12 @@ type ApiHandlerResult =
   | LoadRemoteConfigRuntimeResponse
   | SaveRemoteConfigRuntimeResponse
   | ClearSavedGitHubTokenRuntimeResponse
+  | ManagedRuleFilesStatusRuntimeResponse
+  | ManagedRuleFilesRemoteRuntimeResponse
+  | ManagedRuleFilesPlanRuntimeResponse
+  | ManagedRuleFilesApplyRuntimeResponse
+  | AutoSyncRuntimeResponse
+  | SyncNowRuntimeResponse
   | DiscoverProviderModelsRuntimeResponse
   | ConfigAvailabilityRuntimeResponse
   | DiffRuntimeResponse
@@ -293,6 +312,44 @@ async function dispatchApiRequest(
       ),
       configPath: stringOrUndefined(requestUrl.searchParams.get('configPath')),
     });
+  }
+
+  if (requestUrl.pathname === '/api/rules/files') {
+    if (request.method === 'GET') {
+      return getManagedRuleFilesRuntime({
+        statePath: await resolveDefaultStatePath(
+          requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
+          options,
+        ),
+      });
+    }
+    assertMethod(request, ['POST']);
+    return loadManagedRuleFilesRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/rules/init') {
+    assertMethod(request, ['POST']);
+    return initializeManagedRuleFileRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/rules/plan') {
+    assertMethod(request, ['POST']);
+    return planManagedRuleFilesRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/rules/apply') {
+    assertMethod(request, ['POST']);
+    return applyManagedRuleFilesRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/sync/settings') {
+    assertMethod(request, ['POST']);
+    return saveAutoSyncRuntime(await readRuntimeRequest(request, options));
+  }
+
+  if (requestUrl.pathname === '/api/sync/now') {
+    assertMethod(request, ['POST']);
+    return syncNowRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   throw new NotFoundError(`No API endpoint found for ${requestUrl.pathname}`);

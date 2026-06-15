@@ -565,6 +565,58 @@ test('web server can remember, reuse, and clear a local GitHub token without ret
   }
 });
 
+test('web server exposes managed rule file status and plan endpoints without leaking token', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-rules-'));
+  const statePath = join(directory, 'state.json');
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const gistServer = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(remoteYaml(CACHED_SECRET), 'server-rules-revision', {
+      'AGENTS.md': { content: '# server codex rules\n' },
+    }),
+  });
+  const server = await startWebServer({
+    host: '127.0.0.1',
+    port: 0,
+    statePath,
+    assetsDir: join(directory, 'missing-assets'),
+    env: { AGENTCFG_GIST_API_BASE_URL: gistServer.apiBaseUrl },
+  });
+
+  try {
+    await mkdir(join(directory, '.codex'), { recursive: true });
+    await writeFile(join(directory, '.codex', 'AGENTS.md'), '# local server rules\n');
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'server-rules-gist' } }, null, 2)}\n`);
+
+    const status = await requestJson(server.url, '/api/rules/files');
+    assert.equal(status.status, 200);
+    assert.equal(status.body.ok, true);
+    assert.equal(JSON.stringify(status.body).includes('AGENTS.md'), true);
+
+    const plan = await requestJson(server.url, '/api/rules/plan', {
+      githubToken: 'server-rules-token',
+      id: 'codex-agents',
+    });
+    assert.equal(plan.status, 200);
+    assert.equal(plan.body.ok, true);
+    assert.equal(JSON.stringify(plan.body).includes('# server codex rules'), true);
+    assert.equal(JSON.stringify(plan.body).includes('server-rules-token'), false);
+    assert.deepEqual(gistServer.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
+      { url: '/server-rules-gist', method: 'GET', authorization: 'Bearer server-rules-token' },
+    ]);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await server.close();
+    await gistServer.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('web server serves built assets with SPA fallback and blocks traversal', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-static-'));
   const assetsDir = join(directory, 'dist');
