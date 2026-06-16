@@ -20,8 +20,7 @@ export type Step = {
 export const MANAGED_FIELDS: ManagedField[] = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'];
 
 const REMOTE_ACCESS_WARNING_COPY = '局域网设备可能访问并读写本机 Agent 配置。仅在可信网络中使用。';
-const LOCAL_REVIEW_ACTION_COPY_WITH_DIFF = 'diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。';
-const LOCAL_REVIEW_ACTION_COPY_WITHOUT_DIFF = 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。';
+const LOCAL_REVIEW_ACTION_COPY = 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。';
 
 export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
   return [
@@ -37,7 +36,7 @@ export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
     },
     {
       title: '审阅变更',
-      copy: state?.cache.present ? '选择目标后即可执行 diff、dry-run 与应用。' : '拉取缓存后才会解锁审阅。',
+      copy: state?.cache.present ? '选择目标后即可执行 dry-run 与应用。' : '拉取缓存后才会解锁审阅。',
       state: state?.cache.present ? 'pending' : 'locked',
     },
   ];
@@ -64,8 +63,8 @@ export function agentSupportsManagedFieldDiff(agent: AgentName): boolean {
   return agent !== 'ohmyopenagent';
 }
 
-export function localReviewActionCopyForAgent(agent: AgentName | null): string {
-  return agent === null || agentSupportsManagedFieldDiff(agent) ? LOCAL_REVIEW_ACTION_COPY_WITH_DIFF : LOCAL_REVIEW_ACTION_COPY_WITHOUT_DIFF;
+export function localReviewActionCopyForAgent(_agent: AgentName | null): string {
+  return LOCAL_REVIEW_ACTION_COPY;
 }
 
 export function remoteAccessWarningForHostname(hostname: string | undefined): string | null {

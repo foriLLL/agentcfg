@@ -16,7 +16,6 @@ import {
   type EditableAgentConfig,
   applyRuntime,
   clearSavedGitHubTokenRuntime,
-  diffRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
@@ -28,14 +27,12 @@ import {
   saveRemoteConfigRuntime,
   setupRemoteConfigRuntime,
   type AgentConfig,
-  type AgentDiffResult,
   type AgentName,
   type ApplyAgentResult,
   type ApplyFilePreview,
   type ApplyPlanSummary,
   type ConfigAvailabilityEntry,
   type ConfigFileRuntimeResponse,
-  type DiffRuntimeResponse,
   type ManagedDiffChange,
   type ManagedDiffNotice,
   type OhMyOpenAgentModelAssignment,
@@ -131,7 +128,6 @@ function App() {
   const [remoteEditorModelId, setRemoteEditorModelId] = useState(EMPTY_REMOTE_CONFIG.defaults.model);
   const [remoteStatus, setRemoteStatus] = useState('输入 GitHub Token 后，应用会发现现有 agentcfg Gist；没有时会在保存远端配置时自动创建。');
   const [targetMode, setTargetMode] = useState<TargetMode>('');
-  const [diffResponse, setDiffResponse] = useState<DiffRuntimeResponse | null>(null);
   const [planResponse, setPlanResponse] = useState<PlanApplyRuntimeResponse | null>(null);
   const [planKey, setPlanKey] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<ApplyAgentResult[] | null>(null);
@@ -144,7 +140,6 @@ function App() {
   const [configStatus, setConfigStatus] = useState('尚未加载配置文件。');
   const [isSubmittingInit, setIsSubmittingInit] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
-  const [isDiffing, setIsDiffing] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [isSettingRemote, setIsSettingRemote] = useState(false);
@@ -219,17 +214,13 @@ function App() {
   const reviewKey = targetRequest === null ? '' : JSON.stringify(targetRequest);
   const isPlanCurrent = planResponse !== null && planKey === reviewKey;
   const hasSavedGitHubToken = runtimeState?.secrets?.hasGitHubToken === true;
-  const isBusy = isSubmittingInit || isPulling || isDiffing || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
+  const isBusy = isSubmittingInit || isPulling || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
-  const canReviewManagedDiff = canReview && (targetRequest?.agent === undefined || agentSupportsManagedFieldDiff(targetRequest.agent));
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
   const configAgent = targetMode === '' || targetMode === 'all' ? null : targetMode;
   const canReviewLocalConfig = configAgent !== null && canReview;
-  const canReviewLocalConfigManagedDiff = configAgent !== null && agentSupportsManagedFieldDiff(configAgent) && canReview;
   const canApplyLocalConfig = configAgent !== null && canApply;
   const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
-  const showLocalConfigDiffButton = configAgent === null || agentSupportsManagedFieldDiff(configAgent);
-  const showReviewDiffButton = targetMode === '' || targetMode === 'all' || (configAgent !== null && agentSupportsManagedFieldDiff(configAgent));
   const localSyncTargetLabel = configAgent === null ? '请选择单个本地配置目标' : `${agentLabel(configAgent)} / ${configPath.trim() === '' ? '默认检测路径' : configPath.trim()}`;
   const configBusy = isLoadingConfig || isSavingConfig;
   const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
@@ -393,7 +384,6 @@ function App() {
     try {
       const { state } = await pullRuntime(githubTokenRequest(requestStatePath));
       commitRuntimeState(state);
-      setDiffResponse(null);
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
@@ -466,7 +456,6 @@ function App() {
       setGistId(response.state.gist.id ?? gistId);
       replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已保存。表单和预览已回填最终写入的完整值。');
-      setDiffResponse(null);
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
@@ -677,35 +666,6 @@ function App() {
     setRemoteDraft((currentDraft) => withOhMyOpenAgentAssignment(currentDraft, kind, name, undefined));
   }
 
-  async function handleDiff(): Promise<void> {
-    if (targetRequest === null) {
-      setNotice({ tone: 'error', title: '请选择目标', copy: '运行 diff 前请选择支持字段 diff 的目标或全部代理。' });
-      return;
-    }
-
-    if (targetRequest.agent !== undefined && !agentSupportsManagedFieldDiff(targetRequest.agent)) {
-      await handlePlan();
-      return;
-    }
-
-    setIsDiffing(true);
-    setNotice(null);
-    setApplyResults(null);
-    try {
-      setDiffResponse(await diffRuntime(targetRequest));
-      setPlanResponse(null);
-      setPlanKey(null);
-      setNotice({ tone: 'success', title: 'Diff 已就绪', copy: '托管字段已按代理分组，API Key 按真实值显示。' });
-    } catch (error) {
-      setDiffResponse(null);
-      setPlanResponse(null);
-      setPlanKey(null);
-      setNotice({ tone: 'error', title: 'Diff 需要处理', copy: formatError(error) });
-    } finally {
-      setIsDiffing(false);
-    }
-  }
-
   async function handlePlan(): Promise<void> {
     if (targetRequest === null) {
       setNotice({ tone: 'error', title: '请选择目标', copy: '规划写入前请只选择一个目标模式。' });
@@ -797,7 +757,6 @@ function App() {
       setConfigFile(response);
       setConfigDraft(response.content);
       setConfigStatus(response.backupPath === undefined ? '配置已保存' : `配置已保存，备份：${response.backupPath}`);
-      setDiffResponse(null);
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
@@ -1193,7 +1152,7 @@ function App() {
                       />
                     </label>
                     <div className="path-note">
-                      留空时使用检测到的默认原生配置；仅当所选代理的原生配置在其他文件或目录时填写。该值会同时作为 diff、dry-run、应用的路径覆盖。
+                      留空时使用检测到的默认原生配置；仅当所选代理的原生配置在其他文件或目录时填写。该值会同时作为 dry-run、应用的路径覆盖。
                     </div>
                     <div className="path-note">
                       <span>当前目标</span>
@@ -1213,12 +1172,7 @@ function App() {
                         <strong>{localSyncTargetLabel}</strong>
                         <p>{localReviewActionCopyForAgent(configAgent)}</p>
                       </div>
-                      <div className="review-actions" aria-label="本地配置 Diff 与应用操作">
-                        {showLocalConfigDiffButton && (
-                          <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewLocalConfigManagedDiff}>
-                            {isDiffing ? '正在 diff...' : '运行 diff'}
-                          </button>
-                        )}
+                      <div className="review-actions" aria-label="本地配置 dry-run 与应用操作">
                         <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReviewLocalConfig}>
                           {isPlanning ? '正在规划...' : '执行 dry-run'}
                         </button>
@@ -1251,8 +1205,7 @@ function App() {
                   <span>{configStatus}</span>
                   {configFile !== null && <strong>{configFile.path}</strong>}
                 </div>
-                <section className="review-results config-review-results" aria-label="本地配置 Diff、dry-run 与应用结果">
-                  <DiffResults results={diffResponse?.results ?? null} />
+                <section className="review-results config-review-results" aria-label="本地配置 dry-run 与应用结果">
                   <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
                   <ApplyResults results={applyResults} />
                 </section>
@@ -1309,7 +1262,7 @@ function App() {
                 <div className="section-heading section-heading--split">
                   <div>
                     <p className="eyebrow">审阅与应用</p>
-                    <h2>Diff、dry-run、再输入确认应用</h2>
+                    <h2>Dry-run、再输入确认应用</h2>
                   </div>
                   <StatusBadge tone={isPlanCurrent ? 'ready' : targetMode === '' ? 'pending' : 'warning'}>
                     {isPlanCurrent ? 'Dry-run 已就绪' : targetMode === '' ? '选择目标' : '需要 dry-run'}
@@ -1354,12 +1307,7 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="review-actions" aria-label="Diff 与应用操作">
-                      {showReviewDiffButton && (
-                        <button className="secondary-action" type="button" onClick={handleDiff} disabled={!canReviewManagedDiff}>
-                          {isDiffing ? '正在 diff...' : '运行 diff'}
-                        </button>
-                      )}
+                    <div className="review-actions" aria-label="dry-run 与应用操作">
                       <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReview}>
                         {isPlanning ? '正在规划...' : '执行 dry-run'}
                       </button>
@@ -1388,8 +1336,7 @@ function App() {
                     </div>
                   </section>
 
-                  <section className="review-results" aria-label="Diff、dry-run 与应用结果">
-                    <DiffResults results={diffResponse?.results ?? null} />
+                  <section className="review-results" aria-label="dry-run 与应用结果">
                     <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
                     <ApplyResults results={applyResults} />
                   </section>
@@ -1975,32 +1922,6 @@ function validateOhMyOpenAgentDraft(config: EditableAgentConfig): string | null 
   return null;
 }
 
-function DiffResults({ results }: { results: AgentDiffResult[] | null }) {
-  if (results === null) {
-    return <EmptyCopy title="尚未运行 diff" copy="选择目标后运行 diff，以比较托管字段。" />;
-  }
-
-  const fieldDiffResults = results.filter((result) => agentSupportsManagedFieldDiff(result.agent));
-  if (fieldDiffResults.length === 0) {
-    return <EmptyCopy title="字段 diff 不适用" copy="此目标使用 dry-run 文件预览审阅变更。" />;
-  }
-
-  return (
-    <section className="result-stack" aria-label="Diff 结果">
-      <ResultHeading eyebrow="Diff" title="托管字段变更" />
-      {fieldDiffResults.map((result) => (
-        <AgentChangeCard
-          key={result.agent}
-          title={agentLabel(result.agent)}
-          subtitle="当前原生值 -> 预期缓存值"
-          changes={result.changes}
-          notices={result.notices}
-        />
-      ))}
-    </section>
-  );
-}
-
 function PlanResults({ plans, results, stale }: { plans: ApplyPlanSummary[] | null; results: ApplyAgentResult[] | null; stale: boolean }) {
   if (plans === null || results === null) {
     return <EmptyCopy title="需要 dry-run" copy="应用按钮解锁前必须先获得成功计划。" />;
@@ -2066,22 +1987,6 @@ function ResultHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
       <p className="eyebrow">{eyebrow}</p>
       <h3>{title}</h3>
     </div>
-  );
-}
-
-function AgentChangeCard({ title, subtitle, changes, notices }: { title: string; subtitle: string; changes: ManagedDiffChange[]; notices: ManagedDiffNotice[] }) {
-  return (
-    <article className="agent-result-card">
-      <div className="agent-result-card__header">
-        <div>
-          <h3>{title}</h3>
-          <p>{subtitle}</p>
-        </div>
-        <StatusBadge tone={changes.length > 0 ? 'warning' : 'ready'}>{changes.length > 0 ? '有变更' : '未变化'}</StatusBadge>
-      </div>
-      <NoticeList notices={notices} />
-      <FieldRows changes={changes} />
-    </article>
   );
 }
 

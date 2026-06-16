@@ -1700,7 +1700,7 @@ h3 {
 }
 
 .config-editor-toolbar .path-form .local-sync-panel .review-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .local-sync-panel .apply-lock {

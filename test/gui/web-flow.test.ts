@@ -455,11 +455,10 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
       await assertConfigEditorLayout(cdp);
-      await assertButtonVisibleInPanel(cdp, '#config-panel', '运行 diff');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '执行 dry-run');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '应用所选目标');
       await assertSelectorVisible(cdp, '#local-apply-confirmation');
-      await cdp.waitForText('diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+      await cdp.waitForText('dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
       await cdp.setInputValue('#config-path-editor', nativePath);
       await cdp.waitForText(nativePath);
       await cdp.clickButton('加载配置');
@@ -476,18 +475,6 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('配置已保存');
       const nativeAfterEditorSave = await readFile(nativePath, 'utf8');
       assert.equal(nativeAfterEditorSave.includes('gui-editor-secret'), true);
-
-      const localDiffRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/diff').length;
-      assert.equal(await cdp.clickButton('运行 diff'), true, 'local config diff button was not clickable');
-      await cdp.waitForFunction(`(() => {
-        const requests = window.__agentcfgFetchBodies ?? [];
-        return requests.filter((request) => request.url === '/api/diff').length > ${localDiffRequestCountBefore};
-      })()`);
-      await cdp.waitForText('Diff 已就绪');
-      await assertPanelContainsText(cdp, '#config-panel', CACHED_SECRET);
-      await assertPanelContainsText(cdp, '#config-panel', 'gui-editor-secret');
-      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/diff'), { statePath, agent: 'opencode', configPath: nativePath });
-      await assertDomHasNoGitHubToken(cdp, 'post-local-diff DOM');
 
       const localPlanRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/apply/plan').length;
       assert.equal(await cdp.clickButton('执行 dry-run'), true, 'local config dry-run button was not clickable');
@@ -529,11 +516,6 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
       await cdp.clickButton('审阅与应用');
-      await cdp.clickButton('运行 diff');
-      await cdp.waitForText('Diff 已就绪');
-      await cdp.waitForText(CACHED_SECRET);
-      await cdp.waitForText('gui-editor-after-local-apply-secret');
-      await assertDomHasNoGitHubToken(cdp, 'post-diff DOM');
 
       await cdp.clickButton('执行 dry-run');
       await cdp.waitForText('Dry-run 完成');
@@ -621,20 +603,6 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           && pathInput instanceof HTMLInputElement
           && pathInput.value === ${JSON.stringify(codexNativePath)};
       })()`);
-      const diffRequestCountBeforeCodex = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/diff').length;
-      assert.equal(await cdp.clickButton('运行 diff'), true, 'Codex diff button was not clickable');
-      await cdp.waitForFunction(`(() => {
-        const requests = window.__agentcfgFetchBodies ?? [];
-        return requests.filter((request) => request.url === '/api/diff').length > ${diffRequestCountBeforeCodex};
-      })()`);
-      assert.equal((await lastRecordedJsonBody(cdp, '/api/diff')).agent, 'codex', 'Codex UI diff did not target Codex');
-      await cdp.waitForText('Limit Context');
-      await cdp.waitForText('Limit Input');
-      await cdp.waitForText('Limit Output');
-      await cdp.waitForText('unsupported-native-mapping');
-      await cdp.waitForText('Codex has no official native mapping for contextWindow');
-      assert.equal((await cdp.bodyText()).includes('未变化'), true, 'Codex notice-only diff did not remain unchanged');
-      await assertDomHasNoGitHubToken(cdp, 'post-Codex-diff DOM');
 
       assert.equal(await cdp.clickButton('执行 dry-run'), true, 'Codex dry-run button was not clickable');
       await cdp.waitForText('Dry-run 完成');
