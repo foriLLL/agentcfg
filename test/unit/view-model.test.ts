@@ -178,11 +178,14 @@ test('OhMyOpenAgent uses dry-run instead of field-level diff in the web flow', (
   assert.equal(localReviewActionCopyForAgent('opencode'), 'diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
 });
 
-test('App wires the remote access warning helper into a visible banner', async () => {
+test('App wires the remote access warning helper into toast notifications', async () => {
   const appSource = await readFile(join(process.cwd(), 'web', 'src', 'App.tsx'), 'utf8');
+  const toastSource = await readFile(join(process.cwd(), 'web', 'src', 'NoticeToast.tsx'), 'utf8');
 
   assert.match(appSource, /remoteAccessWarningForHostname\(typeof window === 'undefined' \? undefined : window\.location\.hostname\)/);
-  assert.match(appSource, /className="notice-stack"/);
-  assert.match(appSource, /<strong>远程访问警告<\/strong>/);
-  assert.match(appSource, /<span>\{remoteAccessWarning\}<\/span>/);
+  assert.match(appSource, /<NoticeToast notice=\{notice\} remoteAccessWarning=\{remoteAccessWarning\}/);
+  assert.match(appSource, /window\.setTimeout\(\(\) => setNotice\(null\), 4500\)/);
+  assert.match(toastSource, /className="toast-region"/);
+  assert.match(toastSource, /<strong>远程访问警告<\/strong>/);
+  assert.match(toastSource, /<span>\{remoteAccessWarning\}<\/span>/);
 });

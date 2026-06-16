@@ -3,6 +3,7 @@ import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
 import { CommandCenterShell } from './CommandCenterShell';
 import { FileDiffViewer } from './FileDiffViewer';
+import { NoticeToast, type ToastNotice } from './NoticeToast';
 import { RulesPanel } from './RulesPanel';
 import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
 import { StatusRail } from './StatusRail';
@@ -63,11 +64,7 @@ import {
   type Step,
 } from './view-model';
 
-type Notice = {
-  tone: 'success' | 'error';
-  title: string;
-  copy: string;
-};
+type Notice = ToastNotice;
 
 type TargetMode = AgentName | 'all' | '';
 
@@ -274,6 +271,17 @@ function App() {
   useEffect(() => {
     setConfirmationText('');
   }, [reviewKey]);
+
+  useEffect(() => {
+    if (notice === null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotice(null), 4500);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [notice]);
 
   useEffect(() => {
     setConfigFile(null);
@@ -802,13 +810,6 @@ function App() {
     }
   }
 
-  const noticeNode = notice && (
-    <section className={`notice notice--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">
-      <strong>{notice.title}</strong>
-      <span>{notice.copy}</span>
-    </section>
-  );
-
   const loadErrorNode = loadState === 'error' && (
     <section className="empty-state" role="status">
       <p className="eyebrow">状态不可用</p>
@@ -817,30 +818,15 @@ function App() {
     </section>
   );
 
-  const remoteAccessWarningNode = remoteAccessWarning && (
-    <section className="notice" role="alert" aria-live="polite">
-      <strong>远程访问警告</strong>
-      <span>{remoteAccessWarning}</span>
-    </section>
-  );
-
-  const noticeStackNode = (remoteAccessWarningNode || noticeNode) && (
-    <section className="notice-stack" aria-label="页面提示">
-      {remoteAccessWarningNode}
-      {noticeNode}
-    </section>
-  );
-
   return (
     <CommandCenterShell
       activeTab={activeTab}
-      loadState={loadState}
       runtimeState={runtimeState}
       onTabChange={setActiveTab}
       statusRail={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} />}
     >
+        <NoticeToast notice={notice} remoteAccessWarning={remoteAccessWarning} onDismiss={() => setNotice(null)} />
         <section className="tab-viewport">
-          {noticeStackNode}
           {activeTab === 'overview' && (
             <WorkflowOverview steps={workflowSteps} onNavigate={setActiveTab} onRunDryRun={handlePlan} />
           )}
