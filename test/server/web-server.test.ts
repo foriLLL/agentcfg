@@ -384,6 +384,9 @@ test('web server returns structured errors for invalid JSON and missing API endp
 
 test('web server reports native config availability for every known agent', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-config-availability-'));
+  const codexDirectory = join(directory, '.codex');
+  const codexPath = join(codexDirectory, 'config.toml');
+  const codexEnvPath = join(codexDirectory, '.env');
   const opencodeDirectory = join(directory, '.config', 'opencode');
   const opencodePath = join(opencodeDirectory, 'opencode.json');
   const server = await startWebServer({ host: '127.0.0.1', port: 0, assetsDir: join(directory, 'missing-assets') });
@@ -391,7 +394,10 @@ test('web server reports native config availability for every known agent', asyn
 
   try {
     process.env.HOME = directory;
+    await mkdir(codexDirectory, { recursive: true });
     await mkdir(opencodeDirectory, { recursive: true });
+    await writeFile(codexPath, codexNativeToml());
+    await writeFile(codexEnvPath, `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
     await writeFile(opencodePath, opencodeNativeJson(NATIVE_SECRET));
 
     const rejectedFixtureRoot = await requestJson(server.url, `/api/config/availability?fixturesRoot=${encodeURIComponent(directory)}`);
@@ -404,15 +410,27 @@ test('web server reports native config availability for every known agent', asyn
     if (availability.body.ok !== true) throw new Error('Expected availability success');
 
     assert.deepEqual(availability.body.data.agents.map((entry: { agent: string; available: boolean; status: string }) => ({ agent: entry.agent, available: entry.available, status: entry.status })), [
-      { agent: 'codex', available: false, status: 'missing' },
+      { agent: 'codex', available: true, status: 'available' },
       { agent: 'opencode', available: true, status: 'available' },
       { agent: 'openclaw', available: false, status: 'missing' },
       { agent: 'claude', available: false, status: 'missing' },
       { agent: 'ohmyopenagent', available: false, status: 'missing' },
     ]);
+    assert.equal(availability.body.data.agents[0].path, codexPath);
+    assert.deepEqual(
+      availability.body.data.agents[0].files.map((file: { label: string; path: string; exists: boolean; format?: string }) => ({
+        label: file.label,
+        path: file.path,
+        exists: file.exists,
+        format: file.format,
+      })),
+      [
+        { label: '主配置', path: codexPath, exists: true, format: 'toml' },
+        { label: 'API Key 环境变量', path: codexEnvPath, exists: true, format: 'env' },
+      ],
+    );
     assert.equal(availability.body.data.agents[1].path, opencodePath);
     assert.equal(availability.body.data.agents[1].format, 'json');
-    assert.match(availability.body.data.agents[0].reason, /Missing codex native config/);
     assert.match(availability.body.data.agents[2].reason, /Missing openclaw native config/);
     assert.match(availability.body.data.agents[3].reason, /Missing claude native config/);
     assert.match(availability.body.data.agents[4].reason, /Missing ohmyopenagent native config/);

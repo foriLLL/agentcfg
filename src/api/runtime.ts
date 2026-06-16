@@ -1,4 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { ADAPTER_NAMES, getAdapter, type AdapterName } from '../adapters';
 import { isAdapterName, resolveAdapterConfigPath } from '../adapters/registry';
 import {
@@ -41,7 +43,6 @@ import {
   type AgentConfigInput,
   type CanonicalAgentConfig,
   type FetchGistOptions,
-  type ManagedDiffChange,
   type ManagedRuleFileError,
 } from '../core';
 import {
@@ -50,18 +51,16 @@ import {
   planApply,
   plansToResults,
   type ApplyAgentPlan,
-  type ApplyAgentResult,
   type ApplyWriteOptions,
 } from '../core/apply';
 import { DiffError } from '../core/diff';
 import type { AgentCfgState } from '../core/state';
 import type {
-  ApiAgentDiffResult,
-  ApiApplyAgentResult,
   ApiApplyFilePreview,
   ApiApplyPlanSummary,
   ApplyRuntimeRequest,
   ApplyRuntimeResponse,
+  ConfigAssociatedFile,
   ClearSavedGitHubTokenRuntimeRequest,
   ClearSavedGitHubTokenRuntimeResponse,
   ConfigAvailabilityEntry,
@@ -398,13 +397,15 @@ export async function getConfigAvailabilityRuntime(
     try {
       const configPath = await resolveConfigEditorPath(agent, { ...request, agent });
       const fileStat = await stat(configPath);
+      const format = detectNativeConfigFormat(configPath);
       agents.push({
         agent,
         available: true,
         status: 'available',
         path: configPath,
-        format: detectNativeConfigFormat(configPath),
+        format,
         updatedAt: fileStat.mtime.toISOString(),
+        files: await buildConfigAssociatedFiles(agent, configPath),
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to resolve native config.';
@@ -412,12 +413,71 @@ export async function getConfigAvailabilityRuntime(
         agent,
         available: false,
         status: reason.startsWith('Ambiguous') ? 'ambiguous' : 'missing',
+        files: await buildMissingConfigAssociatedFiles(agent, request),
         reason,
       });
     }
   }
 
   return { agents };
+}
+
+async function buildConfigAssociatedFiles(agent: AdapterName, configPath: string): Promise<ConfigAssociatedFile[]> {
+  const files = [await describeAssociatedFile('primary', '主配置', configPath, detectNativeConfigFormat(configPath))];
+
+  if (agent === 'codex') {
+    files.push(await describeAssociatedFile('generated-env', 'API Key 环境变量', join(homedir(), '.codex', '.env'), 'env'));
+  }
+
+  return files;
+}
+
+async function buildMissingConfigAssociatedFiles(
+  agent: AdapterName,
+  request: ConfigAvailabilityRuntimeRequest,
+): Promise<ConfigAssociatedFile[]> {
+  const configPath = request.configPath?.trim() === '' || request.configPath === undefined ? getAdapter(agent).defaultConfigPath() : request.configPath;
+  const files = [await describeAssociatedFile('primary', '主配置', configPath, safeDetectNativeConfigFormat(configPath))];
+
+  if (agent === 'codex') {
+    files.push(await describeAssociatedFile('generated-env', 'API Key 环境变量', join(homedir(), '.codex', '.env'), 'env'));
+  }
+
+  return files;
+}
+
+async function describeAssociatedFile(
+  role: ConfigAssociatedFile['role'],
+  label: string,
+  path: string,
+  format?: ConfigAssociatedFile['format'],
+): Promise<ConfigAssociatedFile> {
+  const fileStat = await stat(path).catch((error: unknown) => {
+    if (isNodeErrorWithCode(error, 'ENOENT')) {
+      return undefined;
+    }
+    throw error;
+  });
+
+  return {
+    role,
+    label,
+    path,
+    exists: fileStat !== undefined,
+    ...(format === undefined ? {} : { format }),
+    ...(fileStat === undefined ? {} : { updatedAt: fileStat.mtime.toISOString() }),
+  };
+}
+
+function safeDetectNativeConfigFormat(path: string): ConfigAssociatedFile['format'] | undefined {
+  try {
+    return detectNativeConfigFormat(path);
+  } catch (error) {
+    if (error instanceof NativeConfigParseError) {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 export async function saveConfigFileRuntime(request: SaveConfigFileRuntimeRequest): Promise<SaveConfigFileRuntimeResponse> {

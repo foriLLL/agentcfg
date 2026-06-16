@@ -1781,14 +1781,39 @@ h3 {
   background: var(--color-link-soft);
 }
 
-.agent-config-icon {
-  width: 1.2rem;
-  height: 1.2rem;
+.agent-config-logo {
+  width: 1.35rem;
+  height: 1.35rem;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.8;
+  stroke-width: 1.7;
+}
+
+.agent-config-logo--codex {
+  stroke-width: 1.45;
+}
+
+.agent-config-logo--claude {
+  color: #c15f2c;
+  fill: currentColor;
+  stroke: none;
+}
+
+.agent-config-logo--opencode {
+  color: #151515;
+  overflow: hidden;
+  border-radius: var(--radius-small);
+  stroke: none;
+}
+
+.agent-config-logo--openclaw {
+  color: #256f55;
+}
+
+.agent-config-logo--ohmyopenagent {
+  color: #5146d9;
 }
 
 .config-agent-tab strong,
@@ -1853,6 +1878,47 @@ h3 {
   color: var(--color-coffee);
   font-size: var(--text-small);
   line-height: var(--line-body);
+}
+
+.config-associated-files {
+  grid-column: 1 / -1;
+}
+
+.config-associated-files ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-associated-files li {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  background: var(--color-panel);
+}
+
+.config-associated-files code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-cocoa);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-associated-files small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 750;
+  white-space: nowrap;
 }
 
 .raw-config-target-grid {
@@ -2504,6 +2570,16 @@ h3 {
   .remote-command-panel,
   .config-agent-tabs {
     grid-template-columns: 1fr;
+  }
+
+  .config-associated-files li {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .config-associated-files code,
+  .config-associated-files small {
+    white-space: normal;
   }
 
   .command-main,

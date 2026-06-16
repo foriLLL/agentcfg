@@ -966,6 +966,9 @@ test('runtime config editor resolves default Claude Code settings candidate and 
     assert.equal(claude?.status, 'available');
     assert.equal(claude?.path, nativePath);
     assert.equal(claude?.format, 'json');
+    assert.deepEqual(claude?.files.map((file) => ({ label: file.label, path: file.path, exists: file.exists, format: file.format })), [
+      { label: '主配置', path: nativePath, exists: true, format: 'json' },
+    ]);
   } finally {
     if (previousHome === undefined) {
       delete process.env.HOME;

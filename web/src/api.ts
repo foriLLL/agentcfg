@@ -193,6 +193,14 @@ export type ConfigAvailabilityEntry = {
   path?: string;
   format?: 'json' | 'jsonc' | 'json5' | 'toml';
   updatedAt?: string;
+  files: Array<{
+    role: 'primary' | 'generated-env';
+    label: string;
+    path: string;
+    exists: boolean;
+    format?: 'json' | 'jsonc' | 'json5' | 'toml' | 'env';
+    updatedAt?: string;
+  }>;
   reason?: string;
 };
 

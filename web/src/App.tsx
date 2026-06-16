@@ -4,6 +4,7 @@ import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPEN
 import { AgentConfigIcon } from './AgentConfigIcon';
 import { CommandCenterShell } from './CommandCenterShell';
 import { FileDiffViewer } from './FileDiffViewer';
+import { LocalConfigAgentSummary } from './LocalConfigAgentSummary';
 import { NoticeToast, type ToastNotice } from './NoticeToast';
 import { RulesPanel } from './RulesPanel';
 import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
@@ -1153,25 +1154,14 @@ function App() {
                     );
                   })}
                 </div>
-                <div className="config-agent-summary" id="config-agent-panel" role="tabpanel" aria-labelledby={configAgent === null ? undefined : `config-agent-${configAgent}-tab`}>
-                  <div>
-                    <span>当前 Agent</span>
-                    <strong>{selectedConfigTarget?.title ?? '请选择 Agent'}</strong>
-                  </div>
-                  <div>
-                    <span>配置文件</span>
-                    <strong>{configFile?.path ?? selectedConfigAvailability?.path ?? (configAgent === null ? '未选择' : configPathModeLabel)}</strong>
-                  </div>
-                  <p>
-                    {configAgent === null
-                      ? '选择上方 Agent 后，可以加载、编辑并保存它的原生配置。'
-                      : selectedConfigAvailability?.available === false
-                        ? selectedConfigAvailability.reason ?? '未找到可编辑的配置文件。'
-                        : configFile === null
-                          ? '尚未加载配置文件；可直接使用默认检测路径，或填写下方路径覆盖。'
-                          : `已加载 ${selectedConfigTarget?.copy ?? '配置原文'}。`}
-                  </p>
-                </div>
+                <LocalConfigAgentSummary
+                  availability={selectedConfigAvailability}
+                  configAgent={configAgent}
+                  configFile={configFile}
+                  configPathModeLabel={configPathModeLabel}
+                  targetCopy={selectedConfigTarget?.copy}
+                  targetTitle={selectedConfigTarget?.title}
+                />
                 <div className="config-editor-toolbar">
                   <div className="path-form">
                     <label htmlFor="config-path-editor">

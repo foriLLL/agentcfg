@@ -199,6 +199,15 @@ export type ConfigFileRuntimeRequest = RuntimeRequest & {
 
 export type ConfigAvailabilityStatus = 'available' | 'missing' | 'ambiguous';
 
+export type ConfigAssociatedFile = {
+  role: 'primary' | 'generated-env';
+  label: string;
+  path: string;
+  exists: boolean;
+  format?: NativeConfigFormat | 'env';
+  updatedAt?: string;
+};
+
 export type ConfigAvailabilityEntry = {
   agent: AdapterName;
   available: boolean;
@@ -206,6 +215,7 @@ export type ConfigAvailabilityEntry = {
   path?: string;
   format?: NativeConfigFormat;
   updatedAt?: string;
+  files: ConfigAssociatedFile[];
   reason?: string;
 };
 
