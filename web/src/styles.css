@@ -499,7 +499,9 @@ h3 {
 .config-editor-body,
 .remote-editor-card,
 .diff-card,
-.execute-card {
+.execute-card,
+.rules-card,
+.sync-card {
   grid-column: span 12;
 }
 
@@ -1623,6 +1625,13 @@ h3 {
   align-items: start;
 }
 
+.rules-card,
+.sync-card {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+}
+
 .rules-list,
 .rules-actions,
 .sync-settings,
@@ -1816,7 +1825,9 @@ h3 {
   .conflict-card,
   .remote-editor-card,
   .diff-card,
-  .execute-card {
+  .execute-card,
+  .rules-card,
+  .sync-card {
     grid-column: auto;
   }
 }
