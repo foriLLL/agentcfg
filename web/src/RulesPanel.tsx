@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileDiffViewer } from './FileDiffViewer';
-import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
 import {
   applyManagedRuleFilesRuntime,
   getManagedRuleFilesRuntime,
@@ -191,12 +190,6 @@ export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, request
 
         <RulesResults plans={plans} results={results} />
       </article>
-      <SkillsDirectoryPanel
-        requestStatePath={requestStatePath}
-        buildGitHubTokenRequest={buildGitHubTokenRequest}
-        onState={onState}
-        onNotice={onNotice}
-      />
     </section>
   );
 }

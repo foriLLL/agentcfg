@@ -1,9 +1,16 @@
 import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
+import { CommandCenterShell } from './CommandCenterShell';
 import { FileDiffViewer } from './FileDiffViewer';
 import { RulesPanel } from './RulesPanel';
+import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
+import { StatusRail } from './StatusRail';
 import { SyncPanel } from './SyncPanel';
+import { WorkflowOverview } from './WorkflowOverview';
+import { buildCommandCenterWorkflow } from './command-center-model';
+import type { AppTab } from './navigation';
+import { useCommandCenterStatus } from './useCommandCenterStatus';
 import {
   type EditableAgentConfig,
   applyRuntime,
@@ -52,7 +59,6 @@ import {
   formatStatus,
   localReviewActionCopyForAgent,
   remoteAccessWarningForHostname,
-  statusLabel,
   statusTone,
   type Step,
 } from './view-model';
@@ -64,8 +70,6 @@ type Notice = {
 };
 
 type TargetMode = AgentName | 'all' | '';
-
-type AppTab = 'connection' | 'remote' | 'config' | 'rules' | 'sync' | 'execute' | 'status';
 
 type RemoteConfigView = 'editor' | 'preview';
 
@@ -135,7 +139,7 @@ function App() {
   const [planKey, setPlanKey] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<ApplyAgentResult[] | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
-  const [activeTab, setActiveTab] = useState<AppTab>('connection');
+  const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [remoteConfigView, setRemoteConfigView] = useState<RemoteConfigView>('editor');
   const [configFile, setConfigFile] = useState<ConfigFileRuntimeResponse | null>(null);
   const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
@@ -250,6 +254,22 @@ function App() {
   const defaultProviderModelIds = Object.keys(providerDraft(remoteDraft, defaultProvider).models);
   const remoteModelReferenceOptions = useMemo(() => buildRemoteModelReferenceOptions(remoteDraft), [remoteDraft]);
   const remoteAccessWarning = useMemo(() => remoteAccessWarningForHostname(typeof window === 'undefined' ? undefined : window.location.hostname), []);
+  const commandCenterStatus = useCommandCenterStatus({
+    loadState,
+    requestStatePath,
+    onState: commitRuntimeState,
+  });
+  const workflowSteps = useMemo(
+    () =>
+      buildCommandCenterWorkflow({
+        runtimeState,
+        status: commandCenterStatus,
+        isPlanCurrent,
+        canReview,
+        applyResults,
+      }),
+    [applyResults, canReview, commandCenterStatus, isPlanCurrent, runtimeState],
+  );
 
   useEffect(() => {
     setConfirmationText('');
@@ -812,32 +832,18 @@ function App() {
   );
 
   return (
-    <main className="app-shell" aria-labelledby="page-title">
-        <header className="app-header">
-          <div className="app-title-area">
-            <p className="eyebrow">本地控制台</p>
-            <h1 id="page-title">agentcfg</h1>
-          </div>
-
-          <nav className="tab-bar" role="tablist" aria-label="功能切换">
-            <TabButton id="connection-tab" active={activeTab === 'connection'} controls="connection-panel" onClick={() => setActiveTab('connection')}>连接 GitHub</TabButton>
-            <TabButton id="remote-tab" active={activeTab === 'remote'} controls="remote-panel" onClick={() => setActiveTab('remote')}>远端配置</TabButton>
-            <TabButton id="config-tab" active={activeTab === 'config'} controls="config-panel" onClick={() => setActiveTab('config')}>本地配置</TabButton>
-            <TabButton id="rules-tab" active={activeTab === 'rules'} controls="rules-panel" onClick={() => setActiveTab('rules')}>规则文件</TabButton>
-            <TabButton id="sync-tab" active={activeTab === 'sync'} controls="sync-panel" onClick={() => setActiveTab('sync')}>自动同步</TabButton>
-            <TabButton id="execute-tab" active={activeTab === 'execute'} controls="execute-panel" onClick={() => setActiveTab('execute')}>审阅与应用</TabButton>
-            <TabButton id="status-tab" active={activeTab === 'status'} controls="status-panel" onClick={() => setActiveTab('status')}>状态详情</TabButton>
-          </nav>
-
-          <div className="header-actions" aria-label="状态与同步操作">
-            <StatusBadge tone={statusTone(runtimeState)}>
-              {loadState === 'loading' ? '正在加载会话' : statusLabel(runtimeState)}
-            </StatusBadge>
-          </div>
-        </header>
-
+    <CommandCenterShell
+      activeTab={activeTab}
+      loadState={loadState}
+      runtimeState={runtimeState}
+      onTabChange={setActiveTab}
+      statusRail={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} />}
+    >
         <section className="tab-viewport">
           {noticeStackNode}
+          {activeTab === 'overview' && (
+            <WorkflowOverview steps={workflowSteps} onNavigate={setActiveTab} onRunDryRun={handlePlan} />
+          )}
           {activeTab === 'connection' && (
             <section className="dashboard-grid dashboard-grid--connection" id="connection-panel" role="tabpanel" aria-labelledby="connection-tab">
               {loadErrorNode}
@@ -1290,6 +1296,17 @@ function App() {
             />
           )}
 
+          {activeTab === 'skills' && (
+            <section className="dashboard-grid dashboard-grid--rules" id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
+              <SkillsDirectoryPanel
+                requestStatePath={requestStatePath}
+                buildGitHubTokenRequest={() => githubTokenRequest()}
+                onState={commitRuntimeState}
+                onNotice={showNotice}
+              />
+            </section>
+          )}
+
           {activeTab === 'sync' && (
             <SyncPanel
               runtimeState={runtimeState}
@@ -1464,15 +1481,7 @@ function App() {
             </section>
           )}
         </section>
-    </main>
-  );
-}
-
-function TabButton({ active, children, controls, id, onClick }: { active: boolean; children: string; controls: string; id: string; onClick: () => void }) {
-  return (
-    <button id={id} className={`tab-button ${active ? 'tab-button--active' : ''}`} type="button" role="tab" aria-selected={active} aria-controls={controls} tabIndex={active ? 0 : -1} onClick={onClick}>
-      {children}
-    </button>
+    </CommandCenterShell>
   );
 }
 
