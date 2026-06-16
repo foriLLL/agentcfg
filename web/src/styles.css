@@ -250,7 +250,7 @@ a {
 
 .command-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 20rem;
+  grid-template-columns: minmax(0, 1fr) 21.25rem;
   min-width: 0;
   min-height: 0;
 }
@@ -272,7 +272,7 @@ a {
 .command-rail {
   min-width: 0;
   min-height: 0;
-  padding: var(--space-5) var(--space-5) var(--space-5) 0;
+  padding: var(--space-5);
   overflow: auto;
 }
 
