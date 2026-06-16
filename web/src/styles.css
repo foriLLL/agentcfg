@@ -1712,7 +1712,7 @@ h3 {
 }
 
 .config-review-results {
-  max-height: clamp(calc(var(--space-10) * 3), 34vh, calc(var(--space-10) * 6));
+  overflow: visible;
   padding: var(--space-4);
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-large);
