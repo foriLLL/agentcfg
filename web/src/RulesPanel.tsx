@@ -29,6 +29,11 @@ type RulesPanelProps = {
 };
 
 type RuleSelection = string | 'all';
+type RuleTargetOption = {
+  readonly id: RuleSelection;
+  readonly label: string;
+  readonly copy: string;
+};
 
 export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, requestStatePath, runtimeState }: RulesPanelProps) {
   const [files, setFiles] = useState<ManagedRuleFileStatus[]>([]);
@@ -57,6 +62,17 @@ export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, request
 
   const selectedFile = useMemo(() => files.find((file) => file.id === selection), [files, selection]);
   const selectedRemote = useMemo(() => remoteFiles.find((file) => file.id === selection), [remoteFiles, selection]);
+  const targetOptions = useMemo<RuleTargetOption[]>(
+    () => [
+      ...files.map((file) => ({
+        id: file.id,
+        label: file.label,
+        copy: file.local.exists ? file.localPath : '本地缺失，应用时会创建',
+      })),
+      { id: 'all', label: '全部规则文件', copy: '一次处理 Codex、Claude 与 Gemini 三项规则文件' },
+    ],
+    [files],
+  );
   const canApply = plans.length > 0 && confirmationText === 'APPLY' && !isBusy;
 
   async function refreshLocalStatus(): Promise<void> {
@@ -136,13 +152,26 @@ export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, request
 
         <div className="rules-layout">
           <section className="rules-list" aria-label="规则文件列表">
-            <label htmlFor="rule-file-selection">
-              同步目标
-              <select id="rule-file-selection" value={selection} onChange={(event) => setSelection(event.target.value)}>
-                {files.map((file) => <option value={file.id} key={file.id}>{file.label}</option>)}
-                <option value="all">全部规则文件</option>
-              </select>
-            </label>
+            <div className="rule-target-picker" role="group" aria-label="同步目标">
+              <div>
+                <p className="eyebrow">同步目标</p>
+                <h3>选择要同步的规则文件</h3>
+              </div>
+              <div className="rule-target-grid">
+                {targetOptions.map((target) => (
+                  <button
+                    className={`rule-target-option ${selection === target.id ? 'rule-target-option--active' : ''}`}
+                    type="button"
+                    aria-pressed={selection === target.id}
+                    onClick={() => setSelection(target.id)}
+                    key={target.id}
+                  >
+                    <strong>{target.label}</strong>
+                    <span>{target.copy}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="rule-file-table" role="list">
               {files.map((file) => (
                 <div className="rule-file-row" key={file.id} role="listitem">

@@ -138,8 +138,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       });
 
       await cdp.waitForText('远端配置');
-      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '加载远端配置');
-      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存远端配置');
+      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取到表单');
+      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存到 Gist');
       await assertNoRemoteBottomActions(cdp);
       await assertSelectorVisible(cdp, '#remote-provider');
       await assertSelectorVisible(cdp, '#remote-model');
@@ -185,7 +185,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model-context-tokens', '1040000');
       await cdp.setInputValue('#remote-model-max-tokens', '32768');
       await cdp.setInputValue('#remote-provider', 'open/router');
-      await cdp.clickButton('保存远端配置');
+      await cdp.clickButton('保存到 Gist');
       await cdp.waitForText('提供商 ID 不能包含 /');
       await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.clickButton('添加提供商');
@@ -245,7 +245,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(schemaDocsWithSecretInput.includes(CACHED_SECRET), false, 'schema docs exposed the edited provider API key');
       assert.equal(schemaDocsWithSecretInput.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
       await switchRemoteConfigView(cdp, 'editor');
-      await cdp.clickButton('保存远端配置');
+      await cdp.clickButton('保存到 Gist');
       await cdp.waitForText('远端配置已保存');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/save'), {
         statePath,
@@ -329,7 +329,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.clickButton('取消编辑');
       await assertSavedGitHubTokenLocked(cdp, 'cancelled GitHub Token edit input');
       await cdp.clickButton('远端配置');
-      await cdp.clickButton('加载远端配置');
+      await cdp.clickButton('读取到表单');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after load');
       await switchRemoteConfigView(cdp, 'preview');
@@ -394,7 +394,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           leftStatusPresent: titleArea?.querySelector(':scope > span') !== null,
           headerButtonCount: headerActions?.querySelectorAll('button').length ?? -1,
           headerStatusPresent: headerActions?.querySelector('.status-badge') !== null,
-          remotePullPresent: Array.from(remotePanel?.querySelectorAll('.section-actions button') ?? []).some((button) => button.textContent?.includes('拉取远端') === true),
+          remotePullPresent: Array.from(remotePanel?.querySelectorAll('.section-actions button') ?? []).some((button) => button.textContent?.includes('刷新本地缓存') === true),
         };
       })()`), {
         leftStatusPresent: false,
@@ -409,7 +409,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(stateAfterSave.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after remote save/load');
       assert.equal(JSON.parse(stateAfterSave).gist.id, 'gui-gist-id');
 
-      await cdp.clickButton('拉取远端');
+      await cdp.clickButton('刷新本地缓存');
       await cdp.waitForText('已拉取远端配置');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the pulled value after pull');
       await switchRemoteConfigView(cdp, 'preview');
@@ -440,20 +440,20 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('OpenCode');
       await cdp.waitForText('Claude Code');
       await cdp.waitForFunction(`(() => {
-        const codex = document.querySelector('input[name="config-target-mode"][value="codex"]');
-        const opencode = document.querySelector('input[name="config-target-mode"][value="opencode"]');
-        const claude = document.querySelector('input[name="config-target-mode"][value="claude"]');
-        return codex instanceof HTMLInputElement
-          && opencode instanceof HTMLInputElement
-          && claude instanceof HTMLInputElement
+        const codex = document.querySelector('#config-agent-codex-tab');
+        const opencode = document.querySelector('#config-agent-opencode-tab');
+        const claude = document.querySelector('#config-agent-claude-tab');
+        return codex instanceof HTMLButtonElement
+          && opencode instanceof HTMLButtonElement
+          && claude instanceof HTMLButtonElement
           && codex.disabled
           && !opencode.disabled
           && claude.disabled;
       })()`);
-      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="codex"]'), true, 'Codex config target was not disabled when its config was missing');
-      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="opencode"]'), false, 'OpenCode config target was disabled even though its config existed');
-      assert.equal(await cdp.inputDisabled('input[name="config-target-mode"][value="claude"]'), true, 'Claude Code config target was not disabled when its config was missing');
-      await cdp.clickSelector('input[name="config-target-mode"][value="opencode"]');
+      assert.equal(await cdp.buttonDisabled('#config-agent-codex-tab'), true, 'Codex config target was not disabled when its config was missing');
+      assert.equal(await cdp.buttonDisabled('#config-agent-opencode-tab'), false, 'OpenCode config target was disabled even though its config existed');
+      assert.equal(await cdp.buttonDisabled('#config-agent-claude-tab'), true, 'Claude Code config target was not disabled when its config was missing');
+      await cdp.clickSelector('#config-agent-opencode-tab');
       await assertConfigEditorLayout(cdp);
       await assertButtonVisibleInPanel(cdp, '#config-panel', '执行 dry-run');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '应用所选目标');
@@ -831,6 +831,13 @@ class CdpPage {
     return this.evaluate<boolean>(`(() => {
       const input = document.querySelector(${JSON.stringify(selector)});
       return input instanceof HTMLInputElement && input.disabled;
+    })()`);
+  }
+
+  buttonDisabled(selector: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const button = document.querySelector(${JSON.stringify(selector)});
+      return button instanceof HTMLButtonElement && button.disabled;
     })()`);
   }
 

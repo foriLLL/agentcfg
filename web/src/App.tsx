@@ -1,6 +1,7 @@
 import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../src/core/schema-docs';
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
+import { AgentConfigIcon } from './AgentConfigIcon';
 import { CommandCenterShell } from './CommandCenterShell';
 import { FileDiffViewer } from './FileDiffViewer';
 import { NoticeToast, type ToastNotice } from './NoticeToast';
@@ -84,11 +85,11 @@ const TARGET_OPTIONS: Array<{ value: Exclude<TargetMode, ''>; title: string; cop
 ];
 
 const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: string }> = [
-  { value: 'codex', title: 'Codex', copy: '查看 Codex TOML 配置原文。' },
-  { value: 'opencode', title: 'OpenCode', copy: '查看 OpenCode JSON/JSONC 配置原文。' },
-  { value: 'openclaw', title: 'OpenClaw', copy: '查看 OpenClaw JSON/JSON5 配置原文。' },
-  { value: 'claude', title: 'Claude Code', copy: '查看 Claude Code settings.json 配置原文。' },
-  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '查看 OhMyOpenAgent JSON 路由配置原文。' },
+  { value: 'codex', title: 'Codex', copy: 'TOML 配置原文' },
+  { value: 'opencode', title: 'OpenCode', copy: 'JSON / JSONC 配置原文' },
+  { value: 'openclaw', title: 'OpenClaw', copy: 'JSON / JSON5 配置原文' },
+  { value: 'claude', title: 'Claude Code', copy: 'settings.json 配置原文' },
+  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '模型路由 JSON 原文' },
 ];
 
 const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
@@ -225,6 +226,9 @@ function App() {
   const configBusy = isLoadingConfig || isSavingConfig;
   const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
   const isConfigAgentAvailable = configAgent === null ? false : configAvailabilityByAgent.get(configAgent)?.available === true;
+  const selectedConfigTarget = configAgent === null ? undefined : CONFIG_TARGET_OPTIONS.find((target) => target.value === configAgent);
+  const selectedConfigAvailability = configAgent === null ? undefined : configAvailabilityByAgent.get(configAgent);
+  const configPathModeLabel = configPath.trim() === '' ? '默认检测路径' : configPath.trim();
   const canLoadConfig = configAgent !== null && isConfigAgentAvailable && !configBusy;
   const canSaveConfig = configAgent !== null && configFile !== null && configDraft !== configFile.content && !configBusy;
   const isGitHubTokenLocked = hasSavedGitHubToken && !isEditingGitHubToken;
@@ -917,23 +921,28 @@ function App() {
                     <p className="eyebrow">远端配置</p>
                     <h2>用表单生成并保存 agentcfg.yaml，不需要手写 Gist 内容。</h2>
                   </div>
-                  <div className="section-actions">
+                  <div className="section-actions remote-command-panel" aria-label="远端配置操作">
                     <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>{runtimeState?.gist.present ? '已绑定 Gist' : '保存时创建'}</StatusBadge>
-                    <button className="secondary-action secondary-action--compact" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
-                      {isLoadingRemote ? '正在加载...' : '加载远端配置'}
+                    <button className="remote-command-card" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
+                      <span>Gist → 表单</span>
+                      <strong>{isLoadingRemote ? '正在读取...' : '读取到表单'}</strong>
+                      <small>只更新当前页面，不写本地 Agent。</small>
                     </button>
                     <button
-                      className="primary-action primary-action--compact"
+                      className="remote-command-card remote-command-card--primary"
                       type={remoteConfigView === 'editor' ? 'submit' : 'button'}
                       form={remoteConfigView === 'editor' ? 'remote-config-form' : undefined}
                       onClick={remoteConfigView === 'editor' ? undefined : () => { void handleSaveRemoteConfig(); }}
                       disabled={isSavingRemote}
                     >
-                      {isSavingRemote ? '正在保存...' : '保存远端配置'}
+                      <span>表单 → Gist</span>
+                      <strong>{isSavingRemote ? '正在保存...' : '保存到 Gist'}</strong>
+                      <small>把当前表单写入 agentcfg.yaml。</small>
                     </button>
-                    <button className="primary-action primary-action--compact" type="button" onClick={handlePull} disabled={isBusy}>
-                      <span aria-hidden="true">↓</span>
-                      {isPulling ? '正在拉取...' : '拉取远端'}
+                    <button className="remote-command-card" type="button" onClick={handlePull} disabled={isBusy}>
+                      <span>Gist → 本地缓存</span>
+                      <strong>{isPulling ? '正在刷新...' : '刷新本地缓存'}</strong>
+                      <small>更新 dry-run 和应用使用的本地基线。</small>
                     </button>
                   </div>
                 </div>
@@ -1116,30 +1125,54 @@ function App() {
                     {configFile === null ? '未加载' : configDraft === configFile.content ? '已同步' : '有未保存修改'}
                   </StatusBadge>
                 </div>
+                <div className="config-agent-tabs" role="tablist" aria-label="选择本地配置 Agent">
+                  {CONFIG_TARGET_OPTIONS.map((target) => {
+                    const availability = configAvailabilityByAgent.get(target.value);
+                    const unavailable = availability?.available === false;
+                    const active = targetMode === target.value;
+                    return (
+                      <button
+                        id={`config-agent-${target.value}-tab`}
+                        className={`config-agent-tab ${active ? 'config-agent-tab--active' : ''}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        aria-controls="config-agent-panel"
+                        disabled={isLoadingConfigAvailability || unavailable}
+                        onClick={() => setTargetMode(target.value)}
+                        key={target.value}
+                      >
+                        <span className="config-agent-tab__icon" aria-hidden="true">
+                          <AgentConfigIcon agent={target.value} />
+                        </span>
+                        <span>
+                          <strong>{target.title}</strong>
+                          <small>{unavailable ? '不可用' : target.copy}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="config-agent-summary" id="config-agent-panel" role="tabpanel" aria-labelledby={configAgent === null ? undefined : `config-agent-${configAgent}-tab`}>
+                  <div>
+                    <span>当前 Agent</span>
+                    <strong>{selectedConfigTarget?.title ?? '请选择 Agent'}</strong>
+                  </div>
+                  <div>
+                    <span>配置文件</span>
+                    <strong>{configFile?.path ?? selectedConfigAvailability?.path ?? (configAgent === null ? '未选择' : configPathModeLabel)}</strong>
+                  </div>
+                  <p>
+                    {configAgent === null
+                      ? '选择上方 Agent 后，可以加载、编辑并保存它的原生配置。'
+                      : selectedConfigAvailability?.available === false
+                        ? selectedConfigAvailability.reason ?? '未找到可编辑的配置文件。'
+                        : configFile === null
+                          ? '尚未加载配置文件；可直接使用默认检测路径，或填写下方路径覆盖。'
+                          : `已加载 ${selectedConfigTarget?.copy ?? '配置原文'}。`}
+                  </p>
+                </div>
                 <div className="config-editor-toolbar">
-                  <fieldset className="target-grid raw-config-target-grid">
-                    <legend>选择要查看的配置文件</legend>
-                    {CONFIG_TARGET_OPTIONS.map((target) => {
-                      const availability = configAvailabilityByAgent.get(target.value);
-                      const unavailable = availability?.available === false;
-                      return (
-                        <label className="target-option" key={target.value}>
-                          <input
-                            type="radio"
-                            name="config-target-mode"
-                            value={target.value}
-                            checked={targetMode === target.value}
-                            onChange={() => setTargetMode(target.value)}
-                            disabled={isLoadingConfigAvailability || unavailable}
-                          />
-                          <span>
-                            <strong>{target.title}</strong>
-                            <small>{unavailable ? availability.reason ?? '未找到可编辑的配置文件。' : target.copy}</small>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </fieldset>
                   <div className="path-form">
                     <label htmlFor="config-path-editor">
                       配置路径覆盖
@@ -1153,10 +1186,6 @@ function App() {
                     </label>
                     <div className="path-note">
                       留空时使用检测到的默认原生配置；仅当所选代理的原生配置在其他文件或目录时填写。该值会同时作为 dry-run、应用的路径覆盖。
-                    </div>
-                    <div className="path-note">
-                      <span>当前目标</span>
-                      <strong>{configAgent === null ? '请选择单个代理' : agentLabel(configAgent)}</strong>
                     </div>
                     <div className="review-actions" aria-label="配置文件操作">
                       <button className="secondary-action" type="button" onClick={handleLoadConfigFile} disabled={!canLoadConfig}>

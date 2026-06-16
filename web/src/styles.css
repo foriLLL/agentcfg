@@ -1008,6 +1008,59 @@ h3 {
   max-width: 100%;
 }
 
+.remote-command-panel {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(10.5rem, 1fr));
+  gap: var(--space-3);
+  align-items: stretch;
+  max-width: 48rem;
+}
+
+.remote-command-card {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 4.1rem;
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--color-line-strong);
+  border-radius: var(--radius-large);
+  color: var(--color-cocoa);
+  text-align: left;
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+  transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+}
+
+.remote-command-card:not(:disabled):hover {
+  transform: translateY(calc(var(--space-1) * -1));
+  border-color: color-mix(in srgb, var(--color-link) 34%, var(--color-line-strong));
+}
+
+.remote-command-card--primary {
+  border-color: color-mix(in srgb, var(--color-link) 44%, var(--color-line-strong));
+  color: var(--color-link);
+  background: var(--color-link-soft);
+  box-shadow: 0 var(--space-2) var(--space-5) color-mix(in srgb, var(--color-link) 14%, transparent);
+}
+
+.remote-command-card span,
+.remote-command-card small {
+  overflow-wrap: anywhere;
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 800;
+}
+
+.remote-command-card span {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.remote-command-card strong {
+  color: inherit;
+  font-size: var(--text-small);
+}
+
 .status-badge {
   flex: 0 0 auto;
   padding: var(--space-2) var(--space-3);
@@ -1669,9 +1722,137 @@ h3 {
 }
 
 .config-editor-toolbar {
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   min-width: 0;
+}
+
+.config-agent-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(8rem, 1fr));
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-paper-soft);
+}
+
+.config-agent-tab {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  min-height: 4rem;
+  padding: var(--space-3);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-medium);
+  color: var(--color-cocoa);
+  text-align: left;
+  background: transparent;
+  transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+}
+
+.config-agent-tab:not(:disabled):hover {
+  transform: translateY(calc(var(--space-1) * -1));
+  border-color: color-mix(in srgb, var(--color-link) 24%, var(--color-line-strong));
+  background: var(--color-panel-strong);
+}
+
+.config-agent-tab--active {
+  border-color: color-mix(in srgb, var(--color-link) 42%, var(--color-line-strong));
+  color: var(--color-link);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+}
+
+.config-agent-tab:disabled {
+  opacity: 0.48;
+}
+
+.config-agent-tab__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-small);
+  color: var(--color-link);
+  background: var(--color-link-soft);
+}
+
+.agent-config-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.config-agent-tab strong,
+.config-agent-tab small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-agent-tab strong {
+  color: inherit;
+  font-size: var(--text-small);
+}
+
+.config-agent-tab small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 750;
+}
+
+.config-agent-summary {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.42fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: linear-gradient(180deg, var(--color-panel-strong), color-mix(in srgb, var(--color-paper-soft) 48%, var(--color-panel-strong)));
+  box-shadow: inset 0 var(--hairline) 0 var(--color-highlight-inset);
+}
+
+.config-agent-summary div,
+.config-agent-summary p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.config-agent-summary div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.config-agent-summary span {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.config-agent-summary strong {
+  color: var(--color-link);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+.config-agent-summary p {
+  grid-column: 1 / -1;
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
 }
 
 .raw-config-target-grid {
@@ -2096,6 +2277,62 @@ h3 {
   min-width: 0;
 }
 
+.rule-target-picker {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-paper-soft);
+}
+
+.rule-target-picker .eyebrow {
+  margin-bottom: var(--space-1);
+}
+
+.rule-target-grid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.rule-target-option {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  color: var(--color-cocoa);
+  text-align: left;
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+  transition: border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.rule-target-option:not(:disabled):hover {
+  transform: translateY(calc(var(--space-1) * -1));
+  border-color: color-mix(in srgb, var(--color-link) 28%, var(--color-line-strong));
+}
+
+.rule-target-option--active {
+  border-color: color-mix(in srgb, var(--color-link) 46%, var(--color-line-strong));
+  color: var(--color-link);
+  background: var(--color-link-soft);
+}
+
+.rule-target-option strong,
+.rule-target-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rule-target-option span {
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
 .rule-file-table {
   display: grid;
   gap: var(--space-3);
@@ -2262,6 +2499,11 @@ h3 {
   .command-content {
     grid-template-columns: 1fr;
     overflow: auto;
+  }
+
+  .remote-command-panel,
+  .config-agent-tabs {
+    grid-template-columns: 1fr;
   }
 
   .command-main,
