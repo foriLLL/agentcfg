@@ -1,17 +1,15 @@
 import { useMemo, type ReactNode } from 'react';
-import type { RuntimeStateSummary } from './api';
 import { NavigationIcon } from './NavigationIcon';
 import { COMMAND_CENTER_NAV_ITEMS, navigationGroupLabel, type AppTab, type NavigationItem } from './navigation';
 
 type CommandCenterShellProps = {
   readonly activeTab: AppTab;
-  readonly runtimeState: RuntimeStateSummary | null;
   readonly statusRail: ReactNode;
   readonly children: ReactNode;
   readonly onTabChange: (tab: AppTab) => void;
 };
 
-export function CommandCenterShell({ activeTab, children, onTabChange, runtimeState, statusRail }: CommandCenterShellProps) {
+export function CommandCenterShell({ activeTab, children, onTabChange, statusRail }: CommandCenterShellProps) {
   const navigationGroups = useMemo(() => groupNavigationItems(COMMAND_CENTER_NAV_ITEMS), []);
 
   function navigateTo(tab: AppTab): void {
@@ -50,10 +48,6 @@ export function CommandCenterShell({ activeTab, children, onTabChange, runtimeSt
             </section>
           ))}
         </nav>
-        <div className="command-sidebar__footer">
-          <span className={`status-dot status-dot--${runtimeState?.gist.present ? 'ready' : 'warning'}`} aria-hidden="true" />
-          <span>{runtimeState?.gist.present ? '本地模式' : '等待连接'}</span>
-        </div>
       </aside>
 
       <section className="command-workspace">

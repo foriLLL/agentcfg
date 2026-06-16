@@ -821,7 +821,6 @@ function App() {
   return (
     <CommandCenterShell
       activeTab={activeTab}
-      runtimeState={runtimeState}
       onTabChange={setActiveTab}
       statusRail={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} />}
     >
