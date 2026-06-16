@@ -1239,7 +1239,7 @@ h3 {
 
 .config-editor-card {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto auto minmax(clamp(18rem, 42vh, 30rem), 1fr);
+  grid-template-rows: auto;
   align-content: start;
   min-width: 0;
   min-height: 0;
@@ -1255,7 +1255,6 @@ h3 {
 }
 
 .config-editor-body {
-  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -1989,10 +1988,10 @@ h3 {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  min-height: 0;
-  height: 100%;
+  min-height: 11rem;
+  height: clamp(11rem, 24vh, 16rem);
   padding: var(--space-4);
-  resize: none;
+  resize: vertical;
   overflow: auto;
   color: var(--color-cocoa);
   font-family: var(--font-mono);

@@ -1224,10 +1224,6 @@ function App() {
                   <span>{configStatus}</span>
                   {configFile !== null && <strong>{configFile.path}</strong>}
                 </div>
-                <section className="review-results config-review-results" aria-label="本地配置 dry-run 与应用结果">
-                  <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
-                  <ApplyResults results={applyResults} />
-                </section>
                 <div className="config-editor-body">
                   <textarea
                     id="config-editor"
@@ -1239,6 +1235,10 @@ function App() {
                     wrap="off"
                   />
                 </div>
+                <section className="review-results config-review-results" aria-label="本地配置 dry-run 与应用结果">
+                  <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
+                  <ApplyResults results={applyResults} />
+                </section>
               </article>
             </section>
           )}

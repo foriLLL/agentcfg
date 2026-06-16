@@ -1401,7 +1401,8 @@ async function assertConfigEditorLayout(cdp: CdpPage, label = 'desktop', expectT
   if (expectTabViewportScroll) {
     assert.equal(layout.tabViewportCanScroll, true, `${label}: tab viewport did not scroll on a short desktop viewport: ${layout.textareaDetails}`);
   }
-  assert.equal(layout.textareaHeight >= 220, true, `${label}: config editor did not receive enough usable height: ${layout.textareaDetails}`);
+  assert.equal(layout.textareaHeight >= 176, true, `${label}: config editor did not receive enough usable height: ${layout.textareaDetails}`);
+  assert.equal(layout.textareaHeight <= 280, true, `${label}: config editor became visually oversized: ${layout.textareaDetails}`);
   assert.equal(layout.cardClipsOverflow, false, `${label}: config editor card must not hide overflow as a layout fix: ${layout.textareaDetails}`);
   assert.deepEqual(layout.hiddenEditorAncestors, [], `${label}: hidden ancestors would clip the config editor: ${layout.textareaDetails}`);
   assert.equal(layout.textareaInsideEditorBody, true, `${label}: config editor textarea escaped the editor body row: ${layout.textareaDetails}`);
