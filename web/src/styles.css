@@ -1920,6 +1920,33 @@ h3 {
   white-space: nowrap;
 }
 
+.plan-associated-files {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-small);
+  background: var(--color-paper-soft);
+}
+
+.plan-associated-files > span {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.plan-associated-files strong {
+  color: var(--color-coffee);
+  font-family: inherit;
+  font-size: var(--text-caption);
+}
+
+.plan-associated-files__status--write {
+  color: var(--color-link);
+}
+
 .raw-config-target-grid {
   align-self: stretch;
 }

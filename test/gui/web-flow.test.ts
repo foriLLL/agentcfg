@@ -608,7 +608,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('Dry-run 完成');
       await cdp.waitForText('0 项操作');
       await cdp.waitForText('Codex has no official native mapping for contextTokens');
-      assert.equal((await cdp.bodyText()).includes('不会更改任何文件。'), true, 'Codex notice-only dry-run did not keep zero operations');
+      const codexDryRunDom = await cdp.bodyText();
+      assert.equal(codexDryRunDom.includes('关联文件状态'), true, 'Codex dry-run did not show associated file state');
+      assert.equal(codexDryRunDom.includes(codexNativePath), true, 'Codex dry-run did not show native config as an associated file');
+      assert.equal(codexDryRunDom.includes(codexEnvPath), true, 'Codex dry-run did not show env config as an associated file');
+      assert.equal(codexDryRunDom.includes('关联文件均无需写入。'), true, 'Codex notice-only dry-run did not keep zero operations');
       await assertDomHasNoGitHubToken(cdp, 'post-Codex-dry-run DOM');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');

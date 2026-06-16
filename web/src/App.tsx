@@ -1963,13 +1963,60 @@ function PlanResults({ plans, results, stale }: { plans: ApplyPlanSummary[] | nu
             <Detail label="状态" value={formatStatus(results.find((result) => result.agent === plan.agent)?.status)} />
           </dl>
           <NoticeList notices={plan.notices} />
-          <PathList title="操作路径" paths={plan.operationPaths} empty="不会更改任何文件。" />
+          <PlanAssociatedFiles plan={plan} />
+          <PathList title="将写入路径" paths={plan.operationPaths} empty="关联文件均无需写入。" />
           <FilePreviewList previews={plan.filePreviews} />
           {agentSupportsManagedFieldDiff(plan.agent) && <FieldRows changes={plan.changes} />}
         </article>
       ))}
     </section>
   );
+}
+
+type PlanAssociatedFile = {
+  readonly label: string;
+  readonly path: string;
+  readonly willWrite: boolean;
+};
+
+function PlanAssociatedFiles({ plan }: { plan: ApplyPlanSummary }) {
+  const files = buildPlanAssociatedFiles(plan);
+
+  return (
+    <div className="config-associated-files plan-associated-files" aria-label="dry-run 关联文件状态">
+      <span>关联文件状态</span>
+      <ul>
+        {files.map((file) => (
+          <li key={`${file.label}:${file.path}`}>
+            <strong>{file.label}</strong>
+            <code>{file.path}</code>
+            <small className={file.willWrite ? 'plan-associated-files__status--write' : undefined}>{file.willWrite ? '将写入' : '本次无写入'}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function buildPlanAssociatedFiles(plan: ApplyPlanSummary): PlanAssociatedFile[] {
+  const operationPaths = new Set(plan.operationPaths);
+  const files: PlanAssociatedFile[] = [
+    {
+      label: '原生配置',
+      path: plan.configPath,
+      willWrite: operationPaths.has(plan.configPath),
+    },
+  ];
+
+  if (plan.envPath !== undefined && plan.envPath !== plan.configPath) {
+    files.push({
+      label: 'Env 文件',
+      path: plan.envPath,
+      willWrite: operationPaths.has(plan.envPath),
+    });
+  }
+
+  return files;
 }
 
 function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
