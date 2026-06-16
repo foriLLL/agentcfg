@@ -30,12 +30,14 @@ export function WorkflowOverview({ onNavigate, onRunDryRun, steps }: WorkflowOve
                 <strong>{step.title}</strong>
                 <span>{step.copy}</span>
               </span>
-              <span className={`status-badge status-badge--${badgeTone(step.status)}`}>{statusLabel(step.status)}</span>
               <span className="workflow-step__detail">{step.detail}</span>
             </button>
-            <button className={step.action.kind === 'dry-run' ? 'primary-action primary-action--compact' : 'secondary-action secondary-action--compact'} type="button" onClick={() => handleAction(step, onNavigate, onRunDryRun)}>
-              {step.action.label}
-            </button>
+            <div className="workflow-step__actions">
+              <span className={`status-badge status-badge--${badgeTone(step.status)}`}>{statusLabel(step.status)}</span>
+              <button className={step.action.kind === 'dry-run' ? 'primary-action primary-action--compact' : 'secondary-action secondary-action--compact'} type="button" onClick={() => handleAction(step, onNavigate, onRunDryRun)}>
+                {step.action.label}
+              </button>
+            </div>
           </article>
         ))}
       </div>
