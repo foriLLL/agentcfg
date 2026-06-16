@@ -263,6 +263,7 @@ export type SyncOnceResult = {
   startedAt: string;
   completedAt: string;
   targets: string[];
+  agentSkills?: unknown[];
   message?: string;
 };
 

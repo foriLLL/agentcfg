@@ -33,12 +33,13 @@ const SYNC_TARGETS = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'ohmyopenagent', label: 'OhMyOpenAgent' },
   { id: 'ruleFiles', label: '规则文件' },
+  { id: 'agentSkills', label: 'Agent Skills' },
 ] as const;
 
 const DEFAULT_AUTO_SYNC: AutoSyncConfig = {
   enabled: false,
   intervalMinutes: 60,
-  targets: SYNC_TARGETS.map((target) => target.id),
+  targets: SYNC_TARGETS.filter((target) => target.id !== 'agentSkills').map((target) => target.id),
 };
 
 export function SyncPanel({ buildGitHubTokenRequest, onNotice, onState, requestStatePath, runtimeState }: SyncPanelProps) {
@@ -156,7 +157,7 @@ export function SyncPanel({ buildGitHubTokenRequest, onNotice, onState, requestS
                   <input type="checkbox" checked={draft.targets.includes(target.id)} onChange={(event) => setDraft(withTarget(draft, target.id, event.target.checked))} />
                   <span>
                     <strong>{target.label}</strong>
-                    <small>{target.id === 'ruleFiles' ? 'AGENTS.md、CLAUDE.md、GEMINI.md' : `${target.label} 原生配置`}</small>
+                    <small>{targetDescription(target.id, target.label)}</small>
                   </span>
                 </label>
               ))}
@@ -212,10 +213,17 @@ function normalizeInterval(value: string): number {
 
 function targetLabel(target: string): string {
   if (target === 'ruleFiles') return '规则文件';
+  if (target === 'agentSkills') return 'Agent Skills';
   if (target === 'codex' || target === 'opencode' || target === 'openclaw' || target === 'claude' || target === 'ohmyopenagent') {
     return agentLabel(target);
   }
   return target;
+}
+
+function targetDescription(target: string, label: string): string {
+  if (target === 'ruleFiles') return 'AGENTS.md、CLAUDE.md、GEMINI.md';
+  if (target === 'agentSkills') return '~/.agents/skills 目录';
+  return `${label} 原生配置`;
 }
 
 function SyncRunSummary({ result, state }: { result: SyncOnceResult | null; state: RuntimeStateSummary | null }) {

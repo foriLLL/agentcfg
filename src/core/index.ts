@@ -10,6 +10,7 @@ export * from './diff';
 export * from './mask';
 export * from './gist';
 export * from './managed-files';
+export * from './managed-skills';
 export * from './native-io';
 export * from './node-errors';
 export * from './schema';

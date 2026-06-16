@@ -1,6 +1,7 @@
 import { ADAPTER_NAMES, isAdapterName } from '../adapters';
 import {
   AUTO_SYNC_RULE_FILES_TARGET,
+  AUTO_SYNC_AGENT_SKILLS_TARGET,
   getSyncServiceStatus,
   installSyncService,
   runSyncOnce,
@@ -57,6 +58,7 @@ export function buildSyncHelpText(): string {
     `  --agent <${ADAPTER_NAMES.join('|')}>`,
     '  --all-agents',
     '  --rules',
+    '  --skills',
     '  --state <path>',
     '',
     'sync service options:',
@@ -92,6 +94,10 @@ function parseSyncOnceArgs(args: readonly string[]): ParsedSyncOnceArgs {
     }
     if (arg === '--rules') {
       targets.push(AUTO_SYNC_RULE_FILES_TARGET);
+      continue;
+    }
+    if (arg === '--skills') {
+      targets.push(AUTO_SYNC_AGENT_SKILLS_TARGET);
       continue;
     }
     throw new Error(`Unknown sync once option: ${arg}`);
@@ -160,6 +166,9 @@ function formatSyncOnceResult(result: SyncOnceResult): string {
   }
   for (const file of result.ruleFiles) {
     lines.push(`Rule file ${file.gistFileName}: ${file.status}${file.error === undefined ? '' : ` (${file.error})`}`);
+  }
+  for (const skills of result.agentSkills) {
+    lines.push(`Agent skills ${skills.gistFileName}: ${skills.status}${skills.error === undefined ? '' : ` (${skills.error})`}`);
   }
   return lines.join('\n');
 }

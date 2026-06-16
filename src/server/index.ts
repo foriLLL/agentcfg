@@ -8,15 +8,20 @@ import {
   clearSavedGitHubTokenRuntime,
   diffRuntime,
   discoverProviderModelsRuntime,
+  applyManagedAgentSkillsRuntime,
   applyManagedRuleFilesRuntime,
+  getManagedAgentSkillsRuntime,
   getManagedRuleFilesRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   getRuntimeState,
   getSyncServiceRuntime,
   initRuntime,
+  initializeManagedAgentSkillsRuntime,
   initializeManagedRuleFileRuntime,
+  loadManagedAgentSkillsRuntime,
   loadManagedRuleFilesRuntime,
+  planManagedAgentSkillsRuntime,
   loadRemoteConfigRuntime,
   planManagedRuleFilesRuntime,
   planApplyRuntime,
@@ -38,6 +43,10 @@ import {
   type GetRuntimeStateResponse,
   type InitRuntimeResponse,
   type LoadRemoteConfigRuntimeResponse,
+  type ManagedAgentSkillsApplyRuntimeResponse,
+  type ManagedAgentSkillsPlanRuntimeResponse,
+  type ManagedAgentSkillsRemoteRuntimeResponse,
+  type ManagedAgentSkillsStatusRuntimeResponse,
   type ManagedRuleFilesApplyRuntimeResponse,
   type ManagedRuleFilesPlanRuntimeResponse,
   type ManagedRuleFilesRemoteRuntimeResponse,
@@ -98,6 +107,10 @@ type ApiHandlerResult =
   | LoadRemoteConfigRuntimeResponse
   | SaveRemoteConfigRuntimeResponse
   | ClearSavedGitHubTokenRuntimeResponse
+  | ManagedAgentSkillsStatusRuntimeResponse
+  | ManagedAgentSkillsRemoteRuntimeResponse
+  | ManagedAgentSkillsPlanRuntimeResponse
+  | ManagedAgentSkillsApplyRuntimeResponse
   | ManagedRuleFilesStatusRuntimeResponse
   | ManagedRuleFilesRemoteRuntimeResponse
   | ManagedRuleFilesPlanRuntimeResponse
@@ -345,6 +358,34 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/rules/apply') {
     assertMethod(request, ['POST']);
     return applyManagedRuleFilesRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/skills/files') {
+    if (request.method === 'GET') {
+      return getManagedAgentSkillsRuntime({
+        statePath: await resolveDefaultStatePath(
+          requestUrl.searchParams.has('statePath') ? (requestUrl.searchParams.get('statePath') ?? '') : undefined,
+          options,
+        ),
+      });
+    }
+    assertMethod(request, ['POST']);
+    return loadManagedAgentSkillsRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/skills/init') {
+    assertMethod(request, ['POST']);
+    return initializeManagedAgentSkillsRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/skills/plan') {
+    assertMethod(request, ['POST']);
+    return planManagedAgentSkillsRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/skills/apply') {
+    assertMethod(request, ['POST']);
+    return applyManagedAgentSkillsRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/sync/settings') {

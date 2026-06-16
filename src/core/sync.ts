@@ -1,4 +1,5 @@
 import { ADAPTER_NAMES, isAdapterName, type AdapterName } from '../adapters';
+import { applyManagedAgentSkillsFromGist, type ManagedAgentSkillsApplyResult, type ManagedAgentSkillsWriteOptions } from './managed-skills';
 import { applyManagedRuleFilesFromGist, type ManagedRuleFileApplyResult, type ManagedRuleFileWriteOptions } from './managed-files';
 import { applyPlan, planApply, type ApplyAgentResult, type ApplyWriteOptions } from './apply';
 import { fetchGistAgentConfig, type FetchGistOptions } from './gist';
@@ -6,8 +7,9 @@ import { parseCanonicalAgentConfig } from './schema';
 import { readLocalState, updateLastSyncRun, updatePulledConfig, type LastSyncRunSummary } from './state';
 
 export const AUTO_SYNC_RULE_FILES_TARGET = 'ruleFiles';
+export const AUTO_SYNC_AGENT_SKILLS_TARGET = 'agentSkills';
 
-export type SyncTarget = AdapterName | typeof AUTO_SYNC_RULE_FILES_TARGET;
+export type SyncTarget = AdapterName | typeof AUTO_SYNC_RULE_FILES_TARGET | typeof AUTO_SYNC_AGENT_SKILLS_TARGET;
 
 export type SyncOnceOptions = {
   statePath?: string;
@@ -15,6 +17,7 @@ export type SyncOnceOptions = {
   gistOptions?: FetchGistOptions;
   applyWriteOptions?: ApplyWriteOptions;
   managedRuleFileWriteOptions?: ManagedRuleFileWriteOptions;
+  managedAgentSkillsWriteOptions?: ManagedAgentSkillsWriteOptions;
   now?: () => Date;
 };
 
@@ -25,6 +28,7 @@ export type SyncOnceResult = {
   targets: SyncTarget[];
   agents: ApplyAgentResult[];
   ruleFiles: ManagedRuleFileApplyResult[];
+  agentSkills: ManagedAgentSkillsApplyResult[];
   message?: string;
 };
 
@@ -45,6 +49,10 @@ export function resolveSyncTargets(targets: readonly string[] | undefined): Sync
     const normalizedTarget = target.trim();
     if (normalizedTarget === AUTO_SYNC_RULE_FILES_TARGET) {
       resolved.push(AUTO_SYNC_RULE_FILES_TARGET);
+      continue;
+    }
+    if (normalizedTarget === AUTO_SYNC_AGENT_SKILLS_TARGET) {
+      resolved.push(AUTO_SYNC_AGENT_SKILLS_TARGET);
       continue;
     }
     if (isAdapterName(normalizedTarget)) {
@@ -73,6 +81,7 @@ export async function runSyncOnce(options: SyncOnceOptions = {}): Promise<SyncOn
       targets: [],
       agents: [],
       ruleFiles: [],
+      agentSkills: [],
       message: 'Auto-sync is disabled.',
     };
     await updateLastSyncRun(options.statePath, {
@@ -87,8 +96,10 @@ export async function runSyncOnce(options: SyncOnceOptions = {}): Promise<SyncOn
   const selectedTargets = resolveSyncTargets(options.targets ?? state.autoSync?.targets ?? defaultAutoSyncTargets());
   const agentTargets = selectedTargets.filter(isAdapterName);
   const shouldSyncRuleFiles = selectedTargets.includes(AUTO_SYNC_RULE_FILES_TARGET);
+  const shouldSyncAgentSkills = selectedTargets.includes(AUTO_SYNC_AGENT_SKILLS_TARGET);
   let agents: ApplyAgentResult[] = [];
   let ruleFiles: ManagedRuleFileApplyResult[] = [];
+  let agentSkills: ManagedAgentSkillsApplyResult[] = [];
 
   if (agentTargets.length > 0) {
     const fetched = await fetchGistAgentConfig(state.gist.id, options.gistOptions);
@@ -106,8 +117,18 @@ export async function runSyncOnce(options: SyncOnceOptions = {}): Promise<SyncOn
     );
   }
 
+  if (shouldSyncAgentSkills) {
+    agentSkills = [
+      await applyManagedAgentSkillsFromGist(
+        state.gist.id,
+        options.gistOptions,
+        options.managedAgentSkillsWriteOptions,
+      ),
+    ];
+  }
+
   const completedAt = (options.now ?? (() => new Date()))().toISOString();
-  const result = summarizeSyncRun({ startedAt, completedAt, targets: selectedTargets, agents, ruleFiles });
+  const result = summarizeSyncRun({ startedAt, completedAt, targets: selectedTargets, agents, ruleFiles, agentSkills });
   await updateLastSyncRun(options.statePath, {
     status: result.status,
     startedAt,
@@ -125,14 +146,18 @@ function summarizeSyncRun(result: Omit<SyncOnceResult, 'status' | 'message'>): S
   const failures = [
     ...result.agents.filter((entry) => entry.status === 'failed'),
     ...result.ruleFiles.filter((entry) => entry.status === 'failed'),
+    ...result.agentSkills.filter((entry) => entry.status === 'failed'),
   ];
-  const skipped = result.ruleFiles.filter((entry) => entry.status === 'skipped');
+  const skipped = [
+    ...result.ruleFiles.filter((entry) => entry.status === 'skipped'),
+    ...result.agentSkills.filter((entry) => entry.status === 'skipped'),
+  ];
 
   if (failures.length > 0) {
     return { ...result, status: 'failed', message: `${failures.length} sync target(s) failed.` };
   }
   if (skipped.length > 0) {
-    return { ...result, status: 'partial', message: `${skipped.length} remote rule file(s) were missing and skipped.` };
+    return { ...result, status: 'partial', message: `${skipped.length} remote managed file(s) were missing and skipped.` };
   }
   return { ...result, status: 'success' };
 }

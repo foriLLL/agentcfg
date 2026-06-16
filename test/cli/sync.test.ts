@@ -22,6 +22,7 @@ const VALID_AGENTCFG_YAML = [
   '      gpt-4.1-mini: {}',
   '',
 ].join('\n');
+const AGENT_SKILLS_GIST_FILE = 'AGENT_SKILLS.json';
 
 type CliResult = {
   status: number | null;
@@ -59,6 +60,38 @@ test('sync once applies managed rule files from Gist', async () => {
     assert.match(result.stdout, /Rule file AGENTS\.md: applied/);
     assert.equal(await readFile(localPath, 'utf8'), '# cli remote rules\n');
     assert.equal(server.requests[0]?.authorization, 'Bearer cli-sync-token');
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('sync once applies managed agent skills from Gist', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-cli-sync-skills-'));
+  const statePath = join(directory, 'state.json');
+  const skillPath = join(directory, '.agents', 'skills', 'cli-skill', 'SKILL.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'cli-sync-skills-revision', {
+      [AGENT_SKILLS_GIST_FILE]: { content: buildSkillsManifest({ 'cli-skill/SKILL.md': '# cli remote skill\n' }) },
+    }),
+  });
+
+  try {
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'cli-sync-skills-gist' } }, null, 2)}\n`);
+
+    const result = await runCli(['sync', 'once', '--skills', '--state', statePath], {
+      ...process.env,
+      HOME: directory,
+      AGENTCFG_GIST_API_BASE_URL: server.apiBaseUrl,
+      GITHUB_TOKEN: 'cli-sync-skills-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Sync success/);
+    assert.match(result.stdout, /Agent skills AGENT_SKILLS\.json: applied/);
+    assert.equal(await readFile(skillPath, 'utf8'), '# cli remote skill\n');
+    assert.equal(server.requests[0]?.authorization, 'Bearer cli-sync-skills-token');
   } finally {
     await server.close();
     await rm(directory, { force: true, recursive: true });
@@ -105,6 +138,48 @@ test('sync once uses configured auto-sync targets when no target flags are passe
     assert.match(result.stdout, /Targets: ruleFiles/);
     assert.match(result.stdout, /Rule file GEMINI\.md: applied/);
     assert.equal(await readFile(localPath, 'utf8'), '# configured gemini rules\n');
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('sync once uses configured agent skills target when no target flags are passed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-cli-sync-skills-configured-'));
+  const statePath = join(directory, 'state.json');
+  const skillPath = join(directory, '.agents', 'skills', 'configured', 'SKILL.md');
+  const server = await startFakeGistServer({
+    status: 200,
+    body: buildGistBody(VALID_AGENTCFG_YAML, 'cli-sync-skills-configured-revision', {
+      [AGENT_SKILLS_GIST_FILE]: { content: buildSkillsManifest({ 'configured/SKILL.md': '# configured skill\n' }) },
+    }),
+  });
+
+  try {
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          gist: { id: 'cli-sync-skills-configured-gist' },
+          autoSync: { enabled: true, intervalMinutes: 15, targets: ['agentSkills'] },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runCli(['sync', 'once', '--state', statePath], {
+      ...process.env,
+      HOME: directory,
+      AGENTCFG_GIST_API_BASE_URL: server.apiBaseUrl,
+      GITHUB_TOKEN: 'cli-sync-skills-configured-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Targets: agentSkills/);
+    assert.match(result.stdout, /Agent skills AGENT_SKILLS\.json: applied/);
+    assert.equal(await readFile(skillPath, 'utf8'), '# configured skill\n');
   } finally {
     await server.close();
     await rm(directory, { force: true, recursive: true });
@@ -178,4 +253,17 @@ async function runCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<
     });
     child.on('close', (status) => resolvePromise({ status, stdout, stderr }));
   });
+}
+
+function buildSkillsManifest(files: Record<string, string>): string {
+  return `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      kind: 'agentcfg.agentSkills',
+      root: '~/.agents/skills',
+      files: Object.entries(files).map(([path, content]) => ({ path, encoding: 'utf8', content, mode: 0o644 })),
+    },
+    null,
+    2,
+  )}\n`;
 }

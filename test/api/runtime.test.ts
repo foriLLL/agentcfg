@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   RuntimeApiError,
   applyRuntime,
+  applyManagedAgentSkillsRuntime,
   clearSavedGitHubTokenRuntime,
   diffRuntime,
   discoverProviderModelsRuntime,
@@ -13,9 +14,11 @@ import {
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
   initializeManagedRuleFileRuntime,
+  initializeManagedAgentSkillsRuntime,
   getRuntimeState,
   initRuntime,
   loadRemoteConfigRuntime,
+  planManagedAgentSkillsRuntime,
   planManagedRuleFilesRuntime,
   planApplyRuntime,
   pullRuntime,
@@ -684,6 +687,71 @@ test('runtime initializes a remote managed rule file from local content', async 
   }
 });
 
+test('runtime managed agent skills plan, apply, and initialize without leaking token', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-skills-'));
+  const statePath = join(directory, 'state.json');
+  const previousHome = process.env.HOME;
+  process.env.HOME = directory;
+  const skillsRoot = join(directory, '.agents', 'skills');
+  const localPath = join(skillsRoot, 'shared', 'SKILL.md');
+  const server = await startFakeGistServer([
+    {
+      status: 200,
+      body: buildGistBody(VALID_AGENTCFG_YAML, 'skills-plan-revision', {
+        'AGENT_SKILLS.json': { content: buildSkillsManifest({ 'shared/SKILL.md': '# remote skill\n' }) },
+      }),
+    },
+    {
+      status: 200,
+      body: buildGistBody(VALID_AGENTCFG_YAML, 'skills-apply-revision', {
+        'AGENT_SKILLS.json': { content: buildSkillsManifest({ 'shared/SKILL.md': '# remote skill\n' }) },
+      }),
+    },
+    {
+      status: 200,
+      body: { id: 'skills-gist', ...buildGistBody(VALID_AGENTCFG_YAML, 'skills-init-revision') },
+    },
+  ]);
+
+  try {
+    await mkdir(join(skillsRoot, 'shared'), { recursive: true });
+    await writeFile(localPath, '# local skill\n');
+    await writeFile(statePath, `${JSON.stringify({ schemaVersion: 1, gist: { id: 'skills-gist' } }, null, 2)}\n`);
+
+    const planned = await planManagedAgentSkillsRuntime(
+      { statePath, githubToken: 'skills-token' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    assert.equal(planned.plan.status, 'would-change');
+    assert.equal(planned.plan.operations[0]?.path, 'shared/SKILL.md');
+
+    const applied = await applyManagedAgentSkillsRuntime(
+      { statePath, githubToken: 'skills-token', confirm: 'APPLY' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    assert.equal(applied.result.status, 'applied');
+    assert.equal(applied.result.backupPaths.length, 1);
+    assert.equal(await readFile(localPath, 'utf8'), '# remote skill\n');
+
+    const initialized = await initializeManagedAgentSkillsRuntime(
+      { statePath, githubToken: 'skills-token' },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    const patchBody = JSON.parse(server.requests[2]?.body ?? '{}') as { files?: Record<string, { content?: string }> };
+    assert.equal(initialized.skills.remote.status, 'available');
+    assert.equal(patchBody.files?.['AGENT_SKILLS.json']?.content?.includes('# remote skill\\n'), true);
+    assert.equal(JSON.stringify({ planned, applied, initialized }).includes('skills-token'), false);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('runtime saves auto-sync settings and syncs configured rule file targets', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-sync-now-'));
   const statePath = join(directory, 'state.json');
@@ -1046,6 +1114,19 @@ function remoteYaml(apiKey: string): string {
     '      claude-3-5-sonnet: {}',
     '',
   ].join('\n');
+}
+
+function buildSkillsManifest(files: Record<string, string>): string {
+  return `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      kind: 'agentcfg.agentSkills',
+      root: '~/.agents/skills',
+      files: Object.entries(files).map(([path, content]) => ({ path, encoding: 'utf8', content, mode: 0o644 })),
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 function isNodeErrorWithCode(error: unknown, code: string): boolean {
