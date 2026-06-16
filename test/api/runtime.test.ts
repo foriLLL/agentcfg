@@ -526,7 +526,7 @@ test('runtime Codex diff and apply payloads expose unsupported metadata notices 
   const fixturesRoot = join(directory, 'fixtures');
   const codexDirectory = join(fixturesRoot, 'codex');
   const nativePath = join(codexDirectory, 'input.config.toml');
-  const envPath = join(codexDirectory, 'codex.env');
+  const envPath = join(codexDirectory, '.env');
 
   try {
     await writeStateWithConfig(statePath, METADATA_CONFIG);

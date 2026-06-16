@@ -314,10 +314,10 @@ async function verifyWrittenPlan(plan: ApplyAgentPlan): Promise<void> {
 
 function resolveCodexApplyEnvPath(options: ApplyPlanOptions): string {
   if (options.fixturesRoot !== undefined) {
-    return join(options.fixturesRoot, 'codex', 'codex.env');
+    return join(options.fixturesRoot, 'codex', '.env');
   }
 
-  return join(homedir(), '.agentcfg', 'env', 'codex.env');
+  return join(homedir(), '.codex', '.env');
 }
 
 async function readNativeText(configPath: string, agent: AdapterName): Promise<string> {

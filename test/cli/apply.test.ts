@@ -389,7 +389,7 @@ test('apply yes writes Codex native config and generated env file with backups a
   const fixturesRoot = join(directory, 'fixtures');
   const codexDirectory = join(fixturesRoot, 'codex');
   const nativePath = join(codexDirectory, 'input.config.toml');
-  const envPath = join(codexDirectory, 'codex.env');
+  const envPath = join(codexDirectory, '.env');
 
   try {
     await writeState(statePath);
@@ -417,7 +417,7 @@ test('apply yes writes Codex native config and generated env file with backups a
     const backupsAfterFirst = await backupFiles(codexDirectory);
     assert.equal(backupsAfterFirst.length, 2);
     assert.equal(await readFile(join(codexDirectory, backupFileFor(backupsAfterFirst, 'input.config.toml')), 'utf8'), oldNative);
-    assert.equal(await readFile(join(codexDirectory, backupFileFor(backupsAfterFirst, 'codex.env')), 'utf8'), oldEnv);
+    assert.equal(await readFile(join(codexDirectory, backupFileFor(backupsAfterFirst, '.env')), 'utf8'), oldEnv);
 
     const nativeAfterFirst = await readFile(nativePath, 'utf8');
     const envAfterFirst = await readFile(envPath, 'utf8');
@@ -441,7 +441,7 @@ test('apply all-agents validates all selected agents before any write', async ()
   const fixturesRoot = join(directory, 'fixtures');
   const paths = {
     codex: join(fixturesRoot, 'codex', 'input.config.toml'),
-    codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
+    codexEnv: join(fixturesRoot, 'codex', '.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),
@@ -483,7 +483,7 @@ test('apply all-agents rejects a read-only later target before writing earlier a
   const fixturesRoot = join(directory, 'fixtures');
   const paths = {
     codex: join(fixturesRoot, 'codex', 'input.config.toml'),
-    codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
+    codexEnv: join(fixturesRoot, 'codex', '.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),
@@ -565,7 +565,7 @@ test('apply dry-run reports Codex unsupported metadata notices without writing o
   const fixturesRoot = join(directory, 'fixtures');
   const codexDirectory = join(fixturesRoot, 'codex');
   const nativePath = join(codexDirectory, 'input.config.toml');
-  const envPath = join(codexDirectory, 'codex.env');
+  const envPath = join(codexDirectory, '.env');
 
   try {
     await writeState(statePath, METADATA_CONFIG);
@@ -627,7 +627,7 @@ async function writeNativeFixtures(fixturesRoot: string): Promise<void> {
   await mkdir(join(fixturesRoot, 'claude'), { recursive: true });
   await mkdir(join(fixturesRoot, 'ohmyopenagent'), { recursive: true });
   await writeFile(join(fixturesRoot, 'codex', 'input.config.toml'), codexNativeToml());
-  await writeFile(join(fixturesRoot, 'codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
+  await writeFile(join(fixturesRoot, 'codex', '.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
   await writeFile(join(fixturesRoot, 'opencode', 'input.opencode.jsonc'), opencodeNativeJson(NATIVE_SECRET));
   await writeFile(join(fixturesRoot, 'openclaw', 'input.openclaw.json5'), openclawNativeJson(NATIVE_SECRET));
   await writeFile(join(fixturesRoot, 'claude', 'input.settings.json'), claudeNativeJson(NATIVE_SECRET));

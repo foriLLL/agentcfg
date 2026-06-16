@@ -41,8 +41,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
   const nativePath = join(directory, 'opencode.jsonc');
   const codexDirectory = join(directory, 'codex');
   const codexNativePath = join(codexDirectory, 'input.config.toml');
-  const codexEnvDirectory = join(directory, '.agentcfg', 'env');
-  const codexEnvPath = join(codexEnvDirectory, 'codex.env');
+  const codexEnvDirectory = join(directory, '.codex');
+  const codexEnvPath = join(codexEnvDirectory, '.env');
   const defaultOpenCodeDirectory = join(directory, '.config', 'opencode');
   const defaultOpenCodePath = join(defaultOpenCodeDirectory, 'opencode.json');
   const allTargetsDirectory = join(directory, 'all-targets');

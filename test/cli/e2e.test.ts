@@ -396,7 +396,7 @@ async function withPulledFixture(
 async function writeNativeFixtures(fixturesRoot: string): Promise<NativePaths> {
   const paths = {
     codex: join(fixturesRoot, 'codex', 'input.config.toml'),
-    codexEnv: join(fixturesRoot, 'codex', 'codex.env'),
+    codexEnv: join(fixturesRoot, 'codex', '.env'),
     opencode: join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     openclaw: join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
     claude: join(fixturesRoot, 'claude', 'input.settings.json'),

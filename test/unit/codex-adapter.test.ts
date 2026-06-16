@@ -69,8 +69,8 @@ env_key = "AGENTCFG_OPENAI_API_KEY"
   });
 });
 
-test('Codex default env path resolves under agentcfg state directory', () => {
-  assert.equal(DEFAULT_CODEX_ENV_PATH, join(homedir(), '.agentcfg', 'env', 'codex.env'));
+test('Codex default env path resolves under Codex home dotenv file', () => {
+  assert.equal(DEFAULT_CODEX_ENV_PATH, join(homedir(), '.codex', '.env'));
   assert.equal(resolveCodexEnvPath(), DEFAULT_CODEX_ENV_PATH);
   assert.equal(resolveCodexEnvPath('/tmp/custom-codex.env'), '/tmp/custom-codex.env');
 });

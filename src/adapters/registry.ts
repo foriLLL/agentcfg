@@ -110,7 +110,7 @@ async function diffCodex(config: CanonicalAgentConfig, options: AdapterDiffOptio
 
 function resolveCodexDiffEnvPath(options: AdapterDiffOptions): string {
   if (options.fixturesRoot !== undefined) {
-    return join(options.fixturesRoot, 'codex', 'codex.env');
+    return join(options.fixturesRoot, 'codex', '.env');
   }
 
   return resolveCodexEnvPath();

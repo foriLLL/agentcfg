@@ -261,13 +261,11 @@ test('diff supports fixtures root for all adapters without mutating state or nat
 
   try {
     await writeState(statePath, CANONICAL_CONFIG);
-    await mkdir(join(homeDirectory, '.agentcfg', 'env'), { recursive: true });
-    await writeFile(join(homeDirectory, '.agentcfg', 'env', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
     await writeNativeFixtures(fixturesRoot, CANONICAL_CONFIG.providers.openai.apiKey.value);
     const before = await snapshotFiles([
       statePath,
       join(fixturesRoot, 'codex', 'input.config.toml'),
-      join(fixturesRoot, 'codex', 'codex.env'),
+      join(fixturesRoot, 'codex', '.env'),
       join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
       join(fixturesRoot, 'openclaw', 'input.openclaw.json5'),
       join(fixturesRoot, 'claude', 'input.settings.json'),
@@ -291,22 +289,20 @@ test('diff supports fixtures root for all adapters without mutating state or nat
   }
 });
 
-test('Codex diff default path reads agentcfg env directory instead of codex config directory', async () => {
+test('Codex diff default path reads Codex home dotenv file', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-codex-default-'));
   const homeDirectory = join(directory, 'home');
   const statePath = join(directory, 'state.json');
   const codexConfigPath = join(homeDirectory, '.codex', 'config.toml');
-  const agentcfgEnvPath = join(homeDirectory, '.agentcfg', 'env', 'codex.env');
+  const codexEnvPath = join(homeDirectory, '.codex', '.env');
 
   try {
     await writeState(statePath, CANONICAL_CONFIG);
     await mkdir(join(homeDirectory, '.codex'), { recursive: true });
-    await mkdir(join(homeDirectory, '.agentcfg', 'env'), { recursive: true });
     await writeFile(codexConfigPath, codexNativeToml());
-    await writeFile(join(homeDirectory, '.codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${NATIVE_SECRET}\n`);
-    await writeFile(agentcfgEnvPath, `AGENTCFG_OPENAI_API_KEY=${CANONICAL_CONFIG.providers.openai.apiKey.value}\n`);
+    await writeFile(codexEnvPath, `AGENTCFG_OPENAI_API_KEY=${CANONICAL_CONFIG.providers.openai.apiKey.value}\n`);
 
-    const before = await snapshotFiles([statePath, codexConfigPath, join(homeDirectory, '.codex', 'codex.env'), agentcfgEnvPath]);
+    const before = await snapshotFiles([statePath, codexConfigPath, codexEnvPath]);
     const result = await runCli(['diff', '--agent', 'codex', '--state', statePath], { HOME: homeDirectory });
 
     assert.equal(result.status, 0, result.stderr);
@@ -328,7 +324,7 @@ test('Codex diff reports unsupported selected model metadata as notices without 
     await writeState(statePath, METADATA_CONFIG);
     await writeNativeFixtures(fixturesRoot, METADATA_CONFIG.providers.openai.apiKey.value);
     const nativePath = join(fixturesRoot, 'codex', 'input.config.toml');
-    const envPath = join(fixturesRoot, 'codex', 'codex.env');
+    const envPath = join(fixturesRoot, 'codex', '.env');
     const before = await snapshotFiles([statePath, nativePath, envPath]);
 
     const result = await runCli(['diff', '--agent', 'codex', '--state', statePath, '--fixtures-root', fixturesRoot]);
@@ -355,7 +351,7 @@ test('Codex diff fails closed when the env file exists but is unreadable', async
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-diff-codex-unreadable-env-'));
   const statePath = join(directory, 'state.json');
   const fixturesRoot = join(directory, 'fixtures');
-  const envPath = join(fixturesRoot, 'codex', 'codex.env');
+  const envPath = join(fixturesRoot, 'codex', '.env');
 
   try {
     await writeState(statePath, CANONICAL_CONFIG);
@@ -472,7 +468,7 @@ async function writeNativeFixtures(fixturesRoot: string, apiKey: string): Promis
     join(fixturesRoot, 'codex', 'input.config.toml'),
     codexNativeToml(),
   );
-  await writeFile(join(fixturesRoot, 'codex', 'codex.env'), `AGENTCFG_OPENAI_API_KEY=${apiKey}\n`);
+  await writeFile(join(fixturesRoot, 'codex', '.env'), `AGENTCFG_OPENAI_API_KEY=${apiKey}\n`);
   await writeFile(
     join(fixturesRoot, 'opencode', 'input.opencode.jsonc'),
     `${JSON.stringify({

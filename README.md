@@ -215,7 +215,7 @@ Use `--host`, `--port`, `--state`, and `--no-open` to match your local setup. Th
 
 ### Codex
 
-Codex uses TOML for the native config and a generated env file at `~/.agentcfg/env/codex.env`.
+Codex uses TOML for the native config and a generated env file at `~/.codex/.env`.
 
 The env file stores the secret, and agentcfg writes it with restrictive permissions.
 
@@ -267,7 +267,7 @@ If validation fails, nothing is written.
 
 If you need to roll back, restore the latest backup for that file.
 
-Secret-bearing outputs such as `~/.agentcfg/env/codex.env` are written with restrictive permissions, typically `0600`.
+Secret-bearing outputs such as `~/.codex/.env` are written with restrictive permissions, typically `0600`.
 
 ## Docker validation
 

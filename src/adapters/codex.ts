@@ -30,7 +30,7 @@ export class CodexAdapterError extends Error {
   }
 }
 
-export const DEFAULT_CODEX_ENV_PATH = join(homedir(), '.agentcfg', 'env', 'codex.env');
+export const DEFAULT_CODEX_ENV_PATH = join(homedir(), '.codex', '.env');
 
 export function resolveCodexEnvPath(envPath?: string): string {
   return envPath ?? DEFAULT_CODEX_ENV_PATH;

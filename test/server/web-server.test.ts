@@ -214,7 +214,7 @@ test('web server exposes Codex unsupported metadata notices in diff and plan res
   const statePath = join(directory, 'state.json');
   const codexDirectory = join(directory, 'codex');
   const nativePath = join(codexDirectory, 'input.config.toml');
-  const envPath = join(homeDirectory, '.agentcfg', 'env', 'codex.env');
+  const envPath = join(homeDirectory, '.codex', '.env');
   const server = await startWebServer({ host: '127.0.0.1', port: 0, statePath, assetsDir: join(directory, 'missing-assets') });
   const previousHome = process.env.HOME;
 
@@ -222,7 +222,7 @@ test('web server exposes Codex unsupported metadata notices in diff and plan res
     process.env.HOME = homeDirectory;
     await writeStateWithConfig(statePath, METADATA_CONFIG);
     await mkdir(codexDirectory, { recursive: true });
-    await mkdir(join(homeDirectory, '.agentcfg', 'env'), { recursive: true });
+    await mkdir(join(homeDirectory, '.codex'), { recursive: true });
     await writeFile(nativePath, codexNativeToml());
     await writeFile(envPath, `AGENTCFG_OPENAI_API_KEY=${CACHED_SECRET}\n`);
     const beforeNative = await readFile(nativePath, 'utf8');
