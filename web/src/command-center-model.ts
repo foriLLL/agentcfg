@@ -1,6 +1,7 @@
 import type { ApplyAgentResult, RuntimeStateSummary } from './api';
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
 import type { AppTab } from './navigation';
+import { BUTTONS } from './strings';
 
 export type WorkflowStepStatus = 'complete' | 'ready' | 'pending' | 'blocked' | 'warning';
 
@@ -34,75 +35,83 @@ export type WorkflowModelInput = {
   readonly applyResults: readonly ApplyAgentResult[] | null;
 };
 
+/**
+ * Three-step workflow that mirrors the new top-level IA:
+ *
+ *   1. Connect the remote source (Gist + agentcfg.yaml cache).
+ *   2. Sync the remote source to local agents (dry-run + apply).
+ *   3. Automate the sync (optional).
+ *
+ * Steps 1 and 3 collapse the historic 6-step model: previously
+ * "Gist 连接" / "远端配置" were two ordered steps with the same gate
+ * (no Gist, no cache), and "规则与 Skills" / "Dry Run" / "Apply" were
+ * three steps that all share a single APPLY decision. This commit
+ * compresses them into one step each so the overview matches the
+ * navigation rather than restating internal panel structure.
+ */
 export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowStep[] {
   const hasGist = input.runtimeState?.gist.present === true;
   const hasCache = input.runtimeState?.cache.present === true;
   const hasPlan = input.isPlanCurrent;
   const hasApplied = input.applyResults?.some((result) => result.status === 'applied') === true;
-  const ruleFilesReady = input.status.ruleFiles?.existingCount !== undefined && input.status.ruleFiles.existingCount > 0;
-  const skillsReady = input.status.skills?.exists === true || (input.status.skills?.fileCount ?? 0) > 0;
   const syncEnabled = input.runtimeState?.autoSync?.enabled === true;
 
   return [
     {
-      id: 'gist',
+      id: 'remote-source',
       order: 1,
-      title: 'Gist 连接',
-      copy: '连接远程 Gist 并保存访问状态。',
-      detail: hasGist ? `Gist ID: ${input.runtimeState?.gist.id ?? '已连接'}` : '等待 GitHub Token 或 Gist ID。',
-      status: hasGist ? 'complete' : 'ready',
-      target: 'connection',
-      action: { kind: 'navigate', target: 'connection', label: hasGist ? '查看连接' : '连接 Gist' },
-    },
-    {
-      id: 'remote',
-      order: 2,
-      title: '远端配置',
-      copy: '拉取或维护 agentcfg.yaml 真源。',
-      detail: hasCache ? `缓存更新于 ${input.runtimeState?.cache.updatedAt ?? '当前会话'}` : '连接 Gist 后拉取远端配置。',
-      status: hasCache ? 'complete' : hasGist ? 'ready' : 'blocked',
+      title: '连接远端真源',
+      copy: '连接 Gist 并把 agentcfg.yaml 拉取到本地缓存。',
+      detail: hasCache
+        ? `缓存更新于 ${input.runtimeState?.cache.updatedAt ?? '当前会话'}`
+        : hasGist
+          ? '已连接 Gist，等待拉取缓存。'
+          : '等待 GitHub Token 或 Gist ID。',
+      status: hasCache ? 'complete' : hasGist ? 'ready' : 'pending',
       target: 'remote',
-      action: { kind: 'navigate', target: 'remote', label: hasCache ? '查看配置' : '加载远端' },
+      action: { kind: 'navigate', target: 'remote', label: hasCache ? '查看远端' : hasGist ? '加载远端' : '连接 Gist' },
     },
     {
-      id: 'managed-files',
+      id: 'sync-targets',
+      order: 2,
+      title: '同步到本地',
+      copy: '把远端配置、规则文件与 Skills 目录写入本地 Agent。',
+      detail: hasApplied
+        ? '最近已有应用结果。'
+        : hasPlan
+          ? '预览已就绪，等待 APPLY 确认。'
+          : input.canReview
+            ? '可直接运行预览。'
+            : hasCache
+              ? '选择目标后即可运行预览。'
+              : '需要先拉取远端配置。',
+      status: hasApplied
+        ? 'complete'
+        : hasPlan
+          ? 'ready'
+          : input.canReview
+            ? 'ready'
+            : hasCache
+              ? 'pending'
+              : 'blocked',
+      target: 'execute',
+      action: input.canReview
+        ? { kind: 'dry-run', label: BUTTONS.dryRun }
+        : { kind: 'navigate', target: 'execute', label: hasPlan ? '去应用' : '进入同步' },
+    },
+    {
+      id: 'automation',
       order: 3,
-      title: '规则与 Skills',
-      copy: '同步用户级规则文件与 ~/.agents/skills。',
-      detail: `规则文件 ${input.status.ruleFiles?.existingCount ?? 0}/${input.status.ruleFiles?.totalCount ?? 3}，Skills ${input.status.skills?.fileCount ?? 0} 个文件。`,
-      status: ruleFilesReady || skillsReady ? 'complete' : hasGist ? 'ready' : 'blocked',
-      target: ruleFilesReady ? 'skills' : 'rules',
-      action: { kind: 'navigate', target: ruleFilesReady ? 'skills' : 'rules', label: '查看同步对象' },
-    },
-    {
-      id: 'auto-sync',
-      order: 4,
-      title: '自动同步策略',
+      title: '自动化（可选）',
       copy: '配置定时同步目标和系统后台服务。',
-      detail: syncEnabled ? `已启用，每 ${input.runtimeState?.autoSync?.intervalMinutes ?? 60} 分钟` : '未启用自动同步。',
+      detail: syncEnabled
+        ? `已启用，每 ${input.runtimeState?.autoSync?.intervalMinutes ?? 60} 分钟`
+        : hasGist
+          ? '未启用自动同步。'
+          : '连接 Gist 后再开启自动同步。',
       status: syncEnabled ? 'complete' : hasGist ? 'ready' : 'blocked',
       target: 'sync',
       action: { kind: 'navigate', target: 'sync', label: syncEnabled ? '查看策略' : '配置策略' },
-    },
-    {
-      id: 'dry-run',
-      order: 5,
-      title: '预览更改 (Dry Run)',
-      copy: '计算将写入本地 Agent 配置的变更。',
-      detail: hasPlan ? 'Dry-run 结果已就绪。' : input.canReview ? '可直接运行 dry-run。' : '需要先拉取远端配置并选择目标。',
-      status: hasPlan ? 'complete' : input.canReview ? 'ready' : hasCache ? 'pending' : 'blocked',
-      target: 'execute',
-      action: input.canReview ? { kind: 'dry-run', label: '运行预览' } : { kind: 'navigate', target: 'execute', label: '进入审阅' },
-    },
-    {
-      id: 'apply',
-      order: 6,
-      title: '应用更改 (Apply)',
-      copy: '输入强确认后把变更应用到本地。',
-      detail: hasApplied ? '最近已有应用结果。' : hasPlan ? '等待 APPLY 强确认。' : '先完成 dry-run。',
-      status: hasApplied ? 'complete' : hasPlan ? 'ready' : 'blocked',
-      target: 'execute',
-      action: { kind: 'navigate', target: 'execute', label: hasPlan ? '去应用' : '查看门禁' },
     },
   ];
 }

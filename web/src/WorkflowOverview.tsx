@@ -60,9 +60,9 @@ function badgeTone(status: WorkflowStepStatus): 'ready' | 'pending' | 'warning' 
 }
 
 function statusLabel(status: WorkflowStepStatus): string {
-  if (status === 'complete') return '已就绪';
+  if (status === 'complete') return '已完成';
   if (status === 'ready') return '可执行';
-  if (status === 'pending') return '待处理';
+  if (status === 'pending') return '待办';
   if (status === 'blocked') return '受阻';
   return '需注意';
 }
