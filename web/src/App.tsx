@@ -28,7 +28,6 @@ import {
   saveConfigFileRuntime,
   saveRemoteConfigRuntime,
   setupRemoteConfigRuntime,
-  type AgentConfig,
   type AgentName,
   type ApplyAgentResult,
   type ApplyFilePreview,
@@ -67,12 +66,9 @@ import {
   GATES,
   NOTICES,
   applyStatusTone,
-  cacheReadinessBadge,
-  conflictBaselineBadge,
   configDraftBadge,
   dryRunReadinessBadge,
   gistConnectionBadge,
-  remoteRevisionBadge,
 } from './strings';
 
 type Notice = ToastNotice;
@@ -1377,74 +1373,6 @@ function App() {
               </article>
             </section>
           )}
-
-          {activeTab === 'status' && (
-            <section className="dashboard-grid" id="status-panel" role="tabpanel" aria-labelledby="status-tab">
-              {loadErrorNode}
-              <article className="card source-card">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">来源</p>
-                    <h2>Gist 与缓存</h2>
-                  </div>
-                  <StatusBadge tone={gistConnectionBadge(runtimeState).tone}>
-                    {gistConnectionBadge(runtimeState).label}
-                  </StatusBadge>
-                </div>
-                <dl className="detail-list">
-                  <Detail label="Gist 状态" value={runtimeState?.gist.present ? '已存在' : '缺失'} />
-                  <Detail label="Gist ID" value={runtimeState?.gist.id ?? '未设置'} />
-                  <Detail label="缓存状态" value={cacheReadinessBadge(runtimeState).label} />
-                  <Detail label="缓存更新时间" value={formatDate(runtimeState?.cache.updatedAt)} />
-                </dl>
-              </article>
-              <article className="card remote-card">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">远端</p>
-                    <h2>版本元数据</h2>
-                  </div>
-                  <StatusBadge tone={remoteRevisionBadge(runtimeState).tone}>{remoteRevisionBadge(runtimeState).label}</StatusBadge>
-                </div>
-                {runtimeState?.remote ? (
-                  <dl className="detail-list">
-                    <Detail label="Revision" value={runtimeState.remote.revision ?? '未返回'} />
-                    <Detail label="ETag" value={runtimeState.remote.etag ?? '未返回'} />
-                    <Detail label="拉取时间" value={formatDate(runtimeState.remote.pulledAt)} />
-                  </dl>
-                ) : (
-                  <EmptyCopy title="远端元数据为空" copy="初始化 Gist 后拉取，即可记录 Revision 与缓存时间戳。" />
-                )}
-              </article>
-              <article className="card config-card">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">缓存</p>
-                    <h2>完整配置摘要</h2>
-                  </div>
-                  <StatusBadge tone={cacheReadinessBadge(runtimeState).tone}>{runtimeState?.cache.config ? '显示完整值' : cacheReadinessBadge(runtimeState).label}</StatusBadge>
-                </div>
-                {runtimeState?.cache.config ? <ConfigSummary config={runtimeState.cache.config} /> : <EmptyCopy title="暂无缓存配置" copy="从已连接的 Gist 拉取后，可在此预览完整运行时值。" />}
-              </article>
-              <article className="card conflict-card">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">基线</p>
-                    <h2>远端基线元数据</h2>
-                  </div>
-                  <StatusBadge tone={conflictBaselineBadge(runtimeState).tone}>
-                    {conflictBaselineBadge(runtimeState).label}
-                  </StatusBadge>
-                </div>
-                <dl className="detail-list">
-                  <Detail label="基线状态" value={runtimeState?.conflict.present ? '已保存远端基线元数据' : '尚未保存远端基线'} />
-                  <Detail label="页面含义" value={runtimeState?.conflict.present ? '这是上次拉取或保存时记录的远端版本，用于以后与本地缓存比对。' : '拉取或保存远端配置后，会在这里记录版本基线供后续比较。'} />
-                  <Detail label="Base revision" value={runtimeState?.conflict.baseRevision ?? '无'} />
-                  <Detail label="Base ETag" value={runtimeState?.conflict.baseETag ?? '无'} />
-                </dl>
-              </article>
-            </section>
-          )}
         </section>
     </CommandCenterShell>
   );
@@ -1469,19 +1397,6 @@ function EmptyCopy({ title, copy }: { title: string; copy: string }) {
       <h3>{title}</h3>
       <p>{copy}</p>
     </div>
-  );
-}
-
-function ConfigSummary({ config }: { config: AgentConfig }) {
-  const provider = config.providers[config.defaults.provider];
-
-  return (
-    <dl className="detail-list config-summary">
-      <Detail label="提供方" value={config.defaults.provider} />
-      <Detail label="模型" value={config.defaults.model} />
-      <Detail label="Base URL" value={provider.baseURL} />
-      <Detail label="API 密钥" value={provider.apiKey.value} />
-    </dl>
   );
 }
 

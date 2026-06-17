@@ -1,4 +1,4 @@
-export type AppTab = 'overview' | 'connection' | 'remote' | 'config' | 'rules' | 'skills' | 'sync' | 'execute' | 'status';
+export type AppTab = 'overview' | 'connection' | 'remote' | 'config' | 'rules' | 'skills' | 'sync' | 'execute';
 
 export type NavigationIconName = AppTab;
 
@@ -18,7 +18,6 @@ export const COMMAND_CENTER_NAV_ITEMS = [
   { id: 'skills', icon: 'skills', label: 'Agent Skills', group: 'configuration' },
   { id: 'sync', icon: 'sync', label: '自动同步', group: 'automation' },
   { id: 'execute', icon: 'execute', label: '审阅与应用', group: 'automation' },
-  { id: 'status', icon: 'status', label: '状态详情', group: 'system' },
 ] as const satisfies readonly NavigationItem[];
 
 export function navigationGroupLabel(group: NavigationItem['group']): string {

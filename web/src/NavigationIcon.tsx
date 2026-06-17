@@ -9,7 +9,6 @@ const NAVIGATION_ICON_PATHS = {
   skills: ['M12 3l1.7 4.8L18 10l-4.3 2.2L12 17l-1.7-4.8L6 10l4.3-2.2z', 'M5 4v4', 'M3 6h4', 'M19 16v4', 'M17 18h4'],
   sync: ['M17 3v5h-5', 'M7 21v-5h5', 'M17 8a6.5 6.5 0 0 0-10.8 2', 'M7 16a6.5 6.5 0 0 0 10.8-2'],
   execute: ['M8 5v14l11-7z'],
-  status: ['M4 12h4l2-6 4 12 2-6h4'],
 } as const satisfies Record<NavigationIconName, readonly string[]>;
 
 type NavigationIconProps = {
