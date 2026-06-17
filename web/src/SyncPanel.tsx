@@ -11,6 +11,7 @@ import {
   type SyncServiceStatus,
 } from './api';
 import { agentLabel, formatDate, formatError } from './view-model';
+import { syncServiceBadge } from './strings';
 
 type GitHubTokenRequest = {
   statePath?: string;
@@ -135,8 +136,8 @@ export function SyncPanel({ buildGitHubTokenRequest, onNotice, onState, requestS
             <p className="eyebrow">自动同步</p>
             <h2>配置系统后台定时同步</h2>
           </div>
-          <span className={`status-badge status-badge--${service?.installed ? 'ready' : 'pending'}`}>
-            {service?.installed ? '服务已安装' : '服务未安装'}
+          <span className={`status-badge status-badge--${syncServiceBadge(service?.installed).tone}`}>
+            {syncServiceBadge(service?.installed).label}
           </span>
         </div>
 

@@ -62,6 +62,18 @@ import {
   statusTone,
   type Step,
 } from './view-model';
+import {
+  BUTTONS,
+  GATES,
+  NOTICES,
+  applyStatusTone,
+  cacheReadinessBadge,
+  conflictBaselineBadge,
+  configDraftBadge,
+  dryRunReadinessBadge,
+  gistConnectionBadge,
+  remoteRevisionBadge,
+} from './strings';
 
 type Notice = ToastNotice;
 
@@ -373,11 +385,11 @@ function App() {
       await refreshState(nextStatePath);
       setNotice({
         tone: 'success',
-        title: '状态已连接',
+        title: NOTICES.connected,
         copy: 'agentcfg 已保存 Gist 身份。准备好后即可拉取远端配置。',
       });
     } catch (error) {
-      setNotice({ tone: 'error', title: '初始化失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.initFailed, copy: formatError(error) });
     } finally {
       setIsSubmittingInit(false);
     }
@@ -394,11 +406,11 @@ function App() {
       setApplyResults(null);
       setNotice({
         tone: 'success',
-        title: '已拉取远端配置',
+        title: NOTICES.pullSucceeded,
         copy: '控制台现在显示最新的本地缓存与完整代理配置，包括 API Key。',
       });
     } catch (error) {
-      setNotice({ tone: 'error', title: '拉取需要处理', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.pullFailed, copy: formatError(error) });
     } finally {
       setIsPulling(false);
     }
@@ -419,9 +431,9 @@ function App() {
         setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
       }
       setActiveTab('remote');
-      setNotice({ tone: 'success', title: response.state.gist.present ? '状态已连接' : '准备创建远端配置', copy: response.state.gist.present ? '已找到现有 agentcfg Gist，可以继续编辑远端配置。' : '填写远端配置后保存，即可自动创建 agentcfg Gist。' });
+      setNotice({ tone: 'success', title: response.state.gist.present ? NOTICES.connected : NOTICES.remoteReadyToCreate, copy: response.state.gist.present ? '已找到现有 agentcfg Gist，可以继续编辑远端配置。' : '填写远端配置后保存，即可自动创建 agentcfg Gist。' });
     } catch (error) {
-      setNotice({ tone: 'error', title: 'Token 配置失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.remoteSetupFailed, copy: formatError(error) });
     } finally {
       setIsSettingRemote(false);
     }
@@ -437,9 +449,9 @@ function App() {
       commitRuntimeState(response.state);
       replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已加载。API Key 直接显示；保存前请确认表单就是最终写入值。');
-      setNotice({ tone: 'success', title: '远端配置已加载', copy: '你可以直接修改 provider、model、Base URL，或填写新的 API Key。' });
+      setNotice({ tone: 'success', title: NOTICES.remoteLoaded, copy: '你可以直接修改 provider、model、Base URL，或填写新的 API Key。' });
     } catch (error) {
-      setNotice({ tone: 'error', title: '加载远端配置失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.remoteLoadFailed, copy: formatError(error) });
     } finally {
       setIsLoadingRemote(false);
     }
@@ -449,7 +461,7 @@ function App() {
     const nextGithubToken = githubToken.trim();
     const validationError = validateRemoteDraft(remoteDraft);
     if (validationError !== null) {
-      setNotice({ tone: 'error', title: '远端配置无效', copy: validationError });
+      setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: validationError });
       return;
     }
 
@@ -464,9 +476,9 @@ function App() {
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
-      setNotice({ tone: 'success', title: '远端配置已保存', copy: 'agentcfg.yaml 已写入 Gist，并更新了本地缓存。' });
+      setNotice({ tone: 'success', title: NOTICES.remoteSaved, copy: 'agentcfg.yaml 已写入 Gist，并更新了本地缓存。' });
     } catch (error) {
-      setNotice({ tone: 'error', title: '保存远端配置失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.remoteSaveFailed, copy: formatError(error) });
     } finally {
       setIsSavingRemote(false);
     }
@@ -481,9 +493,9 @@ function App() {
       setGithubToken('');
       setRememberGitHubToken(false);
       setIsEditingGitHubToken(false);
-      setNotice({ tone: 'success', title: '已清除本地 Token', copy: 'secrets.json 中保存的 GitHub Token 已删除；后续远端操作需要重新输入 Token。' });
+      setNotice({ tone: 'success', title: NOTICES.tokenCleared, copy: 'secrets.json 中保存的 GitHub Token 已删除；后续远端操作需要重新输入 Token。' });
     } catch (error) {
-      setNotice({ tone: 'error', title: '清除 Token 失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.tokenClearFailed, copy: formatError(error) });
     } finally {
       setIsClearingGitHubToken(false);
     }
@@ -673,7 +685,7 @@ function App() {
 
   async function handlePlan(): Promise<void> {
     if (targetRequest === null) {
-      setNotice({ tone: 'error', title: '请选择目标', copy: '规划写入前请只选择一个目标模式。' });
+      setNotice({ tone: 'error', title: NOTICES.selectTarget, copy: '规划写入前请只选择一个目标模式。' });
       return;
     }
 
@@ -684,11 +696,11 @@ function App() {
       const response = await planApplyRuntime(targetRequest);
       setPlanResponse(response);
       setPlanKey(reviewKey);
-      setNotice({ tone: 'success', title: 'Dry-run 完成', copy: '检查操作路径，然后输入 APPLY 解锁写入。' });
+      setNotice({ tone: 'success', title: NOTICES.dryRunSucceeded, copy: '检查操作路径，然后输入 APPLY 解锁写入。' });
     } catch (error) {
       setPlanResponse(null);
       setPlanKey(null);
-      setNotice({ tone: 'error', title: 'Dry-run 失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.dryRunFailed, copy: formatError(error) });
       const results = extractApplyResults(error);
       setApplyResults(results ?? null);
     } finally {
@@ -708,11 +720,11 @@ function App() {
       setApplyResults(response.results);
       setConfirmationText('');
       await refreshState(requestStatePath);
-      setNotice({ tone: 'success', title: '应用完成', copy: '所选代理文件已更新，控制台状态已刷新。' });
+      setNotice({ tone: 'success', title: NOTICES.applySucceeded, copy: '所选代理文件已更新，控制台状态已刷新。' });
     } catch (error) {
       const results = extractApplyResults(error);
       setApplyResults(results ?? null);
-      setNotice({ tone: 'error', title: '应用失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.applyFailed, copy: formatError(error) });
     } finally {
       setIsApplying(false);
     }
@@ -739,7 +751,7 @@ function App() {
       setConfigFile(null);
       setConfigDraft('');
       setConfigStatus(formatError(error));
-      setNotice({ tone: 'error', title: '配置加载失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.configLoadFailed, copy: formatError(error) });
     } finally {
       setIsLoadingConfig(false);
     }
@@ -768,7 +780,7 @@ function App() {
       setConfirmationText('');
     } catch (error) {
       setConfigStatus(formatError(error));
-      setNotice({ tone: 'error', title: '配置保存失败', copy: formatError(error) });
+      setNotice({ tone: 'error', title: NOTICES.configSaveFailed, copy: formatError(error) });
     } finally {
       setIsSavingConfig(false);
     }
@@ -802,8 +814,8 @@ function App() {
                     <p className="eyebrow">初始化</p>
                     <h2>连接状态</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>
-                    {runtimeState?.gist.present ? '状态已连接' : '等待连接'}
+                  <StatusBadge tone={gistConnectionBadge(runtimeState).tone}>
+                    {gistConnectionBadge(runtimeState).label}
                   </StatusBadge>
                 </div>
                 <form className="setup-form" onSubmit={handleInitSubmit}>
@@ -923,10 +935,10 @@ function App() {
                     <h2>用表单生成并保存 agentcfg.yaml，不需要手写 Gist 内容。</h2>
                   </div>
                   <div className="section-actions remote-command-panel" aria-label="远端配置操作">
-                    <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>{runtimeState?.gist.present ? '已绑定 Gist' : '保存时创建'}</StatusBadge>
+                    <StatusBadge tone={gistConnectionBadge(runtimeState).tone}>{gistConnectionBadge(runtimeState).label}</StatusBadge>
                     <button className="remote-command-card" type="button" onClick={handleLoadRemoteConfig} disabled={isLoadingRemote || isSavingRemote}>
                       <span>Gist → 表单</span>
-                      <strong>{isLoadingRemote ? '正在读取...' : '读取到表单'}</strong>
+                      <strong>{isLoadingRemote ? BUTTONS.loadRemoteRunning : BUTTONS.loadRemote}</strong>
                       <small>只更新当前页面，不写本地 Agent。</small>
                     </button>
                     <button
@@ -937,12 +949,12 @@ function App() {
                       disabled={isSavingRemote}
                     >
                       <span>表单 → Gist</span>
-                      <strong>{isSavingRemote ? '正在保存...' : '保存到 Gist'}</strong>
+                      <strong>{isSavingRemote ? BUTTONS.saveRemoteRunning : BUTTONS.saveRemote}</strong>
                       <small>把当前表单写入 agentcfg.yaml。</small>
                     </button>
                     <button className="remote-command-card" type="button" onClick={handlePull} disabled={isBusy}>
                       <span>Gist → 本地缓存</span>
-                      <strong>{isPulling ? '正在刷新...' : '刷新本地缓存'}</strong>
+                      <strong>{isPulling ? BUTTONS.pullCacheRunning : BUTTONS.pullCache}</strong>
                       <small>更新 dry-run 和应用使用的本地基线。</small>
                     </button>
                   </div>
@@ -1122,9 +1134,10 @@ function App() {
                     <p className="eyebrow">配置文件</p>
                     <h2>直接查看、编辑并保存当前代理的原生配置文件。</h2>
                   </div>
-                  <StatusBadge tone={configFile === null ? 'pending' : configDraft === configFile.content ? 'ready' : 'warning'}>
-                    {configFile === null ? '未加载' : configDraft === configFile.content ? '已同步' : '有未保存修改'}
-                  </StatusBadge>
+                  {(() => {
+                    const badge = configDraftBadge({ loaded: configFile !== null, dirty: configFile !== null && configDraft !== configFile.content });
+                    return <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>;
+                  })()}
                 </div>
                 <div className="config-agent-tabs" role="tablist" aria-label="选择本地配置 Agent">
                   {CONFIG_TARGET_OPTIONS.map((target) => {
@@ -1193,13 +1206,13 @@ function App() {
                       </div>
                       <div className="review-actions" aria-label="本地配置 dry-run 与应用操作">
                         <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReviewLocalConfig}>
-                          {isPlanning ? '正在规划...' : '执行 dry-run'}
+                          {isPlanning ? BUTTONS.dryRunRunning : BUTTONS.dryRun}
                         </button>
                       </div>
                       <div className="apply-lock" aria-label="本地配置应用安全门禁">
                         <div>
-                          <p className="eyebrow">强确认门禁</p>
-                          <h3>输入 APPLY 后应用当前本地目标。</h3>
+                          <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
+                          <h3>{GATES.applyConfirmTitle}</h3>
                           <p>只有所选本地配置目标与路径匹配最新 dry-run，应用才会解锁。</p>
                         </div>
                         <label htmlFor="local-apply-confirmation">
@@ -1208,13 +1221,13 @@ function App() {
                             id="local-apply-confirmation"
                             value={confirmationText}
                             onChange={(event) => setConfirmationText(event.target.value)}
-                            placeholder="APPLY"
+                            placeholder={GATES.applyConfirmPlaceholder}
                             autoComplete="off"
                             disabled={!canConfirmLocalConfig}
                           />
                         </label>
                         <button className="primary-action" type="button" onClick={handleApply} disabled={!canApplyLocalConfig}>
-                          {isApplying ? '正在应用...' : '应用所选目标'}
+                          {isApplying ? BUTTONS.applyRunning : BUTTONS.apply}
                         </button>
                       </div>
                     </div>
@@ -1283,9 +1296,10 @@ function App() {
                     <p className="eyebrow">审阅与应用</p>
                     <h2>Dry-run、再输入确认应用</h2>
                   </div>
-                  <StatusBadge tone={isPlanCurrent ? 'ready' : targetMode === '' ? 'pending' : 'warning'}>
-                    {isPlanCurrent ? 'Dry-run 已就绪' : targetMode === '' ? '选择目标' : '需要 dry-run'}
-                  </StatusBadge>
+                  {(() => {
+                    const badge = dryRunReadinessBadge({ hasPlan: isPlanCurrent, hasTarget: targetMode !== '' });
+                    return <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>;
+                  })()}
                 </div>
 
                 <div className="review-layout">
@@ -1328,14 +1342,14 @@ function App() {
 
                     <div className="review-actions" aria-label="dry-run 与应用操作">
                       <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReview}>
-                        {isPlanning ? '正在规划...' : '执行 dry-run'}
+                        {isPlanning ? BUTTONS.dryRunRunning : BUTTONS.dryRun}
                       </button>
                     </div>
 
                     <div className="apply-lock" aria-label="应用安全门禁">
                       <div>
-                        <p className="eyebrow">强确认门禁</p>
-                        <h3>成功 dry-run 后输入 APPLY。</h3>
+                        <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
+                        <h3>{GATES.applyConfirmTitle}</h3>
                         <p>只有所选目标与路径匹配最新计划后，应用才会解锁。</p>
                       </div>
                       <label htmlFor="apply-confirmation">
@@ -1344,13 +1358,13 @@ function App() {
                           id="apply-confirmation"
                           value={confirmationText}
                           onChange={(event) => setConfirmationText(event.target.value)}
-                          placeholder="APPLY"
+                          placeholder={GATES.applyConfirmPlaceholder}
                           autoComplete="off"
                           disabled={!isPlanCurrent || isApplying}
                         />
                       </label>
                       <button className="primary-action" type="button" onClick={handleApply} disabled={!canApply}>
-                        {isApplying ? '正在应用...' : '应用所选目标'}
+                        {isApplying ? BUTTONS.applyRunning : BUTTONS.apply}
                       </button>
                     </div>
                   </section>
@@ -1373,14 +1387,14 @@ function App() {
                     <p className="eyebrow">来源</p>
                     <h2>Gist 与缓存</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.gist.present ? 'ready' : 'pending'}>
-                    {runtimeState?.gist.present ? '已连接' : '需要设置'}
+                  <StatusBadge tone={gistConnectionBadge(runtimeState).tone}>
+                    {gistConnectionBadge(runtimeState).label}
                   </StatusBadge>
                 </div>
                 <dl className="detail-list">
                   <Detail label="Gist 状态" value={runtimeState?.gist.present ? '已存在' : '缺失'} />
                   <Detail label="Gist ID" value={runtimeState?.gist.id ?? '未设置'} />
-                  <Detail label="缓存状态" value={runtimeState?.cache.present ? '已缓存' : '为空'} />
+                  <Detail label="缓存状态" value={cacheReadinessBadge(runtimeState).label} />
                   <Detail label="缓存更新时间" value={formatDate(runtimeState?.cache.updatedAt)} />
                 </dl>
               </article>
@@ -1390,7 +1404,7 @@ function App() {
                     <p className="eyebrow">远端</p>
                     <h2>版本元数据</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.remote ? 'ready' : 'pending'}>{runtimeState?.remote ? '已同步' : '尚未拉取'}</StatusBadge>
+                  <StatusBadge tone={remoteRevisionBadge(runtimeState).tone}>{remoteRevisionBadge(runtimeState).label}</StatusBadge>
                 </div>
                 {runtimeState?.remote ? (
                   <dl className="detail-list">
@@ -1408,7 +1422,7 @@ function App() {
                     <p className="eyebrow">缓存</p>
                     <h2>完整配置摘要</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.cache.config ? 'ready' : 'pending'}>{runtimeState?.cache.config ? '显示完整值' : '为空'}</StatusBadge>
+                  <StatusBadge tone={cacheReadinessBadge(runtimeState).tone}>{runtimeState?.cache.config ? '显示完整值' : cacheReadinessBadge(runtimeState).label}</StatusBadge>
                 </div>
                 {runtimeState?.cache.config ? <ConfigSummary config={runtimeState.cache.config} /> : <EmptyCopy title="暂无缓存配置" copy="从已连接的 Gist 拉取后，可在此预览完整运行时值。" />}
               </article>
@@ -1418,8 +1432,8 @@ function App() {
                     <p className="eyebrow">基线</p>
                     <h2>远端基线元数据</h2>
                   </div>
-                  <StatusBadge tone={runtimeState?.conflict.present ? 'ready' : 'pending'}>
-                    {runtimeState?.conflict.present ? '已保存' : '未保存'}
+                  <StatusBadge tone={conflictBaselineBadge(runtimeState).tone}>
+                    {conflictBaselineBadge(runtimeState).label}
                   </StatusBadge>
                 </div>
                 <dl className="detail-list">
@@ -2031,7 +2045,7 @@ function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
         <article className="agent-result-card" key={result.agent}>
           <div className="agent-result-card__header">
             <h3>{agentLabel(result.agent)}</h3>
-            <StatusBadge tone={result.status === 'applied' || result.status === 'unchanged' ? 'ready' : 'warning'}>{formatStatus(result.status)}</StatusBadge>
+            <StatusBadge tone={applyStatusTone(result.status)}>{formatStatus(result.status)}</StatusBadge>
           </div>
           <dl className="detail-list compact-detail-list">
             {result.configPath !== undefined && <Detail label="原生配置" value={result.configPath} />}

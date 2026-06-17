@@ -14,6 +14,7 @@ import {
   type ManagedAgentSkillsStatus,
 } from './skills-api';
 import type { RuntimeStateSummary } from './api';
+import { BUTTONS, GATES } from './strings';
 import { formatDate, formatError } from './view-model';
 
 type SkillsDirectoryPanelProps = {
@@ -111,7 +112,7 @@ export function SkillsDirectoryPanel({ buildGitHubTokenRequest, onNotice, onStat
           <p className="eyebrow">Agent Skills</p>
           <h2>同步 ~/.agents/skills 目录</h2>
         </div>
-        <span className="status-badge status-badge--pending">{status?.local.exists ? '本地目录存在' : '本地目录缺失'}</span>
+        <span className={`status-badge status-badge--${status?.local.exists ? 'ready' : 'pending'}`}>{status?.local.exists ? '本地目录存在' : '本地目录缺失'}</span>
       </div>
 
       <div className="rules-layout">
@@ -144,21 +145,21 @@ export function SkillsDirectoryPanel({ buildGitHubTokenRequest, onNotice, onStat
               用本地初始化远端
             </button>
             <button className="secondary-action" type="button" onClick={handlePlan} disabled={isBusy}>
-              执行 dry-run
+              {BUTTONS.dryRun}
             </button>
           </div>
           <div className="apply-lock">
             <div>
-              <p className="eyebrow">强确认门禁</p>
-              <h3>输入 APPLY 后镜像 Skills 目录。</h3>
+              <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
+              <h3>{GATES.applyConfirmTitle}</h3>
               <p>远端缺失的本地文件会被删除；写入和删除前会创建备份。</p>
             </div>
             <label htmlFor="skills-apply-confirmation">
               确认文本
-              <input id="skills-apply-confirmation" value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} placeholder="APPLY" autoComplete="off" disabled={plan === null || plan.operations.length === 0 || isBusy} />
+              <input id="skills-apply-confirmation" value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} placeholder={GATES.applyConfirmPlaceholder} autoComplete="off" disabled={plan === null || plan.operations.length === 0 || isBusy} />
             </label>
             <button className="primary-action" type="button" onClick={handleApply} disabled={!canApply}>
-              应用 Skills
+              {BUTTONS.apply}
             </button>
           </div>
         </section>

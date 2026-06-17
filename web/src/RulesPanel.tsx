@@ -12,6 +12,7 @@ import {
   type ManagedRuleFileStatus,
   type RuntimeStateSummary,
 } from './api';
+import { BUTTONS, GATES, gistConnectionBadge } from './strings';
 import { formatDate, formatError } from './view-model';
 
 type GitHubTokenRequest = {
@@ -147,7 +148,7 @@ export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, request
             <p className="eyebrow">规则文件</p>
             <h2>同步官方用户级规则文件</h2>
           </div>
-          <span className="status-badge status-badge--pending">{runtimeState?.gist.present ? '使用当前 Gist' : '等待连接'}</span>
+          <span className={`status-badge status-badge--${gistConnectionBadge(runtimeState).tone}`}>{gistConnectionBadge(runtimeState).label}</span>
         </div>
 
         <div className="rules-layout">
@@ -197,21 +198,21 @@ export function RulesPanel({ buildGitHubTokenRequest, onNotice, onState, request
                 用本地初始化远端
               </button>
               <button className="secondary-action" type="button" onClick={handlePlan} disabled={isBusy}>
-                执行 dry-run
+                {BUTTONS.dryRun}
               </button>
             </div>
             <div className="apply-lock">
               <div>
-                <p className="eyebrow">强确认门禁</p>
-                <h3>输入 APPLY 后写入规则文件。</h3>
+                <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
+                <h3>{GATES.applyConfirmTitle}</h3>
                 <p>远端 Gist 内容会覆盖本地；写入前会创建备份。</p>
               </div>
               <label htmlFor="rules-apply-confirmation">
                 确认文本
-                <input id="rules-apply-confirmation" value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} placeholder="APPLY" autoComplete="off" disabled={plans.length === 0 || isBusy} />
+                <input id="rules-apply-confirmation" value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} placeholder={GATES.applyConfirmPlaceholder} autoComplete="off" disabled={plans.length === 0 || isBusy} />
               </label>
               <button className="primary-action" type="button" onClick={handleApply} disabled={!canApply}>
-                应用规则文件
+                {BUTTONS.apply}
               </button>
             </div>
           </section>

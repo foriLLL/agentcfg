@@ -1,5 +1,6 @@
 import type { ConfigAvailabilityEntry, RuntimeStateSummary } from './api';
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
+import { cacheReadinessBadge, gistConnectionBadge, syncServiceBadge } from './strings';
 import { formatDate } from './view-model';
 
 type StatusRailProps = {
@@ -10,19 +11,19 @@ type StatusRailProps = {
 
 export function StatusRail({ commandStatus, configAvailability, runtimeState }: StatusRailProps) {
   const availableAgents = configAvailability.filter((entry) => entry.available).length;
+  const gistBadge = gistConnectionBadge(runtimeState);
+  const serviceBadge = syncServiceBadge(commandStatus.service?.installed);
 
   return (
     <div className="status-rail">
       <section className="rail-card">
         <div className="rail-card__heading">
           <h2>状态面板</h2>
-          <span className={`status-badge status-badge--${runtimeState?.gist.present ? 'ready' : 'warning'}`}>
-            {runtimeState?.gist.present ? '已连接' : '未连接'}
-          </span>
+          <span className={`status-badge status-badge--${gistBadge.tone}`}>{gistBadge.label}</span>
         </div>
         <dl className="rail-list">
           <Detail label="Gist" value={runtimeState?.gist.id ?? '未设置'} />
-          <Detail label="缓存" value={runtimeState?.cache.updatedAt === undefined ? '尚未拉取' : formatDate(runtimeState.cache.updatedAt)} />
+          <Detail label="缓存" value={runtimeState?.cache.updatedAt === undefined ? cacheReadinessBadge(runtimeState).label : formatDate(runtimeState.cache.updatedAt)} />
           <Detail label="远端版本" value={runtimeState?.remote?.revision ?? '未返回'} />
         </dl>
       </section>
@@ -39,9 +40,9 @@ export function StatusRail({ commandStatus, configAvailability, runtimeState }: 
       <section className="rail-card">
         <h2>自动同步</h2>
         <dl className="rail-list">
-          <Detail label="设置" value={runtimeState?.autoSync?.enabled === true ? `每 ${runtimeState.autoSync.intervalMinutes} 分钟` : '未启用'} />
-          <Detail label="系统服务" value={commandStatus.service?.installed ? '已安装' : '未安装'} />
-          <Detail label="最近结果" value={runtimeState?.lastSyncRun?.status ?? '暂无'} />
+            <Detail label="设置" value={runtimeState?.autoSync?.enabled === true ? `每 ${runtimeState.autoSync.intervalMinutes} 分钟` : '未启用'} />
+            <Detail label="系统服务" value={serviceBadge.label} />
+            <Detail label="最近结果" value={runtimeState?.lastSyncRun?.status ?? '暂无'} />
         </dl>
       </section>
 
