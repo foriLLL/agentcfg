@@ -175,7 +175,7 @@ test('OhMyOpenAgent uses dry-run instead of field-level diff in the web flow', (
   assert.equal(agentSupportsManagedFieldDiff('claude'), true);
   assert.equal(agentSupportsManagedFieldDiff('ohmyopenagent'), false);
   assert.equal(localReviewActionCopyForAgent('ohmyopenagent'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
-  assert.equal(localReviewActionCopyForAgent('opencode'), 'diff、dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+  assert.equal(localReviewActionCopyForAgent('opencode'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
 });
 
 test('App wires the remote access warning helper into toast notifications', async () => {
