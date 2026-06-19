@@ -69,6 +69,7 @@ import {
 } from './strings';
 import { Detail, EmptyCopy, ResultHeading, StatusBadge } from './widgets';
 import { ConnectionPanel } from './panels/ConnectionPanel';
+import { LocalConfigPanel } from './panels/LocalConfigPanel';
 import {
   RemoteConfigPanel,
   type OhMyOpenAgentAssignmentKind,
@@ -86,14 +87,6 @@ const TARGET_OPTIONS: Array<{ value: Exclude<TargetMode, ''>; title: string; cop
   { value: 'claude', title: 'Claude Code', copy: '检查 Claude Code settings.json 配置。' },
   { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '检查 OhMyOpenAgent 模型路由配置。' },
   { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode、OpenClaw、Claude Code 与 OhMyOpenAgent。' },
-];
-
-const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: string }> = [
-  { value: 'codex', title: 'Codex', copy: 'TOML 配置原文' },
-  { value: 'opencode', title: 'OpenCode', copy: 'JSON / JSONC 配置原文' },
-  { value: 'openclaw', title: 'OpenClaw', copy: 'JSON / JSON5 配置原文' },
-  { value: 'claude', title: 'Claude Code', copy: 'settings.json 配置原文' },
-  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '模型路由 JSON 原文' },
 ];
 
 const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
@@ -230,7 +223,6 @@ function App() {
   const configBusy = isLoadingConfig || isSavingConfig;
   const configAvailabilityByAgent = useMemo(() => new Map(configAvailability.map((entry) => [entry.agent, entry])), [configAvailability]);
   const isConfigAgentAvailable = configAgent === null ? false : configAvailabilityByAgent.get(configAgent)?.available === true;
-  const selectedConfigTarget = configAgent === null ? undefined : CONFIG_TARGET_OPTIONS.find((target) => target.value === configAgent);
   const selectedConfigAvailability = configAgent === null ? undefined : configAvailabilityByAgent.get(configAgent);
   const configPathModeLabel = configPath.trim() === '' ? '默认检测路径' : configPath.trim();
   const canLoadConfig = configAgent !== null && isConfigAgentAvailable && !configBusy;
@@ -874,134 +866,43 @@ function App() {
           )}
 
           {activeTab === 'config' && (
-            <section className="dashboard-grid dashboard-grid--config" id="config-panel" role="tabpanel" aria-labelledby="config-tab">
-              {loadErrorNode}
-              <article className="card config-editor-card">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">配置文件</p>
-                    <h2>直接查看、编辑并保存当前代理的原生配置文件。</h2>
-                  </div>
-                  {(() => {
-                    const badge = configDraftBadge({ loaded: configFile !== null, dirty: configFile !== null && configDraft !== configFile.content });
-                    return <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>;
-                  })()}
-                </div>
-                <div className="config-agent-tabs" role="tablist" aria-label="选择本地配置 Agent">
-                  {CONFIG_TARGET_OPTIONS.map((target) => {
-                    const availability = configAvailabilityByAgent.get(target.value);
-                    const unavailable = availability?.available === false;
-                    const active = targetMode === target.value;
-                    return (
-                      <button
-                        id={`config-agent-${target.value}-tab`}
-                        className={`config-agent-tab ${active ? 'config-agent-tab--active' : ''}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        aria-controls="config-agent-panel"
-                        disabled={isLoadingConfigAvailability || unavailable}
-                        onClick={() => setTargetMode(target.value)}
-                        key={target.value}
-                      >
-                        <span className="config-agent-tab__icon" aria-hidden="true">
-                          <AgentConfigIcon agent={target.value} />
-                        </span>
-                        <span>
-                          <strong>{target.title}</strong>
-                          <small>{unavailable ? '不可用' : target.copy}</small>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <LocalConfigAgentSummary
-                  availability={selectedConfigAvailability}
-                  configAgent={configAgent}
-                  configFile={configFile}
-                  configPathModeLabel={configPathModeLabel}
-                  targetCopy={selectedConfigTarget?.copy}
-                  targetTitle={selectedConfigTarget?.title}
-                />
-                <div className="config-editor-toolbar">
-                  <div className="path-form">
-                    <label htmlFor="config-path-editor">
-                      配置路径覆盖
-                      <input
-                        id="config-path-editor"
-                        value={configPath}
-                        onChange={(event) => setConfigPath(event.target.value)}
-                        placeholder="单个配置文件、配置目录，或留空使用默认值"
-                        autoComplete="off"
-                      />
-                    </label>
-                    <div className="path-note">
-                      留空时使用检测到的默认原生配置；仅当所选代理的原生配置在其他文件或目录时填写。该值会同时作为 dry-run、应用的路径覆盖。
-                    </div>
-                    <div className="review-actions" aria-label="配置文件操作">
-                      <button className="secondary-action" type="button" onClick={handleLoadConfigFile} disabled={!canLoadConfig}>
-                        {isLoadingConfig ? '正在加载...' : '加载配置'}
-                      </button>
-                      <button className="primary-action" type="button" onClick={handleSaveConfigFile} disabled={!canSaveConfig}>
-                        {isSavingConfig ? '正在保存...' : '保存配置'}
-                      </button>
-                    </div>
-                    <div className="local-sync-panel" aria-label="本地配置同步与应用">
-                      <div className="path-note">
-                        <span>同步目标</span>
-                        <strong>{localSyncTargetLabel}</strong>
-                        <p>{localReviewActionCopyForAgent(configAgent)}</p>
-                      </div>
-                      <div className="review-actions" aria-label="本地配置 dry-run 与应用操作">
-                        <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReviewLocalConfig}>
-                          {isPlanning ? BUTTONS.dryRunRunning : BUTTONS.dryRun}
-                        </button>
-                      </div>
-                      <div className="apply-lock" aria-label="本地配置应用安全门禁">
-                        <div>
-                          <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
-                          <h3>{GATES.applyConfirmTitle}</h3>
-                          <p>只有所选本地配置目标与路径匹配最新 dry-run，应用才会解锁。</p>
-                        </div>
-                        <label htmlFor="local-apply-confirmation">
-                          确认文本
-                          <input
-                            id="local-apply-confirmation"
-                            value={confirmationText}
-                            onChange={(event) => setConfirmationText(event.target.value)}
-                            placeholder={GATES.applyConfirmPlaceholder}
-                            autoComplete="off"
-                            disabled={!canConfirmLocalConfig}
-                          />
-                        </label>
-                        <button className="primary-action" type="button" onClick={handleApply} disabled={!canApplyLocalConfig}>
-                          {isApplying ? BUTTONS.applyRunning : BUTTONS.apply}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="config-editor-meta" role="status" aria-live="polite">
-                  <span>{configStatus}</span>
-                  {configFile !== null && <strong>{configFile.path}</strong>}
-                </div>
-                <div className="config-editor-body">
-                  <textarea
-                    id="config-editor"
-                    className="config-editor-textarea"
-                    value={configDraft}
-                    onChange={(event) => setConfigDraft(event.target.value)}
-                    placeholder="加载配置后可在此编辑原始文件内容。"
-                    spellCheck={false}
-                    wrap="off"
-                  />
-                </div>
-                <section className="review-results config-review-results" aria-label="本地配置 dry-run 与应用结果">
-                  <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
-                  <ApplyResults results={applyResults} />
-                </section>
-              </article>
-            </section>
+            <LocalConfigPanel
+              runtimeState={runtimeState}
+              loadErrorNode={loadErrorNode}
+              targetMode={targetMode}
+              onTargetModeChange={setTargetMode}
+              configAgent={configAgent}
+              configAvailabilityByAgent={configAvailabilityByAgent}
+              isLoadingConfigAvailability={isLoadingConfigAvailability}
+              selectedConfigAvailability={selectedConfigAvailability}
+              configFile={configFile}
+              configPathModeLabel={configPathModeLabel}
+              configPath={configPath}
+              onConfigPathChange={setConfigPath}
+              configDraft={configDraft}
+              onConfigDraftChange={setConfigDraft}
+              configStatus={configStatus}
+              onLoadConfigFile={handleLoadConfigFile}
+              onSaveConfigFile={handleSaveConfigFile}
+              canLoadConfig={canLoadConfig}
+              canSaveConfig={canSaveConfig}
+              isLoadingConfig={isLoadingConfig}
+              isSavingConfig={isSavingConfig}
+              localSyncTargetLabel={localSyncTargetLabel}
+              onPlan={handlePlan}
+              canReviewLocalConfig={canReviewLocalConfig}
+              isPlanning={isPlanning}
+              confirmationText={confirmationText}
+              onConfirmationTextChange={setConfirmationText}
+              canConfirmLocalConfig={canConfirmLocalConfig}
+              canApplyLocalConfig={canApplyLocalConfig}
+              isApplying={isApplying}
+              onApply={handleApply}
+              planResultsNode={
+                <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
+              }
+              applyResultsNode={<ApplyResults results={applyResults} />}
+            />
           )}
 
           {activeTab === 'rules' && (
