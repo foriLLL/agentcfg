@@ -137,7 +137,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         rememberGitHubToken: true,
       });
 
-      await cdp.waitForText('远端配置');
+      await cdp.waitForText('远端真源');
       await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取到表单');
       await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存到 Gist');
       await assertNoRemoteBottomActions(cdp);
@@ -328,7 +328,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputValue('#github-token'), 'replacement-token-draft', 'GitHub Token replacement draft was not editable');
       await cdp.clickButton('取消编辑');
       await assertSavedGitHubTokenLocked(cdp, 'cancelled GitHub Token edit input');
-      await cdp.clickButton('远端配置');
+      await cdp.clickButton('远端真源');
       await cdp.clickButton('读取到表单');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after load');
@@ -353,7 +353,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-reload DOM');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-reload browser storage');
       assert.equal((await firstRecordedFetchUrl(cdp, '/api/state')), '/api/state');
-      await cdp.clickButton('远端配置');
+      await cdp.clickButton('远端真源');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after reload');
       await assertDomHasNoGitHubToken(cdp, 'post-reload-remote-auto-refresh DOM');
@@ -383,7 +383,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-port-change DOM');
       assert.equal(await firstRecordedFetchUrl(cdp, '/api/state'), '/api/state');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-port-change browser storage');
-      await cdp.clickButton('远端配置');
+      await cdp.clickButton('远端真源');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after port-change navigation');
       assert.deepEqual(await cdp.evaluate(`(() => {
@@ -436,7 +436,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const stateAfterTokenClear = await readFile(statePath, 'utf8');
       assert.equal(stateAfterTokenClear.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after token clear');
 
-      await cdp.clickButton('本地配置');
+      await cdp.clickButton('同步到本地');
       await cdp.waitForText('OpenCode');
       await cdp.waitForText('Claude Code');
       await cdp.waitForFunction(`(() => {
@@ -477,7 +477,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(nativeAfterEditorSave.includes('gui-editor-secret'), true);
 
       const localPlanRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/apply/plan').length;
-      assert.equal(await cdp.clickButton('预览 (Dry-run)'), true, 'local config dry-run button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#config-panel', '预览 (Dry-run)'), true, 'local config dry-run button was not clickable');
       await cdp.waitForFunction(`(() => {
         const requests = window.__agentcfgFetchBodies ?? [];
         return requests.filter((request) => request.url === '/api/apply/plan').length > ${localPlanRequestCountBefore};
@@ -491,7 +491,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(localDryRunDom.includes('gui-editor-secret'), true, 'local dry-run preview did not show current config content');
       assert.equal(localDryRunDom.includes(CACHED_SECRET), true, 'local dry-run preview did not show expected config content');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, agent: 'opencode', configPath: nativePath });
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true);
+      assert.equal(await cdp.isButtonDisabledInPanel('#config-panel', '应用变更'), true);
 
       await cdp.setInputValue('#local-apply-confirmation', 'APPLY');
       await cdp.waitForFunction(`(() => {
@@ -500,7 +500,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         return button instanceof HTMLButtonElement && !button.disabled;
       })()`);
       const localApplyRequestCountBefore = (await cdp.recordedFetchBodies()).filter((request) => request.url === '/api/apply').length;
-      assert.equal(await cdp.clickButton('应用变更'), true, 'local config apply button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#config-panel', '应用变更'), true, 'local config apply button was not clickable');
       await cdp.waitForFunction(`(() => {
         const requests = window.__agentcfgFetchBodies ?? [];
         return requests.filter((request) => request.url === '/api/apply').length > ${localApplyRequestCountBefore};
@@ -515,9 +515,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-local-apply-secret'));
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
-      await cdp.clickButton('审阅与应用');
+      await cdp.clickButton('同步到本地');
 
-      await cdp.clickButton('预览 (Dry-run)');
+      await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)');
       await cdp.waitForText('预览完成');
       await cdp.waitForText('当前内容');
       await cdp.waitForText('应用后内容');
@@ -526,7 +526,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const dryRunDom = await cdp.bodyText();
       assert.equal(dryRunDom.includes('gui-editor-after-local-apply-secret'), true, 'dry-run preview did not show current config content');
       assert.equal(dryRunDom.includes(CACHED_SECRET), true, 'dry-run preview did not show expected config content');
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true);
+      assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true);
 
       const planApi = await postJsonText(webServer.url, '/api/apply/plan', { statePath, agent: 'opencode', configPath: nativePath });
       assert.equal(planApi.includes('gui-editor-after-local-apply-secret'), true, 'dry-run API response did not include current config content');
@@ -534,15 +534,15 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assertNoGitHubToken(planApi, 'dry-run API response');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
-      await cdp.clickButton('本地配置');
+      await cdp.clickButton('同步到本地');
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-plan-secret'));
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
-      await cdp.clickButton('审阅与应用');
+      await cdp.clickButton('同步到本地');
       await cdp.waitForText('需要重新预览');
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true, 'config save did not invalidate stale dry-run plan');
+      assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'config save did not invalidate stale dry-run plan');
 
-      await cdp.clickButton('预览 (Dry-run)');
+      await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)');
       await cdp.waitForText('预览完成');
       await assertSelectorVisible(cdp, '.file-diff-editor');
       const refreshedDryRunDom = await cdp.bodyText();
@@ -551,11 +551,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
       await cdp.waitForFunction(`(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
+        const buttons = Array.from(document.querySelectorAll('#review-panel button'));
         const button = buttons.find((candidate) => candidate.textContent?.includes('应用变更'));
         return button instanceof HTMLButtonElement && !button.disabled;
       })()`);
-      await cdp.clickButton('应用变更');
+      await cdp.clickButtonInPanel('#review-panel', '应用变更');
       await cdp.waitForText('应用完成');
 
       const nativeAfterApply = await readFile(nativePath, 'utf8');
@@ -564,16 +564,16 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
 
       await cdp.clickSelector('input[name="target-mode"][value="all"]');
       await cdp.setInputValue('#config-path', allTargetsDirectory);
-      assert.equal(await cdp.clickButton('预览 (Dry-run)'), true, 'all-agent dry-run button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)'), true, 'all-agent dry-run button was not clickable');
       await cdp.waitForText('预览完成');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, allAgents: true, configPath: allTargetsDirectory });
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true, 'all-agent apply unlocked before confirmation');
-      await cdp.clickButton('本地配置');
+      assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'all-agent apply unlocked before confirmation');
+      await cdp.clickButton('同步到本地');
       await assertSelectorVisible(cdp, '#local-apply-confirmation');
       assert.equal(await cdp.inputDisabled('#local-apply-confirmation'), true, 'local confirmation accepted an all-agent dry-run plan');
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true, 'local apply unlocked for an all-agent dry-run plan');
-      await cdp.clickButton('审阅与应用');
-      assert.equal(await cdp.isButtonDisabled('应用变更'), true, 'execute apply unlocked without direct confirmation after visiting local config');
+      assert.equal(await cdp.isButtonDisabledInPanel('#config-panel', '应用变更'), true, 'local apply unlocked for an all-agent dry-run plan');
+      await cdp.clickButton('同步到本地');
+      assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'execute apply unlocked without direct confirmation after visiting local config');
 
       const codexDiffApi = JSON.parse(await postJsonText(webServer.url, '/api/diff', { statePath, agent: 'codex', configPath: codexNativePath })) as CodexNoticeApiEnvelope;
       assert.equal(codexDiffApi.ok, true, 'Codex diff API response failed');
@@ -604,7 +604,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           && pathInput.value === ${JSON.stringify(codexNativePath)};
       })()`);
 
-      assert.equal(await cdp.clickButton('预览 (Dry-run)'), true, 'Codex dry-run button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)'), true, 'Codex dry-run button was not clickable');
       await cdp.waitForText('预览完成');
       await cdp.waitForText('0 项操作');
       await cdp.waitForText('Codex has no official native mapping for contextTokens');
@@ -616,7 +616,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-Codex-dry-run DOM');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
-      assert.equal(await cdp.clickButton('应用变更'), true, 'Codex apply button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#review-panel', '应用变更'), true, 'Codex apply button was not clickable');
       await cdp.waitForText('应用完成');
       await cdp.waitForText('Codex has no official native mapping for maxTokens');
       assert.equal((await cdp.bodyText()).includes('无变化'), true, 'Codex notice-only apply did not remain unchanged');
@@ -823,9 +823,31 @@ class CdpPage {
     })()`);
   }
 
+  clickButtonInPanel(panelSelector: string, text: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const panel = document.querySelector(${JSON.stringify(panelSelector)});
+      if (!(panel instanceof HTMLElement)) return false;
+      const buttons = Array.from(panel.querySelectorAll('button'));
+      const button = buttons.find((candidate) => candidate.textContent?.includes(${JSON.stringify(text)}));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+  }
+
   isButtonDisabled(text: string): Promise<boolean> {
     return this.evaluate<boolean>(`(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
+      const button = buttons.find((candidate) => candidate.textContent?.includes(${JSON.stringify(text)}));
+      return button instanceof HTMLButtonElement && button.disabled;
+    })()`);
+  }
+
+  isButtonDisabledInPanel(panelSelector: string, text: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const panel = document.querySelector(${JSON.stringify(panelSelector)});
+      if (!(panel instanceof HTMLElement)) return true;
+      const buttons = Array.from(panel.querySelectorAll('button'));
       const button = buttons.find((candidate) => candidate.textContent?.includes(${JSON.stringify(text)}));
       return button instanceof HTMLButtonElement && button.disabled;
     })()`);

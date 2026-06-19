@@ -45,7 +45,7 @@ export function SyncTargetsPanel({
       {heading}
       <ExecutePanel {...execute} />
 
-      <details className="sync-targets-panel__advanced">
+      <details className="sync-targets-panel__advanced" open>
         <summary>
           <span>原生配置原文编辑</span>
           <small>直接编辑当前所选 Agent 的原生配置文件；保存后会让上方预览失效。</small>
@@ -53,7 +53,7 @@ export function SyncTargetsPanel({
         <LocalConfigPanel {...localConfig} />
       </details>
 
-      <details className="sync-targets-panel__advanced">
+      <details className="sync-targets-panel__advanced" open>
         <summary>
           <span>规则文件</span>
           <small>同步 Codex / Claude / Gemini 用户级规则文件。</small>
