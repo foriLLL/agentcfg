@@ -12,17 +12,12 @@ import { useCommandCenterStatus } from './useCommandCenterStatus';
 import {
   type EditableAgentConfig,
   applyRuntime,
-  clearSavedGitHubTokenRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
-  getRuntimeState,
-  initRuntime,
   loadRemoteConfigRuntime,
   planApplyRuntime,
-  pullRuntime,
   saveConfigFileRuntime,
   saveRemoteConfigRuntime,
-  setupRemoteConfigRuntime,
   type AgentName,
   type ApplyAgentResult,
   type ConfigAvailabilityEntry,
@@ -67,6 +62,11 @@ import {
   withOhMyOpenAgentModel,
   withOhMyOpenAgentVariant,
 } from './panels/remote-draft';
+import {
+  selectRequestStatePath,
+  selectShouldRememberGitHubToken,
+  useRuntimeStore,
+} from './stores';
 
 type Notice = ToastNotice;
 
@@ -95,14 +95,28 @@ const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
 const SAVED_GITHUB_TOKEN_MASK = '************';
 
 function App() {
-  const [runtimeState, setRuntimeState] = useState<RuntimeStateSummary | null>(null);
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // ---- runtime store: read-only selectors -----------------------------
+  const runtimeState = useRuntimeStore((state) => state.state);
+  const loadState = useRuntimeStore((state) => state.loadState);
+  const githubToken = useRuntimeStore((state) => state.githubToken);
+  const isEditingGitHubToken = useRuntimeStore((state) => state.isEditingGitHubToken);
+  const rememberGitHubToken = useRuntimeStore((state) => state.rememberGitHubToken);
+  const gistId = useRuntimeStore((state) => state.gistId);
+  const statePath = useRuntimeStore((state) => state.statePath);
+  const isSubmittingInit = useRuntimeStore((state) => state.isSubmittingInit);
+  const isPulling = useRuntimeStore((state) => state.isPulling);
+  const isSettingRemote = useRuntimeStore((state) => state.isSettingRemote);
+  const isClearingGitHubToken = useRuntimeStore((state) => state.isClearingGitHubToken);
+  const setGithubToken = useRuntimeStore((state) => state.setGithubToken);
+  const setGistId = useRuntimeStore((state) => state.setGistId);
+  const setStatePath = useRuntimeStore((state) => state.setStatePath);
+  const setRememberGitHubToken = useRuntimeStore((state) => state.setRememberGitHubToken);
+  const beginEditSavedToken = useRuntimeStore((state) => state.beginEditSavedToken);
+  const cancelEditSavedToken = useRuntimeStore((state) => state.cancelEditSavedToken);
+  const commitRuntimeState = useRuntimeStore((state) => state.commitRuntimeState);
+
+  // ---- legacy useState slices owned by this component (PR3-c3..c4 will move them)
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [githubToken, setGithubToken] = useState('');
-  const [isEditingGitHubToken, setIsEditingGitHubToken] = useState(false);
-  const [rememberGitHubToken, setRememberGitHubToken] = useState(false);
-  const [gistId, setGistId] = useState('');
-  const [statePath, setStatePath] = useState('');
   const [configPath, setConfigPath] = useState('');
   const [remoteDraft, setRemoteDraft] = useState<EditableAgentConfig>(EMPTY_REMOTE_CONFIG);
   const [remoteEditorProviderId, setRemoteEditorProviderId] = useState(EMPTY_REMOTE_CONFIG.defaults.provider);
@@ -119,65 +133,48 @@ function App() {
   const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
   const [configDraft, setConfigDraft] = useState('');
   const [configStatus, setConfigStatus] = useState('尚未加载配置文件。');
-  const [isSubmittingInit, setIsSubmittingInit] = useState(false);
-  const [isPulling, setIsPulling] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
-  const [isSettingRemote, setIsSettingRemote] = useState(false);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [isSavingRemote, setIsSavingRemote] = useState(false);
-  const [isClearingGitHubToken, setIsClearingGitHubToken] = useState(false);
   const [isLoadingConfigAvailability, setIsLoadingConfigAvailability] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   useEffect(() => {
     let active = true;
+    const bootstrap = useRuntimeStore.getState().bootstrap;
 
-    getRuntimeState()
-      .then(async ({ state }) => {
-        if (!active) {
+    bootstrap()
+      .then(async (outcome) => {
+        if (!active) return;
+
+        if (!outcome.ok) {
+          setNotice({ tone: 'error', title: '无法加载状态', copy: formatError(outcome.error) });
           return;
         }
-        commitRuntimeState(state);
-        setLoadState('ready');
-        setGistId(state.gist.id ?? '');
 
-        if (state.secrets?.hasGitHubToken === true && state.gist.present) {
+        if (outcome.shouldAutoLoadRemote) {
           setIsLoadingRemote(true);
           try {
-            const response = await loadRemoteConfigRuntime({ statePath: state.statePath });
-            if (!active) {
-              return;
-            }
+            const response = await loadRemoteConfigRuntime({ statePath: outcome.state.statePath });
+            if (!active) return;
             commitRuntimeState(response.state);
-            setGistId(response.state.gist.id ?? '');
             replaceRemoteDraft(configToDraft(response.config));
             setRemoteStatus('远端配置已自动刷新。表单显示的是当前 Gist 完整值；API Key 直接显示。');
           } catch (error) {
-            if (!active) {
-              return;
-            }
+            if (!active) return;
             setRemoteStatus(`自动刷新远端配置失败：${formatError(error)}`);
           } finally {
-            if (active) {
-              setIsLoadingRemote(false);
-            }
+            if (active) setIsLoadingRemote(false);
           }
         }
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        setLoadState('error');
-        setNotice({ tone: 'error', title: '无法加载状态', copy: formatError(error) });
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [commitRuntimeState]);
 
   const setupSteps = useMemo<Step[]>(() => buildSetupSteps(runtimeState), [runtimeState]);
   const requestStatePath = statePath.trim() === '' ? runtimeState?.statePath : statePath.trim();
@@ -213,7 +210,6 @@ function App() {
   const isGitHubTokenLocked = hasSavedGitHubToken && !isEditingGitHubToken;
   const isReplacingSavedGitHubToken = hasSavedGitHubToken && isEditingGitHubToken;
   const githubTokenInputValue = isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : githubToken;
-  const shouldRememberGitHubToken = isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken;
   const remoteYamlPreview = useMemo(() => buildRemoteYamlPreview(remoteDraft), [remoteDraft]);
   const remoteProviderIds = Object.keys(remoteDraft.providers);
   const selectedRemoteProviderId = remoteDraft.providers[remoteEditorProviderId] === undefined ? remoteProviderIds[0] ?? '' : remoteEditorProviderId;
@@ -292,16 +288,6 @@ function App() {
     };
   }, [loadState, requestStatePath]);
 
-  function commitRuntimeState(state: RuntimeStateSummary): void {
-    setRuntimeState(state);
-    setStatePath(state.statePath);
-    if (state.secrets?.hasGitHubToken === true) {
-      setGithubToken('');
-      setRememberGitHubToken(false);
-      setIsEditingGitHubToken(false);
-    }
-  }
-
   function showNotice(tone: Notice['tone'], title: string, copy: string): void {
     setNotice({ tone, title, copy });
   }
@@ -316,57 +302,33 @@ function App() {
     setRemoteEditorModelId(modelId);
   }
 
-  async function refreshState(nextStatePath?: string): Promise<void> {
-    const { state } = await getRuntimeState(nextStatePath);
-    commitRuntimeState(state);
-    setGistId(state.gist.id ?? gistId);
-    setLoadState('ready');
-  }
-
   async function handleInitSubmit(event: SyntheticEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const nextGistId = gistId.trim();
-    const nextStatePath = statePath.trim();
     const nextGithubToken = githubToken.trim();
+    const nextGistId = gistId.trim();
 
     if (nextGithubToken !== '' || nextGistId === '') {
-      await handleRemoteSetup(nextGithubToken, nextStatePath);
+      await handleRemoteSetup();
       return;
     }
 
-    if (nextGistId === '') {
-      setNotice({
-        tone: 'error',
-        title: '需要 GitHub Token',
-        copy: '请输入 GitHub Token 自动配置远端，或使用已保存的 Token；如已知道 Gist ID，也可以填写高级兼容项。',
-      });
-      return;
-    }
-
-    setIsSubmittingInit(true);
     setNotice(null);
-    try {
-      const { state } = await initRuntime({ gistId: nextGistId, statePath: nextStatePath });
-      commitRuntimeState(state);
-      await refreshState(nextStatePath);
+    const outcome = await useRuntimeStore.getState().init();
+    if (outcome.ok) {
       setNotice({
         tone: 'success',
         title: NOTICES.connected,
         copy: 'agentcfg 已保存 Gist 身份。准备好后即可拉取远端配置。',
       });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.initFailed, copy: formatError(error) });
-    } finally {
-      setIsSubmittingInit(false);
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.initFailed, copy: formatError(outcome.error) });
     }
   }
 
   async function handlePull(): Promise<void> {
-    setIsPulling(true);
     setNotice(null);
-    try {
-      const { state } = await pullRuntime(githubTokenRequest(requestStatePath));
-      commitRuntimeState(state);
+    const outcome = await useRuntimeStore.getState().pull();
+    if (outcome.ok) {
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
@@ -375,43 +337,40 @@ function App() {
         title: NOTICES.pullSucceeded,
         copy: '控制台现在显示最新的本地缓存与完整代理配置，包括 API Key。',
       });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.pullFailed, copy: formatError(error) });
-    } finally {
-      setIsPulling(false);
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.pullFailed, copy: formatError(outcome.error) });
     }
   }
 
-  async function handleRemoteSetup(nextGithubToken = githubToken.trim(), nextStatePath = statePath.trim()): Promise<void> {
-    setIsSettingRemote(true);
+  async function handleRemoteSetup(overrides?: { githubToken?: string; statePath?: string }): Promise<void> {
     setNotice(null);
-    try {
-      const response = await setupRemoteConfigRuntime(githubTokenRequest(nextStatePath, nextGithubToken));
-      commitRuntimeState(response.state);
-      setGistId(response.state.gist.id ?? '');
-      if (response.config !== undefined) {
-        replaceRemoteDraft(configToDraft(response.config));
-        setRemoteStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
-      } else {
-        replaceRemoteDraft(EMPTY_REMOTE_CONFIG);
-        setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
-      }
-      setActiveTab('remote');
-      setNotice({ tone: 'success', title: response.state.gist.present ? NOTICES.connected : NOTICES.remoteReadyToCreate, copy: response.state.gist.present ? '已找到现有 agentcfg Gist，可以继续编辑远端配置。' : '填写远端配置后保存，即可自动创建 agentcfg Gist。' });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.remoteSetupFailed, copy: formatError(error) });
-    } finally {
-      setIsSettingRemote(false);
+    const outcome = await useRuntimeStore.getState().setupRemote(overrides);
+    if (!outcome.ok) {
+      setNotice({ tone: 'error', title: NOTICES.remoteSetupFailed, copy: formatError(outcome.error) });
+      return;
     }
+    if (outcome.config !== undefined) {
+      replaceRemoteDraft(configToDraft(outcome.config));
+      setRemoteStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
+    } else {
+      replaceRemoteDraft(EMPTY_REMOTE_CONFIG);
+      setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
+    }
+    setActiveTab('remote');
+    setNotice({
+      tone: 'success',
+      title: outcome.bootstrapped ? NOTICES.connected : NOTICES.remoteReadyToCreate,
+      copy: outcome.bootstrapped
+        ? '已找到现有 agentcfg Gist，可以继续编辑远端配置。'
+        : '填写远端配置后保存，即可自动创建 agentcfg Gist。',
+    });
   }
 
   async function handleLoadRemoteConfig(): Promise<void> {
-    const nextGithubToken = githubToken.trim();
-
     setIsLoadingRemote(true);
     setNotice(null);
     try {
-      const response = await loadRemoteConfigRuntime(githubTokenRequest(requestStatePath, nextGithubToken));
+      const response = await loadRemoteConfigRuntime(buildGitHubTokenRequest());
       commitRuntimeState(response.state);
       replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已加载。API Key 直接显示；保存前请确认表单就是最终写入值。');
@@ -424,7 +383,6 @@ function App() {
   }
 
   async function handleSaveRemoteConfig(): Promise<void> {
-    const nextGithubToken = githubToken.trim();
     const validationError = validateRemoteDraft(remoteDraft);
     if (validationError !== null) {
       setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: validationError });
@@ -434,9 +392,8 @@ function App() {
     setIsSavingRemote(true);
     setNotice(null);
     try {
-      const response = await saveRemoteConfigRuntime({ ...githubTokenRequest(requestStatePath, nextGithubToken), config: remoteDraft });
+      const response = await saveRemoteConfigRuntime({ ...buildGitHubTokenRequest(), config: remoteDraft });
       commitRuntimeState(response.state);
-      setGistId(response.state.gist.id ?? gistId);
       replaceRemoteDraft(configToDraft(response.config));
       setRemoteStatus('远端配置已保存。表单和预览已回填最终写入的完整值。');
       setPlanResponse(null);
@@ -451,40 +408,22 @@ function App() {
   }
 
   async function handleClearSavedGitHubToken(): Promise<void> {
-    setIsClearingGitHubToken(true);
     setNotice(null);
-    try {
-      const { state } = await clearSavedGitHubTokenRuntime({ statePath: requestStatePath });
-      commitRuntimeState(state);
-      setGithubToken('');
-      setRememberGitHubToken(false);
-      setIsEditingGitHubToken(false);
+    const outcome = await useRuntimeStore.getState().clearSavedToken();
+    if (outcome.ok) {
       setNotice({ tone: 'success', title: NOTICES.tokenCleared, copy: 'secrets.json 中保存的 GitHub Token 已删除；后续远端操作需要重新输入 Token。' });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.tokenClearFailed, copy: formatError(error) });
-    } finally {
-      setIsClearingGitHubToken(false);
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.tokenClearFailed, copy: formatError(outcome.error) });
     }
   }
 
-  function githubTokenRequest(nextStatePath = requestStatePath, nextGithubToken = githubToken.trim()) {
+  function buildGitHubTokenRequest(nextStatePath = requestStatePath, nextGithubToken = githubToken.trim()) {
+    const remember = selectShouldRememberGitHubToken(useRuntimeStore.getState());
     return {
       statePath: nextStatePath,
       githubToken: nextGithubToken,
-      ...(shouldRememberGitHubToken && nextGithubToken !== '' ? { rememberGitHubToken: true } : {}),
+      ...(remember && nextGithubToken !== '' ? { rememberGitHubToken: true } : {}),
     };
-  }
-
-  function handleEditSavedGitHubToken(): void {
-    setGithubToken('');
-    setRememberGitHubToken(false);
-    setIsEditingGitHubToken(true);
-  }
-
-  function handleCancelGitHubTokenEdit(): void {
-    setGithubToken('');
-    setRememberGitHubToken(false);
-    setIsEditingGitHubToken(false);
   }
 
   function handleSelectRemoteProvider(providerId: string): void {
@@ -685,7 +624,7 @@ function App() {
       const response = await applyRuntime({ ...targetRequest, confirm: 'APPLY' });
       setApplyResults(response.results);
       setConfirmationText('');
-      await refreshState(requestStatePath);
+      await useRuntimeStore.getState().refresh(requestStatePath);
       setNotice({ tone: 'success', title: NOTICES.applySucceeded, copy: '所选代理文件已更新，控制台状态已刷新。' });
     } catch (error) {
       const results = extractApplyResults(error);
@@ -790,8 +729,8 @@ function App() {
               hasSavedGitHubToken={hasSavedGitHubToken}
               isEditingGitHubToken={isEditingGitHubToken}
               savedTokenStatusCopy={hasSavedGitHubToken ? (isEditingGitHubToken ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。' : '已保存 GitHub Token，输入框已锁定为固定掩码。') : '尚未保存 GitHub Token。'}
-              onEditSavedGitHubToken={handleEditSavedGitHubToken}
-              onCancelGitHubTokenEdit={handleCancelGitHubTokenEdit}
+              onEditSavedGitHubToken={beginEditSavedToken}
+              onCancelGitHubTokenEdit={cancelEditSavedToken}
               onClearSavedGitHubToken={handleClearSavedGitHubToken}
               onInitSubmit={handleInitSubmit}
               submitButtonLabel={isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub'}
@@ -891,7 +830,7 @@ function App() {
             <RulesPanel
               runtimeState={runtimeState}
               requestStatePath={requestStatePath}
-              buildGitHubTokenRequest={() => githubTokenRequest()}
+              buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
               onState={commitRuntimeState}
               onNotice={showNotice}
             />
@@ -901,7 +840,7 @@ function App() {
             <section className="dashboard-grid dashboard-grid--rules" id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
               <SkillsDirectoryPanel
                 requestStatePath={requestStatePath}
-                buildGitHubTokenRequest={() => githubTokenRequest()}
+                buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
                 onState={commitRuntimeState}
                 onNotice={showNotice}
               />
@@ -912,7 +851,7 @@ function App() {
             <SyncPanel
               runtimeState={runtimeState}
               requestStatePath={requestStatePath}
-              buildGitHubTokenRequest={() => githubTokenRequest()}
+              buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
               onState={commitRuntimeState}
               onNotice={showNotice}
             />
