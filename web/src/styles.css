@@ -2879,3 +2879,50 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* PR4 IA: composite panels */
+
+.remote-source-panel,
+.sync-targets-panel {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.sync-targets-panel__advanced {
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-control);
+}
+
+.sync-targets-panel__advanced > summary {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  list-style: none;
+  cursor: pointer;
+}
+
+.sync-targets-panel__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sync-targets-panel__advanced > summary > span {
+  font-weight: 800;
+  font-size: var(--text-card-title);
+  color: var(--color-cocoa);
+}
+
+.sync-targets-panel__advanced > summary > small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  letter-spacing: 0.04em;
+}
+
+.sync-targets-panel__advanced[open] > summary {
+  border-bottom: var(--hairline) solid var(--color-line);
+}
+
+.sync-targets-panel__advanced > :not(summary) {
+  padding: var(--space-4);
+}

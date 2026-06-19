@@ -29,9 +29,8 @@ import {
   type Step,
 } from './view-model';
 import { NOTICES } from './strings';
-import { ExecutePanel } from './panels/ExecutePanel';
-import { LocalConfigPanel } from './panels/LocalConfigPanel';
 import { RemoteSourcePanel } from './panels/RemoteSourcePanel';
+import { SyncTargetsPanel } from './panels/SyncTargetsPanel';
 import {
   type OhMyOpenAgentAssignmentKind,
   type RemoteConfigView,
@@ -575,79 +574,83 @@ function App() {
           )}
 
           {activeTab === 'sync' && (
-            <>
-              <ExecutePanel
-                runtimeState={runtimeState}
-                loadErrorNode={loadErrorNode}
-                targetMode={targetMode}
-                onTargetModeChange={setTargetMode}
-                configPath={configPath}
-                onConfigPathChange={setConfigPath}
-                requestStatePath={requestStatePath}
-                onPlan={handlePlan}
-                canReview={canReview}
-                isPlanning={isPlanning}
-                confirmationText={confirmationText}
-                onConfirmationTextChange={setConfirmationText}
-                isPlanCurrent={isPlanCurrent}
-                canApply={canApply}
-                isApplying={isApplying}
-                onApply={handleApply}
-                planResponse={planResponse}
-                applyResults={applyResults}
-              />
-              <LocalConfigPanel
-                runtimeState={runtimeState}
-                loadErrorNode={loadErrorNode}
-                targetMode={targetMode}
-                onTargetModeChange={setTargetMode}
-                configAgent={configAgent}
-                configAvailabilityByAgent={configAvailabilityByAgent}
-                isLoadingConfigAvailability={isLoadingConfigAvailability}
-                selectedConfigAvailability={selectedConfigAvailability}
-                configFile={configFile}
-                configPathModeLabel={configPathModeLabel}
-                configPath={configPath}
-                onConfigPathChange={setConfigPath}
-                configDraft={configDraft}
-                onConfigDraftChange={setConfigDraft}
-                configStatus={configStatus}
-                onLoadConfigFile={handleLoadConfigFile}
-                onSaveConfigFile={handleSaveConfigFile}
-                canLoadConfig={canLoadConfig}
-                canSaveConfig={canSaveConfig}
-                isLoadingConfig={isLoadingConfig}
-                isSavingConfig={isSavingConfig}
-                localSyncTargetLabel={localSyncTargetLabel}
-                onPlan={handlePlan}
-                canReviewLocalConfig={canReviewLocalConfig}
-                isPlanning={isPlanning}
-                confirmationText={confirmationText}
-                onConfirmationTextChange={setConfirmationText}
-                canConfirmLocalConfig={canConfirmLocalConfig}
-                canApplyLocalConfig={canApplyLocalConfig}
-                isApplying={isApplying}
-                onApply={handleApply}
-                planResponse={planResponse}
-                isPlanCurrent={isPlanCurrent}
-                applyResults={applyResults}
-              />
-              <RulesPanel
-                runtimeState={runtimeState}
-                requestStatePath={requestStatePath}
-                buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
-                onState={commitRuntimeState}
-                onNotice={showNotice}
-              />
-              <section className="dashboard-grid dashboard-grid--rules" id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
-                <SkillsDirectoryPanel
+            <SyncTargetsPanel
+              execute={{
+                runtimeState,
+                loadErrorNode,
+                targetMode,
+                onTargetModeChange: setTargetMode,
+                configPath,
+                onConfigPathChange: setConfigPath,
+                requestStatePath,
+                onPlan: handlePlan,
+                canReview,
+                isPlanning,
+                confirmationText,
+                onConfirmationTextChange: setConfirmationText,
+                isPlanCurrent,
+                canApply,
+                isApplying,
+                onApply: handleApply,
+                planResponse,
+                applyResults,
+              }}
+              localConfig={{
+                runtimeState,
+                loadErrorNode,
+                targetMode,
+                onTargetModeChange: setTargetMode,
+                configAgent,
+                configAvailabilityByAgent,
+                isLoadingConfigAvailability,
+                selectedConfigAvailability,
+                configFile,
+                configPathModeLabel,
+                configPath,
+                onConfigPathChange: setConfigPath,
+                configDraft,
+                onConfigDraftChange: setConfigDraft,
+                configStatus,
+                onLoadConfigFile: handleLoadConfigFile,
+                onSaveConfigFile: handleSaveConfigFile,
+                canLoadConfig,
+                canSaveConfig,
+                isLoadingConfig,
+                isSavingConfig,
+                localSyncTargetLabel,
+                onPlan: handlePlan,
+                canReviewLocalConfig,
+                isPlanning,
+                confirmationText,
+                onConfirmationTextChange: setConfirmationText,
+                canConfirmLocalConfig,
+                canApplyLocalConfig,
+                isApplying,
+                onApply: handleApply,
+                planResponse,
+                isPlanCurrent,
+                applyResults,
+              }}
+              rulesPanelNode={
+                <RulesPanel
+                  runtimeState={runtimeState}
                   requestStatePath={requestStatePath}
                   buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
                   onState={commitRuntimeState}
                   onNotice={showNotice}
                 />
-              </section>
-            </>
+              }
+              skillsPanelNode={
+                <section className="dashboard-grid dashboard-grid--rules" id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
+                  <SkillsDirectoryPanel
+                    requestStatePath={requestStatePath}
+                    buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
+                    onState={commitRuntimeState}
+                    onNotice={showNotice}
+                  />
+                </section>
+              }
+            />
           )}
 
           {activeTab === 'automation' && (
