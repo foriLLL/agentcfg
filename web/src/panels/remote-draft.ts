@@ -8,7 +8,8 @@ import type {
   OhMyOpenAgentModelAssignment,
   OhMyOpenAgentModelVariant,
 } from '../api';
-import type { OhMyOpenAgentAssignmentKind } from './RemoteConfigPanel';
+
+export type OhMyOpenAgentAssignmentKind = 'agents' | 'categories';
 
 /**
  * Pure draft mutators for the remote agentcfg.yaml editor.

@@ -4,8 +4,9 @@ import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPEN
 import type { EditableAgentConfig, OhMyOpenAgentModelAssignment, RuntimeStateSummary } from '../api';
 import { BUTTONS, gistConnectionBadge } from '../strings';
 import { StatusBadge } from '../widgets';
+import type { OhMyOpenAgentAssignmentKind } from './remote-draft';
 
-export type OhMyOpenAgentAssignmentKind = 'agents' | 'categories';
+export type { OhMyOpenAgentAssignmentKind };
 
 export type RemoteConfigView = 'editor' | 'preview';
 

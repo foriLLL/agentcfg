@@ -5,7 +5,6 @@ import {
   type EditableAgentConfig,
   type OhMyOpenAgentModelAssignment,
 } from '../api';
-import type { OhMyOpenAgentAssignmentKind } from '../panels/RemoteConfigPanel';
 import {
   emptyProviderDraft,
   modelDraft,
@@ -20,6 +19,7 @@ import {
   withOhMyOpenAgentAssignment,
   withOhMyOpenAgentModel,
   withOhMyOpenAgentVariant,
+  type OhMyOpenAgentAssignmentKind,
 } from '../panels/remote-draft';
 import { configToDraft } from '../view-model';
 import {
