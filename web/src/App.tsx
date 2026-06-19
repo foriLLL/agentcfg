@@ -70,6 +70,7 @@ import {
   dryRunReadinessBadge,
   gistConnectionBadge,
 } from './strings';
+import { Detail, EmptyCopy, ResultHeading, StatusBadge } from './widgets';
 
 type Notice = ToastNotice;
 
@@ -1378,28 +1379,6 @@ function App() {
   );
 }
 
-function StatusBadge({ children, tone }: { children: string; tone: 'ready' | 'pending' | 'warning' }) {
-  return <span className={`status-badge status-badge--${tone}`}>{children}</span>;
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-function EmptyCopy({ title, copy }: { title: string; copy: string }) {
-  return (
-    <div className="mini-empty">
-      <h3>{title}</h3>
-      <p>{copy}</p>
-    </div>
-  );
-}
-
 function OhMyOpenAgentMappingEditor({
   config,
   isSavingRemote,
@@ -1973,15 +1952,6 @@ function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
         </article>
       ))}
     </section>
-  );
-}
-
-function ResultHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
-  return (
-    <div className="result-heading">
-      <p className="eyebrow">{eyebrow}</p>
-      <h3>{title}</h3>
-    </div>
   );
 }
 
