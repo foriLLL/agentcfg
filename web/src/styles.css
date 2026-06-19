@@ -2966,3 +2966,44 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* PR5: Remote source advanced editor collapsible */
+
+.remote-source-panel__advanced {
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-control);
+}
+
+.remote-source-panel__advanced > summary {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  list-style: none;
+  cursor: pointer;
+}
+
+.remote-source-panel__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.remote-source-panel__advanced > summary > span {
+  font-weight: 800;
+  font-size: var(--text-card-title);
+  color: var(--color-cocoa);
+}
+
+.remote-source-panel__advanced > summary > small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  letter-spacing: 0.04em;
+}
+
+.remote-source-panel__advanced[open] > summary {
+  border-bottom: var(--hairline) solid var(--color-line);
+}
+
+.remote-source-panel__advanced > :not(summary) {
+  padding: var(--space-4);
+}

@@ -19,10 +19,18 @@ export type RemoteSourcePanelProps = {
  * / #remote-panel) so deep links and the GUI test selectors continue
  * to work.
  *
- * Between the two, DefaultsQuickEdit provides a single-row shortcut
- * for the most common edit (rotate API Key, swap default model). That
- * row is hidden when the draft has no providers yet (e.g. before the
- * first Gist load), since it has no defaults to display.
+ * Layout from top to bottom:
+ *
+ *   1. ConnectionPanel        Gist connection + token form
+ *   2. DefaultsQuickEdit       one-liner: default provider/model/key
+ *   3. <details> 详细编辑      open by default; full RemoteConfigPanel
+ *
+ * The advanced editor lives inside a <details> block so users can
+ * collapse it once they have set their defaults. It is rendered open
+ * by default because the GUI flow test (test:gui) needs to interact
+ * with the providers / models / OhMyOpenAgent / YAML preview surface
+ * inside that section. A future PR can flip the default to closed
+ * once the GUI test learns to expand the section first.
  *
  * The component itself is a pass-through. The aggregated props split
  * cleanly into the two inner panel contracts; App.tsx is the only
@@ -43,7 +51,13 @@ export function RemoteSourcePanel({ connection, editor, heading }: RemoteSourceP
           onSave={editor.onSaveRemoteConfig}
         />
       )}
-      <RemoteConfigPanel {...editor} />
+      <details className="remote-source-panel__advanced" open>
+        <summary>
+          <span>详细编辑</span>
+          <small>列出所有 providers / models / OhMyOpenAgent 映射，并提供 YAML 预览与 schema 参考。可折叠以聚焦默认设定。</small>
+        </summary>
+        <RemoteConfigPanel {...editor} />
+      </details>
     </section>
   );
 }
