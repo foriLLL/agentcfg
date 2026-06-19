@@ -1,8 +1,5 @@
 import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
-import { AgentConfigIcon } from './AgentConfigIcon';
 import { CommandCenterShell } from './CommandCenterShell';
-import { FileDiffViewer } from './FileDiffViewer';
-import { LocalConfigAgentSummary } from './LocalConfigAgentSummary';
 import { NoticeToast, type ToastNotice } from './NoticeToast';
 import { RulesPanel } from './RulesPanel';
 import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
@@ -28,12 +25,8 @@ import {
   setupRemoteConfigRuntime,
   type AgentName,
   type ApplyAgentResult,
-  type ApplyFilePreview,
-  type ApplyPlanSummary,
   type ConfigAvailabilityEntry,
   type ConfigFileRuntimeResponse,
-  type ManagedDiffChange,
-  type ManagedDiffNotice,
   type OhMyOpenAgentModelAssignment,
   type OhMyOpenAgentModelVariant,
   type PlanApplyRuntimeResponse,
@@ -42,33 +35,19 @@ import {
 } from './api';
 import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../src/core/schema';
 import {
-  MANAGED_FIELDS,
-  agentSupportsManagedFieldDiff,
   agentLabel,
   buildRemoteYamlPreview,
   buildSetupSteps,
   configToDraft,
   extractApplyResults,
-  fieldLabel,
   formatDate,
   formatError,
-  formatFileMode,
-  formatManagedValue,
-  formatStatus,
-  localReviewActionCopyForAgent,
   remoteAccessWarningForHostname,
   type Step,
 } from './view-model';
-import {
-  BUTTONS,
-  GATES,
-  NOTICES,
-  applyStatusTone,
-  configDraftBadge,
-  dryRunReadinessBadge,
-} from './strings';
-import { Detail, EmptyCopy, ResultHeading, StatusBadge } from './widgets';
+import { NOTICES } from './strings';
 import { ConnectionPanel } from './panels/ConnectionPanel';
+import { ExecutePanel } from './panels/ExecutePanel';
 import { LocalConfigPanel } from './panels/LocalConfigPanel';
 import {
   RemoteConfigPanel,
@@ -79,15 +58,6 @@ import {
 type Notice = ToastNotice;
 
 type TargetMode = AgentName | 'all' | '';
-
-const TARGET_OPTIONS: Array<{ value: Exclude<TargetMode, ''>; title: string; copy: string }> = [
-  { value: 'codex', title: 'Codex', copy: '检查 ~/.codex 设置与生成的 env 文件。' },
-  { value: 'opencode', title: 'OpenCode', copy: '检查一个 OpenCode JSON 或 JSONC 配置。' },
-  { value: 'openclaw', title: 'OpenClaw', copy: '检查一个 OpenClaw JSON 或 JSON5 配置。' },
-  { value: 'claude', title: 'Claude Code', copy: '检查 Claude Code settings.json 配置。' },
-  { value: 'ohmyopenagent', title: 'OhMyOpenAgent', copy: '检查 OhMyOpenAgent 模型路由配置。' },
-  { value: 'all', title: '全部代理', copy: '同时处理 Codex、OpenCode、OpenClaw、Claude Code 与 OhMyOpenAgent。' },
-];
 
 const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
   schemaVersion: 1,
@@ -898,10 +868,9 @@ function App() {
               canApplyLocalConfig={canApplyLocalConfig}
               isApplying={isApplying}
               onApply={handleApply}
-              planResultsNode={
-                <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
-              }
-              applyResultsNode={<ApplyResults results={applyResults} />}
+              planResponse={planResponse}
+              isPlanCurrent={isPlanCurrent}
+              applyResults={applyResults}
             />
           )}
 
@@ -937,94 +906,26 @@ function App() {
           )}
 
           {activeTab === 'execute' && (
-            <section className="dashboard-grid" id="execute-panel" role="tabpanel" aria-labelledby="execute-tab">
-              {loadErrorNode}
-              <article className="card diff-card execute-card" id="review-panel">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">审阅与应用</p>
-                    <h2>Dry-run、再输入确认应用</h2>
-                  </div>
-                  {(() => {
-                    const badge = dryRunReadinessBadge({ hasPlan: isPlanCurrent, hasTarget: targetMode !== '' });
-                    return <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>;
-                  })()}
-                </div>
-
-                <div className="review-layout">
-                  <section className="review-controls" aria-label="审阅控制">
-                    <fieldset className="target-grid">
-                      <legend>请选择一个目标</legend>
-                      {TARGET_OPTIONS.map((target) => (
-                        <label className="target-option" key={target.value}>
-                          <input
-                            type="radio"
-                            name="target-mode"
-                            value={target.value}
-                            checked={targetMode === target.value}
-                            onChange={() => setTargetMode(target.value)}
-                          />
-                          <span>
-                            <strong>{target.title}</strong>
-                            <small>{target.copy}</small>
-                          </span>
-                        </label>
-                      ))}
-                    </fieldset>
-
-                    <div className="path-form">
-                      <label htmlFor="config-path">
-                        配置路径覆盖
-                        <input
-                          id="config-path"
-                          value={configPath}
-                          onChange={(event) => setConfigPath(event.target.value)}
-                          placeholder="单个配置文件、配置目录，或留空使用默认值"
-                          autoComplete="off"
-                        />
-                      </label>
-                      <div className="path-note">
-                        <span>实际状态路径</span>
-                        <strong>{requestStatePath ?? '默认本地状态'}</strong>
-                      </div>
-                    </div>
-
-                    <div className="review-actions" aria-label="dry-run 与应用操作">
-                      <button className="secondary-action" type="button" onClick={handlePlan} disabled={!canReview}>
-                        {isPlanning ? BUTTONS.dryRunRunning : BUTTONS.dryRun}
-                      </button>
-                    </div>
-
-                    <div className="apply-lock" aria-label="应用安全门禁">
-                      <div>
-                        <p className="eyebrow">{GATES.applyConfirmEyebrow}</p>
-                        <h3>{GATES.applyConfirmTitle}</h3>
-                        <p>只有所选目标与路径匹配最新计划后，应用才会解锁。</p>
-                      </div>
-                      <label htmlFor="apply-confirmation">
-                        确认文本
-                        <input
-                          id="apply-confirmation"
-                          value={confirmationText}
-                          onChange={(event) => setConfirmationText(event.target.value)}
-                          placeholder={GATES.applyConfirmPlaceholder}
-                          autoComplete="off"
-                          disabled={!isPlanCurrent || isApplying}
-                        />
-                      </label>
-                      <button className="primary-action" type="button" onClick={handleApply} disabled={!canApply}>
-                        {isApplying ? BUTTONS.applyRunning : BUTTONS.apply}
-                      </button>
-                    </div>
-                  </section>
-
-                  <section className="review-results" aria-label="dry-run 与应用结果">
-                    <PlanResults plans={planResponse?.plans ?? null} results={planResponse?.results ?? null} stale={planResponse !== null && !isPlanCurrent} />
-                    <ApplyResults results={applyResults} />
-                  </section>
-                </div>
-              </article>
-            </section>
+            <ExecutePanel
+              runtimeState={runtimeState}
+              loadErrorNode={loadErrorNode}
+              targetMode={targetMode}
+              onTargetModeChange={setTargetMode}
+              configPath={configPath}
+              onConfigPathChange={setConfigPath}
+              requestStatePath={requestStatePath}
+              onPlan={handlePlan}
+              canReview={canReview}
+              isPlanning={isPlanning}
+              confirmationText={confirmationText}
+              onConfirmationTextChange={setConfirmationText}
+              isPlanCurrent={isPlanCurrent}
+              canApply={canApply}
+              isApplying={isApplying}
+              onApply={handleApply}
+              planResponse={planResponse}
+              applyResults={applyResults}
+            />
           )}
         </section>
     </CommandCenterShell>
@@ -1345,190 +1246,6 @@ function validateOhMyOpenAgentDraft(config: EditableAgentConfig): string | null 
   }
 
   return null;
-}
-
-function PlanResults({ plans, results, stale }: { plans: ApplyPlanSummary[] | null; results: ApplyAgentResult[] | null; stale: boolean }) {
-  if (plans === null || results === null) {
-    return <EmptyCopy title="需要 dry-run" copy="应用按钮解锁前必须先获得成功计划。" />;
-  }
-
-  return (
-    <section className="result-stack" aria-label="Dry-run 计划结果">
-      <ResultHeading eyebrow="Dry-run 计划" title={stale ? '路径编辑后计划已过期' : '操作摘要'} />
-      {plans.map((plan) => (
-        <article className="agent-result-card" key={plan.agent}>
-          <div className="agent-result-card__header">
-            <h3>{agentLabel(plan.agent)}</h3>
-            <StatusBadge tone={stale ? 'warning' : plan.operationCount > 0 ? 'warning' : 'ready'}>
-              {`${plan.operationCount} 项操作`}
-            </StatusBadge>
-          </div>
-          <dl className="detail-list compact-detail-list">
-            <Detail label="原生配置" value={plan.configPath} />
-            {plan.envPath !== undefined && <Detail label="Env 文件" value={plan.envPath} />}
-            <Detail label="状态" value={formatStatus(results.find((result) => result.agent === plan.agent)?.status)} />
-          </dl>
-          <NoticeList notices={plan.notices} />
-          <PlanAssociatedFiles plan={plan} />
-          <PathList title="将写入路径" paths={plan.operationPaths} empty="关联文件均无需写入。" />
-          <FilePreviewList previews={plan.filePreviews} />
-          {agentSupportsManagedFieldDiff(plan.agent) && <FieldRows changes={plan.changes} />}
-        </article>
-      ))}
-    </section>
-  );
-}
-
-type PlanAssociatedFile = {
-  readonly label: string;
-  readonly path: string;
-  readonly willWrite: boolean;
-};
-
-function PlanAssociatedFiles({ plan }: { plan: ApplyPlanSummary }) {
-  const files = buildPlanAssociatedFiles(plan);
-
-  return (
-    <div className="config-associated-files plan-associated-files" aria-label="dry-run 关联文件状态">
-      <span>关联文件状态</span>
-      <ul>
-        {files.map((file) => (
-          <li key={`${file.label}:${file.path}`}>
-            <strong>{file.label}</strong>
-            <code>{file.path}</code>
-            <small className={file.willWrite ? 'plan-associated-files__status--write' : undefined}>{file.willWrite ? '将写入' : '本次无写入'}</small>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function buildPlanAssociatedFiles(plan: ApplyPlanSummary): PlanAssociatedFile[] {
-  const operationPaths = new Set(plan.operationPaths);
-  const files: PlanAssociatedFile[] = [
-    {
-      label: '原生配置',
-      path: plan.configPath,
-      willWrite: operationPaths.has(plan.configPath),
-    },
-  ];
-
-  if (plan.envPath !== undefined && plan.envPath !== plan.configPath) {
-    files.push({
-      label: 'Env 文件',
-      path: plan.envPath,
-      willWrite: operationPaths.has(plan.envPath),
-    });
-  }
-
-  return files;
-}
-
-function ApplyResults({ results }: { results: ApplyAgentResult[] | null }) {
-  if (results === null) {
-    return <EmptyCopy title="暂无应用结果" copy="确认写入后，已应用、失败与备份路径会显示在这里。" />;
-  }
-
-  return (
-    <section className="result-stack" aria-label="应用结果">
-      <ResultHeading eyebrow="应用" title="写入结果" />
-      {results.map((result) => (
-        <article className="agent-result-card" key={result.agent}>
-          <div className="agent-result-card__header">
-            <h3>{agentLabel(result.agent)}</h3>
-            <StatusBadge tone={applyStatusTone(result.status)}>{formatStatus(result.status)}</StatusBadge>
-          </div>
-          <dl className="detail-list compact-detail-list">
-            {result.configPath !== undefined && <Detail label="原生配置" value={result.configPath} />}
-            {result.envPath !== undefined && <Detail label="Env 文件" value={result.envPath} />}
-            {result.error !== undefined && <Detail label="错误" value={result.error} />}
-          </dl>
-          <NoticeList notices={result.notices} />
-          <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
-          {agentSupportsManagedFieldDiff(result.agent) && <FieldRows changes={result.changes} />}
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function NoticeList({ notices }: { notices: ManagedDiffNotice[] }) {
-  if (notices.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="managed-notice-list" role="note" aria-label="托管字段提示">
-      <strong>注意事项</strong>
-      <ul>
-        {notices.map((notice) => (
-          <li key={`${notice.field}-${notice.code}`}>
-            <span className="managed-notice-list__field">{fieldLabel(notice.field)}</span>
-            <code>{notice.code}</code>
-            <span>{notice.message}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function FieldRows({ changes }: { changes: ManagedDiffChange[] }) {
-  return (
-    <div className="field-grid">
-      {MANAGED_FIELDS.map((field) => {
-        const change = changes.find((candidate) => candidate.field === field);
-        return (
-          <div className={`field-row ${change === undefined ? 'field-row--same' : 'field-row--change'}`} key={field}>
-            <span className="field-name">{fieldLabel(field)}</span>
-            <span>{formatManagedValue(change, 'current')}</span>
-            <span>{formatManagedValue(change, 'expected')}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PathList({ title, paths, empty }: { title: string; paths: string[]; empty: string }) {
-  return (
-    <div className="path-list">
-      <strong>{title}</strong>
-      {paths.length === 0 ? (
-        <p>{empty}</p>
-      ) : (
-        <ul>
-          {paths.map((path) => (
-            <li key={path}>{path}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function FilePreviewList({ previews }: { previews: ApplyFilePreview[] }) {
-  if (previews.length === 0) {
-    return <EmptyCopy title="文件预览无变化" copy="本次 dry-run 不会改写任何文件。" />;
-  }
-
-  return (
-    <div className="file-preview-list" aria-label="当前与应用后文件内容预览">
-      {previews.map((preview) => (
-        <article className="file-preview-card" key={`${preview.kind}:${preview.path}`}>
-          <div className="file-preview-card__header">
-            <div>
-              <p className="eyebrow">{preview.kind === 'env' ? 'Env 文件' : '原生配置'}</p>
-              <h4>{preview.path}</h4>
-            </div>
-            {preview.mode !== undefined && <span>{formatFileMode(preview.mode)}</span>}
-          </div>
-          <FileDiffViewer path={preview.path} currentContent={preview.currentContent ?? ''} expectedContent={preview.expectedContent} />
-        </article>
-      ))}
-    </div>
-  );
 }
 
 export default App;

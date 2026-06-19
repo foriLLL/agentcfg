@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import type { AgentName, ConfigAvailabilityEntry, ConfigFileRuntimeResponse, RuntimeStateSummary } from '../api';
+import type { AgentName, ApplyAgentResult, ApplyPlanSummary, ConfigAvailabilityEntry, ConfigFileRuntimeResponse, RuntimeStateSummary } from '../api';
 import { AgentConfigIcon } from '../AgentConfigIcon';
 import { LocalConfigAgentSummary } from '../LocalConfigAgentSummary';
 import { BUTTONS, GATES, configDraftBadge } from '../strings';
 import { StatusBadge } from '../widgets';
 import { localReviewActionCopyForAgent } from '../view-model';
+import { ApplyResults, PlanResults } from './PlanApplyResults';
 
 const CONFIG_TARGET_OPTIONS: Array<{ value: AgentName; title: string; copy: string }> = [
   { value: 'codex', title: 'Codex', copy: 'TOML 配置原文' },
@@ -57,9 +58,10 @@ export type LocalConfigPanelProps = {
   readonly isApplying: boolean;
   readonly onApply: () => void | Promise<void>;
 
-  // Result slots (plan + apply rendering still owned by App)
-  readonly planResultsNode: ReactNode;
-  readonly applyResultsNode: ReactNode;
+  // Plan + apply result data (rendered via shared PlanApplyResults).
+  readonly planResponse: { readonly plans: ApplyPlanSummary[]; readonly results: ApplyAgentResult[] } | null;
+  readonly isPlanCurrent: boolean;
+  readonly applyResults: ApplyAgentResult[] | null;
 };
 
 /**
@@ -68,9 +70,8 @@ export type LocalConfigPanelProps = {
  * Stateless. App still owns every useState slice and computes the
  * derived selections (configAgent, selectedConfigAvailability,
  * canLoadConfig, ...). The panel renders the existing #config-panel
- * grid plus the embedded plan/apply result stack via the two ReactNode
- * slots so c5 can later move PlanResults / ApplyResults out of App
- * without disturbing this panel.
+ * grid plus the embedded plan/apply result stack via the shared
+ * PlanApplyResults module.
  */
 export function LocalConfigPanel(props: LocalConfigPanelProps) {
   const selectedConfigTarget =
@@ -206,8 +207,12 @@ export function LocalConfigPanel(props: LocalConfigPanelProps) {
           />
         </div>
         <section className="review-results config-review-results" aria-label="本地配置 dry-run 与应用结果">
-          {props.planResultsNode}
-          {props.applyResultsNode}
+          <PlanResults
+            plans={props.planResponse?.plans ?? null}
+            results={props.planResponse?.results ?? null}
+            stale={props.planResponse !== null && !props.isPlanCurrent}
+          />
+          <ApplyResults results={props.applyResults} />
         </section>
       </article>
     </section>
