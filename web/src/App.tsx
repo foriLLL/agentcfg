@@ -71,6 +71,7 @@ import {
   gistConnectionBadge,
 } from './strings';
 import { Detail, EmptyCopy, ResultHeading, StatusBadge } from './widgets';
+import { ConnectionPanel } from './panels/ConnectionPanel';
 
 type Notice = ToastNotice;
 
@@ -803,123 +804,37 @@ function App() {
             <WorkflowOverview steps={workflowSteps} onNavigate={setActiveTab} onRunDryRun={handlePlan} />
           )}
           {activeTab === 'connection' && (
-            <section className="dashboard-grid dashboard-grid--connection" id="connection-panel" role="tabpanel" aria-labelledby="connection-tab">
-              {loadErrorNode}
-              <article className="card onboarding-card connection-card" id="setup-panel">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">初始化</p>
-                    <h2>连接状态</h2>
-                  </div>
-                  <StatusBadge tone={gistConnectionBadge(runtimeState).tone}>
-                    {gistConnectionBadge(runtimeState).label}
-                  </StatusBadge>
-                </div>
-                <form className="setup-form" onSubmit={handleInitSubmit}>
-                  <label htmlFor="github-token">
-                    GitHub Token
-                    <input
-                      id="github-token"
-                      name="github-token"
-                      type="password"
-                      value={githubTokenInputValue}
-                      onChange={(event) => setGithubToken(event.target.value)}
-                      placeholder={isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token'}
-                      autoComplete="off"
-                      disabled={isGitHubTokenLocked || isSubmittingInit || isSettingRemote}
-                    />
-                  </label>
-                  <label htmlFor="gist-id">
-                    Gist ID（高级兼容，可选）
-                    <input
-                      id="gist-id"
-                      name="gist-id"
-                      value={gistId}
-                      onChange={(event) => setGistId(event.target.value)}
-                      placeholder="私有 Gist ID"
-                      autoComplete="off"
-                      disabled={isSubmittingInit}
-                    />
-                  </label>
-                  <label htmlFor="state-path">
-                    状态路径（可选）
-                    <input
-                      id="state-path"
-                      name="state-path"
-                      value={statePath}
-                      onChange={(event) => setStatePath(event.target.value)}
-                      placeholder={runtimeState?.statePath ?? '~/.agentcfg/state.json'}
-                      autoComplete="off"
-                      disabled={isSubmittingInit}
-                    />
-                  </label>
-                  <label className="checkbox-control" htmlFor="remember-github-token">
-                    <input
-                      id="remember-github-token"
-                      name="remember-github-token"
-                      type="checkbox"
-                      checked={isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken}
-                      onChange={(event) => setRememberGitHubToken(event.target.checked)}
-                      disabled={isGitHubTokenLocked || isReplacingSavedGitHubToken || isSubmittingInit || isSettingRemote || githubToken.trim() === ''}
-                    />
-                    <span>{isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token'}</span>
-                  </label>
-                  <div className="saved-token-control" role="status" aria-live="polite">
-                    <span>{hasSavedGitHubToken ? (isEditingGitHubToken ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。' : '已保存 GitHub Token，输入框已锁定为固定掩码。') : '尚未保存 GitHub Token。'}</span>
-                    <div className="saved-token-actions" aria-label="保存的 GitHub Token 操作">
-                      {hasSavedGitHubToken && !isEditingGitHubToken && (
-                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleEditSavedGitHubToken} disabled={isBusy}>
-                          编辑保存的 Token
-                        </button>
-                      )}
-                      {hasSavedGitHubToken && isEditingGitHubToken && (
-                        <button className="secondary-action secondary-action--compact" type="button" onClick={handleCancelGitHubTokenEdit} disabled={isBusy}>
-                          取消编辑
-                        </button>
-                      )}
-                      <button
-                        className="secondary-action secondary-action--compact"
-                        type="button"
-                        onClick={handleClearSavedGitHubToken}
-                        disabled={!hasSavedGitHubToken || isClearingGitHubToken}
-                      >
-                        {isClearingGitHubToken ? '正在清除...' : '清除保存的 Token'}
-                      </button>
-                    </div>
-                  </div>
-                  <button className="primary-action" type="submit" disabled={isSubmittingInit || isSettingRemote}>
-                    {isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub'}
-                  </button>
-                </form>
-                <p className="helper-copy">勾选后 Token 会以明文保存到本机 secrets.json；API 只返回是否已保存，不会把 Token 值发回界面。若没有现有 agentcfg Gist，在“远端配置”保存时会自动创建 secret Gist。</p>
-                <div className="step-list" aria-label="设置进度">
-                  {setupSteps.map((step) => (
-                    <div className="step-row" key={step.title}>
-                      <span className={`step-marker step-marker--${step.state}`} aria-hidden="true" />
-                      <div>
-                        <h3>{step.title}</h3>
-                        <p>{step.copy}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-
-              <article className="card session-card" aria-label="当前本地状态摘要">
-                <div className="section-heading section-heading--split">
-                  <div>
-                    <p className="eyebrow">会话</p>
-                    <h2>本地状态摘要</h2>
-                  </div>
-                  <span className={`status-dot status-dot--${statusTone(runtimeState)}`} aria-hidden="true" />
-                </div>
-                <dl className="detail-list">
-                  <Detail label="状态路径" value={runtimeState?.statePath ?? '正在解析本地状态...'} />
-                  <Detail label="来源" value={runtimeState?.gist.present ? `Gist ${runtimeState.gist.id}` : '未初始化'} />
-                  <Detail label="远端基线" value={runtimeState?.conflict.present ? '已保存用于后续比对' : '尚未保存'} />
-                </dl>
-              </article>
-            </section>
+            <ConnectionPanel
+              runtimeState={runtimeState}
+              loadErrorNode={loadErrorNode}
+              githubToken={githubToken}
+              githubTokenInputValue={githubTokenInputValue}
+              githubTokenPlaceholder={isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token'}
+              onGithubTokenChange={setGithubToken}
+              gistId={gistId}
+              onGistIdChange={setGistId}
+              statePath={statePath}
+              onStatePathChange={setStatePath}
+              rememberGitHubToken={rememberGitHubToken}
+              onRememberGitHubTokenChange={setRememberGitHubToken}
+              rememberCheckboxChecked={isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken}
+              rememberCheckboxLabel={isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token'}
+              hasSavedGitHubToken={hasSavedGitHubToken}
+              isEditingGitHubToken={isEditingGitHubToken}
+              savedTokenStatusCopy={hasSavedGitHubToken ? (isEditingGitHubToken ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。' : '已保存 GitHub Token，输入框已锁定为固定掩码。') : '尚未保存 GitHub Token。'}
+              onEditSavedGitHubToken={handleEditSavedGitHubToken}
+              onCancelGitHubTokenEdit={handleCancelGitHubTokenEdit}
+              onClearSavedGitHubToken={handleClearSavedGitHubToken}
+              onInitSubmit={handleInitSubmit}
+              submitButtonLabel={isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub'}
+              isGitHubTokenLocked={isGitHubTokenLocked}
+              isSubmittingInit={isSubmittingInit}
+              isSettingRemote={isSettingRemote}
+              isReplacingSavedGitHubToken={isReplacingSavedGitHubToken}
+              isClearingGitHubToken={isClearingGitHubToken}
+              isBusy={isBusy}
+              setupSteps={setupSteps}
+            />
           )}
 
           {activeTab === 'remote' && (
