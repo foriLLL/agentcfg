@@ -29,11 +29,10 @@ import {
   type Step,
 } from './view-model';
 import { NOTICES } from './strings';
-import { ConnectionPanel } from './panels/ConnectionPanel';
 import { ExecutePanel } from './panels/ExecutePanel';
 import { LocalConfigPanel } from './panels/LocalConfigPanel';
+import { RemoteSourcePanel } from './panels/RemoteSourcePanel';
 import {
-  RemoteConfigPanel,
   type OhMyOpenAgentAssignmentKind,
   type RemoteConfigView,
 } from './panels/RemoteConfigPanel';
@@ -496,79 +495,83 @@ function App() {
             <WorkflowOverview steps={workflowSteps} onNavigate={setActiveTab} onRunDryRun={handlePlan} />
           )}
           {activeTab === 'remote' && (
-            <>
-              <ConnectionPanel
-                runtimeState={runtimeState}
-                loadErrorNode={loadErrorNode}
-                githubToken={githubToken}
-                githubTokenInputValue={githubTokenInputValue}
-                githubTokenPlaceholder={isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token'}
-                onGithubTokenChange={setGithubToken}
-                gistId={gistId}
-                onGistIdChange={setGistId}
-                statePath={statePath}
-                onStatePathChange={setStatePath}
-                rememberGitHubToken={rememberGitHubToken}
-                onRememberGitHubTokenChange={setRememberGitHubToken}
-                rememberCheckboxChecked={isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken}
-                rememberCheckboxLabel={isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token'}
-                hasSavedGitHubToken={hasSavedGitHubToken}
-                isEditingGitHubToken={isEditingGitHubToken}
-                savedTokenStatusCopy={hasSavedGitHubToken ? (isEditingGitHubToken ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。' : '已保存 GitHub Token，输入框已锁定为固定掩码。') : '尚未保存 GitHub Token。'}
-                onEditSavedGitHubToken={beginEditSavedToken}
-                onCancelGitHubTokenEdit={cancelEditSavedToken}
-                onClearSavedGitHubToken={handleClearSavedGitHubToken}
-                onInitSubmit={handleInitSubmit}
-                submitButtonLabel={isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub'}
-                isGitHubTokenLocked={isGitHubTokenLocked}
-                isSubmittingInit={isSubmittingInit}
-                isSettingRemote={isSettingRemote}
-                isReplacingSavedGitHubToken={isReplacingSavedGitHubToken}
-                isClearingGitHubToken={isClearingGitHubToken}
-                isBusy={isBusy}
-                setupSteps={setupSteps}
-              />
-              <RemoteConfigPanel
-                runtimeState={runtimeState}
-                loadErrorNode={loadErrorNode}
-                remoteStatus={remoteStatus}
-                onLoadRemoteConfig={handleLoadRemoteConfig}
-                onSaveRemoteConfig={handleSaveRemoteConfig}
-                onPull={handlePull}
-                isLoadingRemote={isLoadingRemote}
-                isSavingRemote={isSavingRemote}
-                isPulling={isPulling}
-                isBusy={isBusy}
-                remoteConfigView={remoteConfigView}
-                onRemoteConfigViewChange={(view) => useRemoteDraftStore.getState().setView(view)}
-                remoteDraft={remoteDraft}
-                remoteProviderIds={remoteProviderIds}
-                selectedRemoteProviderId={selectedRemoteProviderId}
-                selectedRemoteProvider={selectedRemoteProvider}
-                remoteModelIds={remoteModelIds}
-                selectedRemoteModelId={selectedRemoteModelId}
-                selectedRemoteModel={selectedRemoteModel}
-                defaultProvider={defaultProvider}
-                defaultProviderModelIds={defaultProviderModelIds}
-                remoteModelReferenceOptions={remoteModelReferenceOptions}
-                remoteYamlPreview={remoteYamlPreview}
-                onSelectRemoteProvider={handleSelectRemoteProvider}
-                onAddRemoteProvider={handleAddRemoteProvider}
-                onRemoveRemoteProvider={handleRemoveRemoteProvider}
-                onRemoteProviderIdChange={handleRemoteProviderIdChange}
-                onUpdateRemoteProvider={updateRemoteProvider}
-                onSelectRemoteModel={handleSelectRemoteModel}
-                onAddRemoteModel={handleAddRemoteModel}
-                onRemoveRemoteModel={handleRemoveRemoteModel}
-                onRemoteModelIdChange={handleRemoteModelIdChange}
-                onUpdateRemoteModel={updateRemoteModel}
-                onDefaultRemoteProviderChange={handleDefaultRemoteProviderChange}
-                onDefaultRemoteModelChange={handleDefaultRemoteModelChange}
-                onOhMyOpenAgentModelChange={handleOhMyOpenAgentModelChange}
-                onOhMyOpenAgentVariantChange={handleOhMyOpenAgentVariantChange}
-                onClearOhMyOpenAgentAssignment={handleClearOhMyOpenAgentAssignment}
-              />
-            </>
+            <RemoteSourcePanel
+              connection={{
+                runtimeState,
+                loadErrorNode,
+                githubToken,
+                githubTokenInputValue,
+                githubTokenPlaceholder: isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token',
+                onGithubTokenChange: setGithubToken,
+                gistId,
+                onGistIdChange: setGistId,
+                statePath,
+                onStatePathChange: setStatePath,
+                rememberGitHubToken,
+                onRememberGitHubTokenChange: setRememberGitHubToken,
+                rememberCheckboxChecked: isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken,
+                rememberCheckboxLabel: isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token',
+                hasSavedGitHubToken,
+                isEditingGitHubToken,
+                savedTokenStatusCopy: hasSavedGitHubToken
+                  ? (isEditingGitHubToken
+                      ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。'
+                      : '已保存 GitHub Token，输入框已锁定为固定掩码。')
+                  : '尚未保存 GitHub Token。',
+                onEditSavedGitHubToken: beginEditSavedToken,
+                onCancelGitHubTokenEdit: cancelEditSavedToken,
+                onClearSavedGitHubToken: handleClearSavedGitHubToken,
+                onInitSubmit: handleInitSubmit,
+                submitButtonLabel: isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub',
+                isGitHubTokenLocked,
+                isSubmittingInit,
+                isSettingRemote,
+                isReplacingSavedGitHubToken,
+                isClearingGitHubToken,
+                isBusy,
+                setupSteps,
+              }}
+              editor={{
+                runtimeState,
+                loadErrorNode,
+                remoteStatus,
+                onLoadRemoteConfig: handleLoadRemoteConfig,
+                onSaveRemoteConfig: handleSaveRemoteConfig,
+                onPull: handlePull,
+                isLoadingRemote,
+                isSavingRemote,
+                isPulling,
+                isBusy,
+                remoteConfigView,
+                onRemoteConfigViewChange: (view) => useRemoteDraftStore.getState().setView(view),
+                remoteDraft,
+                remoteProviderIds,
+                selectedRemoteProviderId,
+                selectedRemoteProvider,
+                remoteModelIds,
+                selectedRemoteModelId,
+                selectedRemoteModel,
+                defaultProvider,
+                defaultProviderModelIds,
+                remoteModelReferenceOptions,
+                remoteYamlPreview,
+                onSelectRemoteProvider: handleSelectRemoteProvider,
+                onAddRemoteProvider: handleAddRemoteProvider,
+                onRemoveRemoteProvider: handleRemoveRemoteProvider,
+                onRemoteProviderIdChange: handleRemoteProviderIdChange,
+                onUpdateRemoteProvider: updateRemoteProvider,
+                onSelectRemoteModel: handleSelectRemoteModel,
+                onAddRemoteModel: handleAddRemoteModel,
+                onRemoveRemoteModel: handleRemoveRemoteModel,
+                onRemoteModelIdChange: handleRemoteModelIdChange,
+                onUpdateRemoteModel: updateRemoteModel,
+                onDefaultRemoteProviderChange: handleDefaultRemoteProviderChange,
+                onDefaultRemoteModelChange: handleDefaultRemoteModelChange,
+                onOhMyOpenAgentModelChange: handleOhMyOpenAgentModelChange,
+                onOhMyOpenAgentVariantChange: handleOhMyOpenAgentVariantChange,
+                onClearOhMyOpenAgentAssignment: handleClearOhMyOpenAgentAssignment,
+              }}
+            />
           )}
 
           {activeTab === 'sync' && (
