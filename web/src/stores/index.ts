@@ -14,4 +14,15 @@ export {
   type LoadRemoteOutcome,
   type SaveRemoteOutcome,
 } from './remoteDraftStore';
-export { usePlanStore, type TargetMode, type PlanStore } from './planStore';
+export {
+  usePlanStore,
+  selectConfigAgent,
+  selectIsPlanCurrent,
+  selectPlanKey,
+  selectTargetRequest,
+  type ApplyOutcome,
+  type ConfigFileOutcome,
+  type PlanOutcome,
+  type PlanStore,
+  type TargetMode,
+} from './planStore';

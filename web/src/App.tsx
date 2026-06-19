@@ -11,25 +11,18 @@ import type { AppTab } from './navigation';
 import { useCommandCenterStatus } from './useCommandCenterStatus';
 import {
   type EditableAgentConfig,
-  applyRuntime,
-  getConfigAvailabilityRuntime,
-  getConfigFileRuntime,
-  planApplyRuntime,
-  saveConfigFileRuntime,
   type AgentName,
   type ApplyAgentResult,
   type ConfigAvailabilityEntry,
   type ConfigFileRuntimeResponse,
   type PlanApplyRuntimeResponse,
   type RuntimeStateSummary,
-  type RuntimeTargetRequest,
 } from './api';
 import {
   agentLabel,
   buildRemoteYamlPreview,
   buildSetupSteps,
   configToDraft,
-  extractApplyResults,
   formatDate,
   formatError,
   remoteAccessWarningForHostname,
@@ -51,22 +44,22 @@ import {
 } from './panels/remote-draft';
 import {
   EMPTY_REMOTE_DRAFT,
-  selectRequestStatePath,
+  selectConfigAgent,
+  selectIsPlanCurrent,
   selectShouldRememberGitHubToken,
+  selectTargetRequest,
   useRemoteDraftStore,
   useRuntimeStore,
+  usePlanStore,
 } from './stores';
 
 type Notice = ToastNotice;
-
-type TargetMode = AgentName | 'all' | '';
 
 
 
 const SAVED_GITHUB_TOKEN_MASK = '************';
 
 function App() {
-  // ---- runtime store: read-only selectors -----------------------------
   const runtimeState = useRuntimeStore((state) => state.state);
   const loadState = useRuntimeStore((state) => state.loadState);
   const githubToken = useRuntimeStore((state) => state.githubToken);
@@ -86,7 +79,6 @@ function App() {
   const cancelEditSavedToken = useRuntimeStore((state) => state.cancelEditSavedToken);
   const commitRuntimeState = useRuntimeStore((state) => state.commitRuntimeState);
 
-  // ---- remote draft store: selectors + actions -----------------------
   const remoteDraft = useRemoteDraftStore((state) => state.draft);
   const remoteEditorProviderId = useRemoteDraftStore((state) => state.editorProviderId);
   const remoteEditorModelId = useRemoteDraftStore((state) => state.editorModelId);
@@ -95,24 +87,29 @@ function App() {
   const isLoadingRemote = useRemoteDraftStore((state) => state.isLoading);
   const isSavingRemote = useRemoteDraftStore((state) => state.isSaving);
 
-  // ---- legacy useState slices owned by this component (PR3-c4 will move them)
+  const targetMode = usePlanStore((state) => state.targetMode);
+  const configPath = usePlanStore((state) => state.configPath);
+  const planResponse = usePlanStore((state) => state.planResponse);
+  const applyResults = usePlanStore((state) => state.applyResults);
+  const confirmationText = usePlanStore((state) => state.confirmationText);
+  const configFile = usePlanStore((state) => state.configFile);
+  const configAvailability = usePlanStore((state) => state.configAvailability);
+  const configDraft = usePlanStore((state) => state.configDraft);
+  const configStatus = usePlanStore((state) => state.configStatus);
+  const isPlanning = usePlanStore((state) => state.isPlanning);
+  const isApplying = usePlanStore((state) => state.isApplying);
+  const isLoadingConfigAvailability = usePlanStore((state) => state.isLoadingConfigAvailability);
+  const isLoadingConfig = usePlanStore((state) => state.isLoadingConfig);
+  const isSavingConfig = usePlanStore((state) => state.isSavingConfig);
+  const setTargetMode = usePlanStore((state) => state.setTargetMode);
+  const setConfigPath = usePlanStore((state) => state.setConfigPath);
+  const setConfirmationText = usePlanStore((state) => state.setConfirmationText);
+  const setConfigDraft = usePlanStore((state) => state.setConfigDraft);
+  const isPlanCurrent = usePlanStore(selectIsPlanCurrent);
+  const configAgent = usePlanStore(selectConfigAgent);
+
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [configPath, setConfigPath] = useState('');
-  const [targetMode, setTargetMode] = useState<TargetMode>('');
-  const [planResponse, setPlanResponse] = useState<PlanApplyRuntimeResponse | null>(null);
-  const [planKey, setPlanKey] = useState<string | null>(null);
-  const [applyResults, setApplyResults] = useState<ApplyAgentResult[] | null>(null);
-  const [confirmationText, setConfirmationText] = useState('');
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
-  const [configFile, setConfigFile] = useState<ConfigFileRuntimeResponse | null>(null);
-  const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
-  const [configDraft, setConfigDraft] = useState('');
-  const [configStatus, setConfigStatus] = useState('尚未加载配置文件。');
-  const [isPlanning, setIsPlanning] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
-  const [isLoadingConfigAvailability, setIsLoadingConfigAvailability] = useState(false);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -147,24 +144,13 @@ function App() {
 
   const setupSteps = useMemo<Step[]>(() => buildSetupSteps(runtimeState), [runtimeState]);
   const requestStatePath = statePath.trim() === '' ? runtimeState?.statePath : statePath.trim();
-  const targetRequest = useMemo<RuntimeTargetRequest | null>(() => {
-    if (targetMode === '') {
-      return null;
-    }
-
-    return {
-      statePath: requestStatePath,
-      ...(targetMode === 'all' ? { allAgents: true } : { agent: targetMode }),
-      configPath: configPath.trim(),
-    };
-  }, [configPath, requestStatePath, targetMode]);
-  const reviewKey = targetRequest === null ? '' : JSON.stringify(targetRequest);
-  const isPlanCurrent = planResponse !== null && planKey === reviewKey;
+  const targetRequest = usePlanStore(selectTargetRequest);
+  const reviewKey = usePlanStore((state) => state.planKey ?? '');
+  const planKey = usePlanStore((state) => state.planKey);
   const hasSavedGitHubToken = runtimeState?.secrets?.hasGitHubToken === true;
   const isBusy = isSubmittingInit || isPulling || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
   const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
-  const configAgent = targetMode === '' || targetMode === 'all' ? null : targetMode;
   const canReviewLocalConfig = configAgent !== null && canReview;
   const canApplyLocalConfig = configAgent !== null && canApply;
   const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
@@ -208,10 +194,6 @@ function App() {
   );
 
   useEffect(() => {
-    setConfirmationText('');
-  }, [reviewKey]);
-
-  useEffect(() => {
     if (notice === null) {
       return;
     }
@@ -223,38 +205,25 @@ function App() {
   }, [notice]);
 
   useEffect(() => {
-    setConfigFile(null);
-    setConfigDraft('');
-    setConfigStatus(configAgent === null ? '请选择单个 Agent 后再加载配置文件。' : configAvailabilityByAgent.get(configAgent)?.available === false ? '此 Agent 未找到可编辑的配置文件。' : '尚未加载配置文件。');
+    const planStore = usePlanStore.getState();
+    planStore.invalidate();
+    if (planStore.configFile !== null) {
+      usePlanStore.setState({ configFile: null, configDraft: '' });
+    }
+    const nextStatus =
+      configAgent === null
+        ? '请选择单个 Agent 后再加载配置文件。'
+        : configAvailabilityByAgent.get(configAgent)?.available === false
+          ? '此 Agent 未找到可编辑的配置文件。'
+          : '尚未加载配置文件。';
+    planStore.setConfigStatus(nextStatus);
   }, [configAgent, configAvailabilityByAgent, configPath, requestStatePath]);
 
   useEffect(() => {
     if (loadState !== 'ready') {
       return;
     }
-
-    let active = true;
-    setIsLoadingConfigAvailability(true);
-    getConfigAvailabilityRuntime({ statePath: requestStatePath })
-      .then(({ agents }) => {
-        if (active) {
-          setConfigAvailability(agents);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setConfigAvailability([]);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoadingConfigAvailability(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
+    void usePlanStore.getState().refreshAvailability();
   }, [loadState, requestStatePath]);
 
   function showNotice(tone: Notice['tone'], title: string, copy: string): void {
@@ -292,9 +261,7 @@ function App() {
     setNotice(null);
     const outcome = await useRuntimeStore.getState().pull();
     if (outcome.ok) {
-      setPlanResponse(null);
-      setPlanKey(null);
-      setApplyResults(null);
+      usePlanStore.getState().invalidate();
       setNotice({
         tone: 'success',
         title: NOTICES.pullSucceeded,
@@ -344,9 +311,7 @@ function App() {
     setNotice(null);
     const outcome = await useRemoteDraftStore.getState().save();
     if (outcome.ok) {
-      setPlanResponse(null);
-      setPlanKey(null);
-      setApplyResults(null);
+      usePlanStore.getState().invalidate();
       setNotice({ tone: 'success', title: NOTICES.remoteSaved, copy: 'agentcfg.yaml 已写入 Gist，并更新了本地缓存。' });
       return;
     }
@@ -460,76 +425,42 @@ function App() {
   }
 
   async function handlePlan(): Promise<void> {
-    if (targetRequest === null) {
+    setNotice(null);
+    const outcome = await usePlanStore.getState().plan();
+    if (outcome.ok) {
+      setNotice({ tone: 'success', title: NOTICES.dryRunSucceeded, copy: '检查操作路径，然后输入 APPLY 解锁写入。' });
+      return;
+    }
+    if (outcome.targetMissing === true) {
       setNotice({ tone: 'error', title: NOTICES.selectTarget, copy: '规划写入前请只选择一个目标模式。' });
       return;
     }
-
-    setIsPlanning(true);
-    setNotice(null);
-    setApplyResults(null);
-    try {
-      const response = await planApplyRuntime(targetRequest);
-      setPlanResponse(response);
-      setPlanKey(reviewKey);
-      setNotice({ tone: 'success', title: NOTICES.dryRunSucceeded, copy: '检查操作路径，然后输入 APPLY 解锁写入。' });
-    } catch (error) {
-      setPlanResponse(null);
-      setPlanKey(null);
-      setNotice({ tone: 'error', title: NOTICES.dryRunFailed, copy: formatError(error) });
-      const results = extractApplyResults(error);
-      setApplyResults(results ?? null);
-    } finally {
-      setIsPlanning(false);
-    }
+    setNotice({ tone: 'error', title: NOTICES.dryRunFailed, copy: formatError(outcome.error) });
   }
 
   async function handleApply(): Promise<void> {
-    if (!canApply || targetRequest === null) {
+    if (!canApply) {
       return;
     }
-
-    setIsApplying(true);
     setNotice(null);
-    try {
-      const response = await applyRuntime({ ...targetRequest, confirm: 'APPLY' });
-      setApplyResults(response.results);
-      setConfirmationText('');
-      await useRuntimeStore.getState().refresh(requestStatePath);
+    const outcome = await usePlanStore.getState().apply();
+    if (outcome.ok) {
       setNotice({ tone: 'success', title: NOTICES.applySucceeded, copy: '所选代理文件已更新，控制台状态已刷新。' });
-    } catch (error) {
-      const results = extractApplyResults(error);
-      setApplyResults(results ?? null);
-      setNotice({ tone: 'error', title: NOTICES.applyFailed, copy: formatError(error) });
-    } finally {
-      setIsApplying(false);
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.applyFailed, copy: formatError(outcome.error) });
     }
   }
 
   async function handleLoadConfigFile(): Promise<void> {
     if (configAgent === null) {
-      setConfigStatus('请选择单个代理后再加载配置文件。');
+      usePlanStore.getState().setConfigStatus('请选择单个代理后再加载配置文件。');
       return;
     }
-
-    setIsLoadingConfig(true);
     setNotice(null);
-    try {
-      const response = await getConfigFileRuntime({
-        statePath: requestStatePath,
-        agent: configAgent,
-        configPath: configPath.trim(),
-      });
-      setConfigFile(response);
-      setConfigDraft(response.content);
-      setConfigStatus('配置已加载');
-    } catch (error) {
-      setConfigFile(null);
-      setConfigDraft('');
-      setConfigStatus(formatError(error));
-      setNotice({ tone: 'error', title: NOTICES.configLoadFailed, copy: formatError(error) });
-    } finally {
-      setIsLoadingConfig(false);
+    const outcome = await usePlanStore.getState().loadConfigFile(configAgent);
+    if (!outcome.ok) {
+      usePlanStore.getState().setConfigStatus(formatError(outcome.error));
+      setNotice({ tone: 'error', title: NOTICES.configLoadFailed, copy: formatError(outcome.error) });
     }
   }
 
@@ -537,28 +468,11 @@ function App() {
     if (configAgent === null || configFile === null) {
       return;
     }
-
-    setIsSavingConfig(true);
     setNotice(null);
-    try {
-      const response = await saveConfigFileRuntime({
-        statePath: requestStatePath,
-        agent: configAgent,
-        configPath: configFile.path,
-        content: configDraft,
-      });
-      setConfigFile(response);
-      setConfigDraft(response.content);
-      setConfigStatus(response.backupPath === undefined ? '配置已保存' : `配置已保存，备份：${response.backupPath}`);
-      setPlanResponse(null);
-      setPlanKey(null);
-      setApplyResults(null);
-      setConfirmationText('');
-    } catch (error) {
-      setConfigStatus(formatError(error));
-      setNotice({ tone: 'error', title: NOTICES.configSaveFailed, copy: formatError(error) });
-    } finally {
-      setIsSavingConfig(false);
+    const outcome = await usePlanStore.getState().saveConfigFile();
+    if (!outcome.ok) {
+      usePlanStore.getState().setConfigStatus(formatError(outcome.error));
+      setNotice({ tone: 'error', title: NOTICES.configSaveFailed, copy: formatError(outcome.error) });
     }
   }
 
