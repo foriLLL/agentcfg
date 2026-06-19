@@ -76,6 +76,9 @@ export type RemoteDraftStore = {
   readonly updateProvider: (
     update: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string],
   ) => void;
+  readonly updateProviderForDefault: (
+    update: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string],
+  ) => void;
 
   readonly selectModel: (modelId: string) => void;
   readonly addModel: () => void;
@@ -194,6 +197,15 @@ export const useRemoteDraftStore = create<RemoteDraftStore>((set, get) => ({
     set((store) => ({
       draft: applyProviderMutation(store.draft, store.editorProviderId, update),
     }));
+  },
+
+  updateProviderForDefault: (update) => {
+    set((store) => {
+      const ids = Object.keys(store.draft.providers);
+      const targetId = ids.includes(store.draft.defaults.provider) ? store.draft.defaults.provider : ids[0];
+      if (targetId === undefined) return store;
+      return { draft: applyProviderMutation(store.draft, targetId, update) };
+    });
   },
 
   selectModel: (modelId) => set({ editorModelId: modelId }),

@@ -2926,3 +2926,43 @@ h3 {
 .sync-targets-panel__advanced > :not(summary) {
   padding: var(--space-4);
 }
+
+/* PR5: Defaults quick edit */
+
+.defaults-quick-edit {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.defaults-quick-edit__heading h3 {
+  margin: 0;
+  font-size: var(--text-card-title);
+  color: var(--color-cocoa);
+}
+
+.defaults-quick-edit__heading small {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+}
+
+.defaults-quick-edit__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(12rem, 2fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.defaults-quick-edit__row label {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .defaults-quick-edit__row {
+    grid-template-columns: 1fr;
+  }
+}
