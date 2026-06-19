@@ -16,7 +16,7 @@ export function WorkflowOverview({ onNavigate, onRunDryRun, steps }: WorkflowOve
           <h2 id="workflow-title">配置同步工作流</h2>
           <p>从远端 Gist 到本地 Agent 配置的完整同步路径。</p>
         </div>
-        <button className="secondary-action secondary-action--compact" type="button" onClick={() => onNavigate('sync')}>
+        <button className="secondary-action secondary-action--compact" type="button" onClick={() => onNavigate('automation')}>
           同步设置
         </button>
       </div>

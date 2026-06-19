@@ -94,10 +94,10 @@ export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowS
             : hasCache
               ? 'pending'
               : 'blocked',
-      target: 'execute',
+      target: 'sync',
       action: input.canReview
         ? { kind: 'dry-run', label: BUTTONS.dryRun }
-        : { kind: 'navigate', target: 'execute', label: hasPlan ? '去应用' : '进入同步' },
+        : { kind: 'navigate', target: 'sync', label: hasPlan ? '去应用' : '进入同步' },
     },
     {
       id: 'automation',
@@ -110,8 +110,8 @@ export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowS
           ? '未启用自动同步。'
           : '连接 Gist 后再开启自动同步。',
       status: syncEnabled ? 'complete' : hasGist ? 'ready' : 'blocked',
-      target: 'sync',
-      action: { kind: 'navigate', target: 'sync', label: syncEnabled ? '查看策略' : '配置策略' },
+      target: 'automation',
+      action: { kind: 'navigate', target: 'automation', label: syncEnabled ? '查看策略' : '配置策略' },
     },
   ];
 }
