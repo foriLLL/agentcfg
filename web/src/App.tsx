@@ -14,10 +14,8 @@ import {
   applyRuntime,
   getConfigAvailabilityRuntime,
   getConfigFileRuntime,
-  loadRemoteConfigRuntime,
   planApplyRuntime,
   saveConfigFileRuntime,
-  saveRemoteConfigRuntime,
   type AgentName,
   type ApplyAgentResult,
   type ConfigAvailabilityEntry,
@@ -48,23 +46,14 @@ import {
 } from './panels/RemoteConfigPanel';
 import {
   buildRemoteModelReferenceOptions,
-  emptyProviderDraft,
   modelDraft,
   providerDraft,
-  removeUnknownOhMyOpenAgentReferences,
-  renameModelDraft,
-  renameProviderDraft,
-  uniqueDraftId,
-  updateModelDraft,
-  updateProviderDraft,
-  validateRemoteDraft,
-  withOhMyOpenAgentAssignment,
-  withOhMyOpenAgentModel,
-  withOhMyOpenAgentVariant,
 } from './panels/remote-draft';
 import {
+  EMPTY_REMOTE_DRAFT,
   selectRequestStatePath,
   selectShouldRememberGitHubToken,
+  useRemoteDraftStore,
   useRuntimeStore,
 } from './stores';
 
@@ -72,25 +61,7 @@ type Notice = ToastNotice;
 
 type TargetMode = AgentName | 'all' | '';
 
-const EMPTY_REMOTE_CONFIG: EditableAgentConfig = {
-  schemaVersion: 1,
-  defaults: {
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
-  },
-  providers: {
-    openai: {
-      baseURL: 'https://api.openai.com/v1',
-      apiKey: {
-        type: 'plain',
-        value: '',
-      },
-      models: {
-        'gpt-4.1-mini': {},
-      },
-    },
-  },
-};
+
 
 const SAVED_GITHUB_TOKEN_MASK = '************';
 
@@ -115,28 +86,30 @@ function App() {
   const cancelEditSavedToken = useRuntimeStore((state) => state.cancelEditSavedToken);
   const commitRuntimeState = useRuntimeStore((state) => state.commitRuntimeState);
 
-  // ---- legacy useState slices owned by this component (PR3-c3..c4 will move them)
+  // ---- remote draft store: selectors + actions -----------------------
+  const remoteDraft = useRemoteDraftStore((state) => state.draft);
+  const remoteEditorProviderId = useRemoteDraftStore((state) => state.editorProviderId);
+  const remoteEditorModelId = useRemoteDraftStore((state) => state.editorModelId);
+  const remoteStatus = useRemoteDraftStore((state) => state.status);
+  const remoteConfigView = useRemoteDraftStore((state) => state.view);
+  const isLoadingRemote = useRemoteDraftStore((state) => state.isLoading);
+  const isSavingRemote = useRemoteDraftStore((state) => state.isSaving);
+
+  // ---- legacy useState slices owned by this component (PR3-c4 will move them)
   const [notice, setNotice] = useState<Notice | null>(null);
   const [configPath, setConfigPath] = useState('');
-  const [remoteDraft, setRemoteDraft] = useState<EditableAgentConfig>(EMPTY_REMOTE_CONFIG);
-  const [remoteEditorProviderId, setRemoteEditorProviderId] = useState(EMPTY_REMOTE_CONFIG.defaults.provider);
-  const [remoteEditorModelId, setRemoteEditorModelId] = useState(EMPTY_REMOTE_CONFIG.defaults.model);
-  const [remoteStatus, setRemoteStatus] = useState('输入 GitHub Token 后，应用会发现现有 agentcfg Gist；没有时会在保存远端配置时自动创建。');
   const [targetMode, setTargetMode] = useState<TargetMode>('');
   const [planResponse, setPlanResponse] = useState<PlanApplyRuntimeResponse | null>(null);
   const [planKey, setPlanKey] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<ApplyAgentResult[] | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
-  const [remoteConfigView, setRemoteConfigView] = useState<RemoteConfigView>('editor');
   const [configFile, setConfigFile] = useState<ConfigFileRuntimeResponse | null>(null);
   const [configAvailability, setConfigAvailability] = useState<ConfigAvailabilityEntry[]>([]);
   const [configDraft, setConfigDraft] = useState('');
   const [configStatus, setConfigStatus] = useState('尚未加载配置文件。');
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
-  const [isLoadingRemote, setIsLoadingRemote] = useState(false);
-  const [isSavingRemote, setIsSavingRemote] = useState(false);
   const [isLoadingConfigAvailability, setIsLoadingConfigAvailability] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -155,18 +128,14 @@ function App() {
         }
 
         if (outcome.shouldAutoLoadRemote) {
-          setIsLoadingRemote(true);
-          try {
-            const response = await loadRemoteConfigRuntime({ statePath: outcome.state.statePath });
-            if (!active) return;
-            commitRuntimeState(response.state);
-            replaceRemoteDraft(configToDraft(response.config));
-            setRemoteStatus('远端配置已自动刷新。表单显示的是当前 Gist 完整值；API Key 直接显示。');
-          } catch (error) {
-            if (!active) return;
-            setRemoteStatus(`自动刷新远端配置失败：${formatError(error)}`);
-          } finally {
-            if (active) setIsLoadingRemote(false);
+          const result = await useRemoteDraftStore.getState().load();
+          if (!active) return;
+          if (result.ok) {
+            useRemoteDraftStore.getState().setStatus('远端配置已自动刷新。表单显示的是当前 Gist 完整值；API Key 直接显示。');
+          } else {
+            useRemoteDraftStore
+              .getState()
+              .setStatus(`自动刷新远端配置失败：${formatError(result.error)}`);
           }
         }
       });
@@ -174,7 +143,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [commitRuntimeState]);
+  }, []);
 
   const setupSteps = useMemo<Step[]>(() => buildSetupSteps(runtimeState), [runtimeState]);
   const requestStatePath = statePath.trim() === '' ? runtimeState?.statePath : statePath.trim();
@@ -293,13 +262,7 @@ function App() {
   }
 
   function replaceRemoteDraft(nextDraft: EditableAgentConfig): void {
-    const providerId = nextDraft.providers[nextDraft.defaults.provider] === undefined ? Object.keys(nextDraft.providers)[0] ?? '' : nextDraft.defaults.provider;
-    const provider = providerDraft(nextDraft, providerId);
-    const modelId = provider.models[nextDraft.defaults.model] === undefined ? Object.keys(provider.models)[0] ?? '' : nextDraft.defaults.model;
-
-    setRemoteDraft(nextDraft);
-    setRemoteEditorProviderId(providerId);
-    setRemoteEditorModelId(modelId);
+    useRemoteDraftStore.getState().replaceDraft(nextDraft);
   }
 
   async function handleInitSubmit(event: SyntheticEvent<HTMLFormElement>): Promise<void> {
@@ -349,12 +312,13 @@ function App() {
       setNotice({ tone: 'error', title: NOTICES.remoteSetupFailed, copy: formatError(outcome.error) });
       return;
     }
+    const remoteStore = useRemoteDraftStore.getState();
     if (outcome.config !== undefined) {
-      replaceRemoteDraft(configToDraft(outcome.config));
-      setRemoteStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
+      remoteStore.replaceDraft(configToDraft(outcome.config));
+      remoteStore.setStatus('已发现并加载远端配置。表单显示的是当前远端完整值。');
     } else {
-      replaceRemoteDraft(EMPTY_REMOTE_CONFIG);
-      setRemoteStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
+      remoteStore.replaceDraft(EMPTY_REMOTE_DRAFT);
+      remoteStore.setStatus('没有找到现有 agentcfg Gist。填写远端配置并保存后，会自动创建 secret Gist。');
     }
     setActiveTab('remote');
     setNotice({
@@ -367,43 +331,29 @@ function App() {
   }
 
   async function handleLoadRemoteConfig(): Promise<void> {
-    setIsLoadingRemote(true);
     setNotice(null);
-    try {
-      const response = await loadRemoteConfigRuntime(buildGitHubTokenRequest());
-      commitRuntimeState(response.state);
-      replaceRemoteDraft(configToDraft(response.config));
-      setRemoteStatus('远端配置已加载。API Key 直接显示；保存前请确认表单就是最终写入值。');
+    const outcome = await useRemoteDraftStore.getState().load();
+    if (outcome.ok) {
       setNotice({ tone: 'success', title: NOTICES.remoteLoaded, copy: '你可以直接修改 provider、model、Base URL，或填写新的 API Key。' });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.remoteLoadFailed, copy: formatError(error) });
-    } finally {
-      setIsLoadingRemote(false);
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.remoteLoadFailed, copy: formatError(outcome.error) });
     }
   }
 
   async function handleSaveRemoteConfig(): Promise<void> {
-    const validationError = validateRemoteDraft(remoteDraft);
-    if (validationError !== null) {
-      setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: validationError });
-      return;
-    }
-
-    setIsSavingRemote(true);
     setNotice(null);
-    try {
-      const response = await saveRemoteConfigRuntime({ ...buildGitHubTokenRequest(), config: remoteDraft });
-      commitRuntimeState(response.state);
-      replaceRemoteDraft(configToDraft(response.config));
-      setRemoteStatus('远端配置已保存。表单和预览已回填最终写入的完整值。');
+    const outcome = await useRemoteDraftStore.getState().save();
+    if (outcome.ok) {
       setPlanResponse(null);
       setPlanKey(null);
       setApplyResults(null);
       setNotice({ tone: 'success', title: NOTICES.remoteSaved, copy: 'agentcfg.yaml 已写入 Gist，并更新了本地缓存。' });
-    } catch (error) {
-      setNotice({ tone: 'error', title: NOTICES.remoteSaveFailed, copy: formatError(error) });
-    } finally {
-      setIsSavingRemote(false);
+      return;
+    }
+    if (outcome.kind === 'validation') {
+      setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: outcome.message });
+    } else {
+      setNotice({ tone: 'error', title: NOTICES.remoteSaveFailed, copy: formatError(outcome.error) });
     }
   }
 
@@ -427,165 +377,86 @@ function App() {
   }
 
   function handleSelectRemoteProvider(providerId: string): void {
-    setRemoteEditorProviderId(providerId);
-    setRemoteEditorModelId(Object.keys(providerDraft(remoteDraft, providerId).models)[0] ?? '');
+    useRemoteDraftStore.getState().selectProvider(providerId);
   }
 
   function handleAddRemoteProvider(): void {
-    setRemoteDraft((currentDraft) => {
-      const providerId = uniqueDraftId('provider', currentDraft.providers);
-      const modelId = 'model';
-
-      setRemoteEditorProviderId(providerId);
-      setRemoteEditorModelId(modelId);
-
-      return {
-        ...currentDraft,
-        providers: {
-          ...currentDraft.providers,
-          [providerId]: emptyProviderDraft(modelId),
-        },
-      };
-    });
+    useRemoteDraftStore.getState().addProvider();
   }
 
   function handleRemoveRemoteProvider(): void {
-    setRemoteDraft((currentDraft) => {
-      const providerIds = Object.keys(currentDraft.providers);
-      if (providerIds.length <= 1 || currentDraft.providers[selectedRemoteProviderId] === undefined) {
-        return currentDraft;
-      }
-
-      const providers = { ...currentDraft.providers };
-      delete providers[selectedRemoteProviderId];
-      const nextProviderId = providerIds.find((providerId) => providerId !== selectedRemoteProviderId) ?? '';
-      const nextModelId = Object.keys(providers[nextProviderId]?.models ?? {})[0] ?? '';
-      const defaults =
-        currentDraft.defaults.provider === selectedRemoteProviderId
-          ? { provider: nextProviderId, model: nextModelId }
-          : currentDraft.defaults;
-
-      setRemoteEditorProviderId(nextProviderId);
-      setRemoteEditorModelId(nextModelId);
-
-      return removeUnknownOhMyOpenAgentReferences({ ...currentDraft, defaults, providers });
-    });
+    useRemoteDraftStore.getState().removeProvider();
   }
 
   function handleRemoteProviderIdChange(providerId: string): void {
     const previousProviderId = selectedRemoteProviderId;
-    if (providerId !== previousProviderId && remoteDraft.providers[providerId] !== undefined) {
-      setNotice({ tone: 'error', title: '提供商 ID 已存在', copy: `提供商 ID "${providerId}" 已被使用。当前提供商保持为 "${previousProviderId}"；请填写唯一 ID 后再继续。` });
-      return;
+    const ok = useRemoteDraftStore.getState().renameProvider(providerId);
+    if (!ok) {
+      setNotice({
+        tone: 'error',
+        title: '提供商 ID 已存在',
+        copy: `提供商 ID "${providerId}" 已被使用。当前提供商保持为 "${previousProviderId}"；请填写唯一 ID 后再继续。`,
+      });
     }
-
-    setRemoteDraft((currentDraft) => renameProviderDraft(currentDraft, previousProviderId, providerId));
-    setRemoteEditorProviderId(providerId);
   }
 
-  function updateRemoteProvider(updateProvider: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string]): void {
-    const providerId = selectedRemoteProviderId;
-    setRemoteDraft((currentDraft) => updateProviderDraft(currentDraft, providerId, updateProvider));
+  function updateRemoteProvider(
+    update: (provider: EditableAgentConfig['providers'][string]) => EditableAgentConfig['providers'][string],
+  ): void {
+    useRemoteDraftStore.getState().updateProvider(update);
   }
 
   function handleSelectRemoteModel(modelId: string): void {
-    setRemoteEditorModelId(modelId);
+    useRemoteDraftStore.getState().selectModel(modelId);
   }
 
   function handleAddRemoteModel(): void {
-    const providerId = selectedRemoteProviderId;
-    setRemoteDraft((currentDraft) => {
-      const provider = providerDraft(currentDraft, providerId);
-      const modelId = uniqueDraftId('model', provider.models);
-
-      setRemoteEditorModelId(modelId);
-
-      return updateProviderDraft(currentDraft, providerId, (currentProvider) => ({
-        ...currentProvider,
-        models: {
-          ...currentProvider.models,
-          [modelId]: {},
-        },
-      }));
-    });
+    useRemoteDraftStore.getState().addModel();
   }
 
   function handleRemoveRemoteModel(): void {
-    const providerId = selectedRemoteProviderId;
-    const modelId = selectedRemoteModelId;
-    setRemoteDraft((currentDraft) => {
-      const provider = providerDraft(currentDraft, providerId);
-      const modelIds = Object.keys(provider.models);
-      if (modelIds.length <= 1 || provider.models[modelId] === undefined) {
-        return currentDraft;
-      }
-
-      const models = { ...provider.models };
-      delete models[modelId];
-      const nextModelId = modelIds.find((candidate) => candidate !== modelId) ?? '';
-      const defaults =
-        currentDraft.defaults.provider === providerId && currentDraft.defaults.model === modelId
-          ? { ...currentDraft.defaults, model: nextModelId }
-          : currentDraft.defaults;
-
-      setRemoteEditorModelId(nextModelId);
-
-      return removeUnknownOhMyOpenAgentReferences({
-        ...currentDraft,
-        defaults,
-        providers: {
-          ...currentDraft.providers,
-          [providerId]: { ...provider, models },
-        },
-      });
-    });
+    useRemoteDraftStore.getState().removeModel();
   }
 
   function handleRemoteModelIdChange(modelId: string): void {
     const providerId = selectedRemoteProviderId;
     const previousModelId = selectedRemoteModelId;
-    if (modelId !== previousModelId && selectedRemoteProvider.models[modelId] !== undefined) {
-      setNotice({ tone: 'error', title: '模型 ID 已存在', copy: `提供商 "${providerId}" 中已存在模型 ID "${modelId}"。当前模型保持为 "${previousModelId}"；请填写唯一 ID 后再继续。` });
-      return;
+    const ok = useRemoteDraftStore.getState().renameModel(modelId);
+    if (!ok) {
+      setNotice({
+        tone: 'error',
+        title: '模型 ID 已存在',
+        copy: `提供商 "${providerId}" 中已存在模型 ID "${modelId}"。当前模型保持为 "${previousModelId}"；请填写唯一 ID 后再继续。`,
+      });
     }
-
-    setRemoteDraft((currentDraft) => renameModelDraft(currentDraft, providerId, previousModelId, modelId));
-    setRemoteEditorModelId(modelId);
   }
 
-  function updateRemoteModel(updateModel: (model: EditableAgentConfig['providers'][string]['models'][string]) => EditableAgentConfig['providers'][string]['models'][string]): void {
-    const providerId = selectedRemoteProviderId;
-    const modelId = selectedRemoteModelId;
-    setRemoteDraft((currentDraft) => updateModelDraft(currentDraft, providerId, modelId, updateModel));
+  function updateRemoteModel(
+    update: (
+      model: EditableAgentConfig['providers'][string]['models'][string],
+    ) => EditableAgentConfig['providers'][string]['models'][string],
+  ): void {
+    useRemoteDraftStore.getState().updateModel(update);
   }
 
   function handleDefaultRemoteProviderChange(providerId: string): void {
-    setRemoteDraft((currentDraft) => ({
-      ...currentDraft,
-      defaults: {
-        provider: providerId,
-        model: Object.keys(providerDraft(currentDraft, providerId).models)[0] ?? '',
-      },
-    }));
+    useRemoteDraftStore.getState().setDefaultProvider(providerId);
   }
 
   function handleDefaultRemoteModelChange(modelId: string): void {
-    setRemoteDraft((currentDraft) => ({
-      ...currentDraft,
-      defaults: { ...currentDraft.defaults, model: modelId },
-    }));
+    useRemoteDraftStore.getState().setDefaultModel(modelId);
   }
 
   function handleOhMyOpenAgentModelChange(kind: OhMyOpenAgentAssignmentKind, name: string, modelReference: string): void {
-    setRemoteDraft((currentDraft) => withOhMyOpenAgentModel(currentDraft, kind, name, modelReference));
+    useRemoteDraftStore.getState().setOhMyOpenAgentModel(kind, name, modelReference);
   }
 
   function handleOhMyOpenAgentVariantChange(kind: OhMyOpenAgentAssignmentKind, name: string, variant: string): void {
-    setRemoteDraft((currentDraft) => withOhMyOpenAgentVariant(currentDraft, kind, name, variant));
+    useRemoteDraftStore.getState().setOhMyOpenAgentVariant(kind, name, variant);
   }
 
   function handleClearOhMyOpenAgentAssignment(kind: OhMyOpenAgentAssignmentKind, name: string): void {
-    setRemoteDraft((currentDraft) => withOhMyOpenAgentAssignment(currentDraft, kind, name, undefined));
+    useRemoteDraftStore.getState().clearOhMyOpenAgentAssignment(kind, name);
   }
 
   async function handlePlan(): Promise<void> {
@@ -757,7 +628,7 @@ function App() {
               isPulling={isPulling}
               isBusy={isBusy}
               remoteConfigView={remoteConfigView}
-              onRemoteConfigViewChange={setRemoteConfigView}
+              onRemoteConfigViewChange={(view) => useRemoteDraftStore.getState().setView(view)}
               remoteDraft={remoteDraft}
               remoteProviderIds={remoteProviderIds}
               selectedRemoteProviderId={selectedRemoteProviderId}
