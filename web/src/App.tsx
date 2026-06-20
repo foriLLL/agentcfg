@@ -514,9 +514,9 @@ function App() {
                 isEditingGitHubToken,
                 savedTokenStatusCopy: hasSavedGitHubToken
                   ? (isEditingGitHubToken
-                      ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存。'
-                      : '已保存 GitHub Token，输入框已锁定为固定掩码。')
-                  : '尚未保存 GitHub Token。',
+                      ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存到本机 secrets.json。'
+                      : 'GitHub Token 已以明文保存到本机 secrets.json，输入框已锁定为固定掩码。')
+                  : '尚未保存 GitHub Token。勾选下方复选框可在连接成功后保存到本机 secrets.json，避免下次重复粘贴。',
                 onEditSavedGitHubToken: beginEditSavedToken,
                 onCancelGitHubTokenEdit: cancelEditSavedToken,
                 onClearSavedGitHubToken: handleClearSavedGitHubToken,

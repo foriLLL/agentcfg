@@ -347,7 +347,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           && navigation.type === 'reload'
           && statePathInput instanceof HTMLInputElement
           && statePathInput.value === ${JSON.stringify(statePath)}
-          && document.body?.innerText.includes('已保存 GitHub Token，输入框已锁定为固定掩码。') === true;
+          && document.body?.innerText.includes('GitHub Token 已以明文保存到本机 secrets.json') === true;
       })()`);
       await assertSavedGitHubTokenLocked(cdp, 'post-reload GitHub Token input');
       await assertDomHasNoGitHubToken(cdp, 'post-reload DOM');
@@ -377,7 +377,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         return document.readyState === 'complete'
           && statePathInput instanceof HTMLInputElement
           && statePathInput.value === ${JSON.stringify(statePath)}
-          && document.body?.innerText.includes('已保存 GitHub Token，输入框已锁定为固定掩码。') === true;
+          && document.body?.innerText.includes('GitHub Token 已以明文保存到本机 secrets.json') === true;
       })()`);
       await assertSavedGitHubTokenLocked(cdp, 'post-port-change GitHub Token input');
       await assertDomHasNoGitHubToken(cdp, 'post-port-change DOM');

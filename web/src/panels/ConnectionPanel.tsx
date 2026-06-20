@@ -112,17 +112,19 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
               disabled={props.isSubmittingInit}
             />
           </label>
-          <label className="checkbox-control" htmlFor="remember-github-token">
-            <input
-              id="remember-github-token"
-              name="remember-github-token"
-              type="checkbox"
-              checked={props.rememberCheckboxChecked}
-              onChange={(event) => props.onRememberGitHubTokenChange(event.target.checked)}
-              disabled={props.isGitHubTokenLocked || props.isReplacingSavedGitHubToken || props.isSubmittingInit || props.isSettingRemote || props.githubToken.trim() === ''}
-            />
-            <span>{props.rememberCheckboxLabel}</span>
-          </label>
+          {!props.hasSavedGitHubToken && (
+            <label className="checkbox-control" htmlFor="remember-github-token">
+              <input
+                id="remember-github-token"
+                name="remember-github-token"
+                type="checkbox"
+                checked={props.rememberCheckboxChecked}
+                onChange={(event) => props.onRememberGitHubTokenChange(event.target.checked)}
+                disabled={props.isSubmittingInit || props.isSettingRemote || props.githubToken.trim() === ''}
+              />
+              <span>{props.rememberCheckboxLabel}</span>
+            </label>
+          )}
           <div className="saved-token-control" role="status" aria-live="polite">
             <span>{props.savedTokenStatusCopy}</span>
             <div className="saved-token-actions" aria-label="保存的 GitHub Token 操作">
@@ -151,7 +153,7 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
           </button>
         </form>
         <p className="helper-copy">
-          勾选后 Token 会以明文保存到本机 secrets.json；API 只返回是否已保存，不会把 Token 值发回界面。若没有现有 agentcfg Gist，在“远端配置”保存时会自动创建 secret Gist。
+          若没有现有 agentcfg Gist，在“远端配置”保存时会自动创建 secret Gist。
         </p>
         <div className="step-list" aria-label="设置进度">
           {props.setupSteps.map((step) => (
