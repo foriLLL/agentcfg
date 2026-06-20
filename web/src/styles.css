@@ -1345,14 +1345,8 @@ h3 {
   text-transform: uppercase;
 }
 
-.setup-form input,
-.path-form input,
-.apply-lock input,
-.remote-config-form input,
-.remote-config-form select,
 .config-editor-textarea {
   width: 100%;
-  min-height: 20rem;
   padding: var(--space-4);
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-medium);
@@ -1362,6 +1356,16 @@ h3 {
   font-size: var(--text-small);
   line-height: var(--line-body);
   resize: vertical;
+}
+
+.setup-form input,
+.path-form input,
+.apply-lock input,
+.remote-config-form input,
+.remote-config-form select {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
 }
 
 .setup-form input::placeholder,
