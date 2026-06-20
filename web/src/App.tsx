@@ -208,14 +208,15 @@ function App() {
     if (planStore.configFile !== null) {
       usePlanStore.setState({ configFile: null, configDraft: '' });
     }
+    const availabilityEntry = configAvailability.find((entry) => entry.agent === configAgent);
     const nextStatus =
       configAgent === null
         ? '请选择单个 Agent 后再加载配置文件。'
-        : configAvailabilityByAgent.get(configAgent)?.available === false
+        : availabilityEntry?.available === false
           ? '此 Agent 未找到可编辑的配置文件。'
           : '尚未加载配置文件。';
     planStore.setConfigStatus(nextStatus);
-  }, [configAgent, configAvailabilityByAgent, configPath, requestStatePath]);
+  }, [configAgent, configAvailability, configPath, requestStatePath]);
 
   useEffect(() => {
     if (loadState !== 'ready') {
