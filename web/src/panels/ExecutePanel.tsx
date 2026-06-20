@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AgentName, ApplyAgentResult, ApplyPlanSummary, RuntimeStateSummary } from '../api';
+import { AgentConfigIcon } from '../AgentConfigIcon';
 import { BUTTONS, GATES, dryRunReadinessBadge } from '../strings';
 import { StatusBadge } from '../widgets';
 import { ApplyResults, PlanResults } from './PlanApplyResults';
@@ -80,7 +81,10 @@ export function ExecutePanel(props: ExecutePanelProps) {
                     onChange={() => props.onTargetModeChange(target.value)}
                   />
                   <span>
-                    <strong>{target.title}</strong>
+                    <span className="target-option__title">
+                      {target.value !== 'all' && <AgentConfigIcon agent={target.value as AgentName} />}
+                      <strong>{target.title}</strong>
+                    </span>
                     <small>{target.copy}</small>
                   </span>
                 </label>

@@ -5,6 +5,7 @@ import type {
   ManagedDiffChange,
   ManagedDiffNotice,
 } from '../api';
+import { AgentConfigIcon } from '../AgentConfigIcon';
 import { FileDiffViewer } from '../FileDiffViewer';
 import { applyStatusTone } from '../strings';
 import {
@@ -50,7 +51,10 @@ export function PlanResults({
       {plans.map((plan) => (
         <article className="agent-result-card" key={plan.agent}>
           <div className="agent-result-card__header">
-            <h3>{agentLabel(plan.agent)}</h3>
+            <h3>
+              <AgentConfigIcon agent={plan.agent} />
+              {agentLabel(plan.agent)}
+            </h3>
             <StatusBadge tone={stale ? 'warning' : plan.operationCount > 0 ? 'warning' : 'ready'}>
               {`${plan.operationCount} 项操作`}
             </StatusBadge>
@@ -82,7 +86,10 @@ export function ApplyResults({ results }: { results: ApplyAgentResult[] | null }
       {results.map((result) => (
         <article className="agent-result-card" key={result.agent}>
           <div className="agent-result-card__header">
-            <h3>{agentLabel(result.agent)}</h3>
+            <h3>
+              <AgentConfigIcon agent={result.agent} />
+              {agentLabel(result.agent)}
+            </h3>
             <StatusBadge tone={applyStatusTone(result.status)}>{formatStatus(result.status)}</StatusBadge>
           </div>
           <dl className="detail-list compact-detail-list">
