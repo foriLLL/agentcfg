@@ -493,6 +493,12 @@ a {
   padding: var(--space-4);
   list-style: none;
   cursor: pointer;
+  border-radius: var(--radius-large);
+  transition: background-color var(--motion-fast);
+}
+
+.rail-card--collapsible > summary:hover {
+  background-color: var(--color-line);
 }
 
 .rail-card--collapsible > summary::-webkit-details-marker {
@@ -512,13 +518,15 @@ a {
 }
 
 .rail-card--collapsible[open] > summary {
-  border-bottom: var(--hairline) solid var(--color-line);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: inset 3px 0 0 0 var(--color-clay);
 }
 
 .rail-details {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: var(--space-5);
+  padding: var(--space-5);
 }
 
 .rail-detail-group {
@@ -2899,8 +2907,7 @@ h3 {
 .sync-targets-panel__advanced {
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-large);
-  background: var(--color-panel);
-  box-shadow: var(--shadow-control);
+  background: var(--color-paper-soft);
 }
 
 .sync-targets-panel__advanced > summary {
@@ -2909,6 +2916,12 @@ h3 {
   padding: var(--space-4);
   list-style: none;
   cursor: pointer;
+  border-radius: var(--radius-large);
+  transition: background-color var(--motion-fast);
+}
+
+.sync-targets-panel__advanced > summary:hover {
+  background-color: var(--color-line);
 }
 
 .sync-targets-panel__advanced > summary::-webkit-details-marker {
@@ -2928,11 +2941,13 @@ h3 {
 }
 
 .sync-targets-panel__advanced[open] > summary {
-  border-bottom: var(--hairline) solid var(--color-line);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: inset 3px 0 0 0 var(--color-clay);
 }
 
 .sync-targets-panel__advanced > :not(summary) {
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 
 /* PR5: Defaults quick edit */
@@ -2941,6 +2956,10 @@ h3 {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-5);
+  border: 2px solid var(--color-clay);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-large);
 }
 
 .defaults-quick-edit__heading h3 {
@@ -2980,8 +2999,7 @@ h3 {
 .remote-source-panel__advanced {
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-large);
-  background: var(--color-panel);
-  box-shadow: var(--shadow-control);
+  background: var(--color-paper-soft);
 }
 
 .remote-source-panel__advanced > summary {
@@ -2990,6 +3008,12 @@ h3 {
   padding: var(--space-4);
   list-style: none;
   cursor: pointer;
+  border-radius: var(--radius-large);
+  transition: background-color var(--motion-fast);
+}
+
+.remote-source-panel__advanced > summary:hover {
+  background-color: var(--color-line);
 }
 
 .remote-source-panel__advanced > summary::-webkit-details-marker {
@@ -3009,11 +3033,13 @@ h3 {
 }
 
 .remote-source-panel__advanced[open] > summary {
-  border-bottom: var(--hairline) solid var(--color-line);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: inset 3px 0 0 0 var(--color-clay);
 }
 
 .remote-source-panel__advanced > :not(summary) {
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 
 /* Logos: agent availability strip in StatusRail */
