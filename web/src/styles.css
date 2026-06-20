@@ -1583,7 +1583,7 @@ h3 {
 
 .ohmy-openagent-editor__groups {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-4);
   min-width: 0;
 }
@@ -1608,7 +1608,7 @@ h3 {
 
 .ohmy-openagent-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(8rem, 14rem) 1fr minmax(6rem, 8rem) auto;
   gap: var(--space-3);
   align-items: center;
   min-width: 0;
