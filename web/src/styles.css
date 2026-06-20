@@ -410,18 +410,20 @@ a {
 }
 
 .workflow-step--ready .workflow-step__marker {
-  background: var(--color-clay);
-  color: var(--color-cocoa);
+  background: var(--color-link-soft);
+  color: var(--color-clay);
+  box-shadow: inset 0 0 0 1.5px var(--color-clay);
 }
 
 .workflow-step--pending .workflow-step__marker {
   background: var(--color-paper-soft);
   color: var(--color-coffee);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
 .workflow-step--complete .workflow-step__marker {
-  background: var(--color-sage);
-  color: var(--color-olive);
+  background: var(--color-olive);
+  color: var(--color-cream);
 }
 
 .workflow-step--blocked .workflow-step__marker,
