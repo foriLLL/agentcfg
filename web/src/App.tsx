@@ -45,7 +45,6 @@ import {
   selectConfigAgent,
   selectIsPlanCurrent,
   selectShouldRememberGitHubToken,
-  selectTargetRequest,
   useRemoteDraftStore,
   useRuntimeStore,
   usePlanStore,
@@ -142,13 +141,13 @@ function App() {
 
   const setupSteps = useMemo<Step[]>(() => buildSetupSteps(runtimeState), [runtimeState]);
   const requestStatePath = statePath.trim() === '' ? runtimeState?.statePath : statePath.trim();
-  const targetRequest = usePlanStore(selectTargetRequest);
   const reviewKey = usePlanStore((state) => state.planKey ?? '');
   const planKey = usePlanStore((state) => state.planKey);
   const hasSavedGitHubToken = runtimeState?.secrets?.hasGitHubToken === true;
   const isBusy = isSubmittingInit || isPulling || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
-  const canReview = targetRequest !== null && runtimeState?.cache.present === true && !isBusy;
-  const canApply = targetRequest !== null && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
+  const hasReviewTarget = targetMode !== '';
+  const canReview = hasReviewTarget && runtimeState?.cache.present === true && !isBusy;
+  const canApply = hasReviewTarget && isPlanCurrent && confirmationText === 'APPLY' && !isBusy;
   const canReviewLocalConfig = configAgent !== null && canReview;
   const canApplyLocalConfig = configAgent !== null && canApply;
   const canConfirmLocalConfig = configAgent !== null && isPlanCurrent && !isApplying;
