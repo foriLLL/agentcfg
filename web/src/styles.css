@@ -145,7 +145,7 @@ a {
   min-height: 0;
   padding: var(--space-4);
   border-right: var(--hairline) solid var(--color-line);
-  background: color-mix(in srgb, var(--color-panel-strong) 94%, var(--color-link-soft));
+  background: var(--color-panel-strong);
 }
 
 .command-brand {
@@ -160,9 +160,9 @@ a {
   flex: 0 0 auto;
   width: 2rem;
   height: 2rem;
-  border: 0.38rem solid var(--color-link);
   border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 0.24rem var(--color-panel-strong);
+  background: var(--color-clay);
+  box-shadow: inset 0 0 0 0.4rem var(--color-clay), inset 0 0 0 0.8rem #fff;
 }
 
 .command-brand h1 {
@@ -193,9 +193,9 @@ a {
 .command-nav__group p {
   padding: 0 var(--space-3);
   color: var(--color-coffee);
-  font-size: var(--text-caption);
-  font-weight: 800;
-  letter-spacing: 0.09em;
+  font-size: var(--text-small);
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 .command-nav__item {
@@ -216,9 +216,13 @@ a {
 }
 
 .command-nav__item--active {
-  border-color: color-mix(in srgb, var(--color-link) 20%, var(--color-line));
   color: var(--color-link);
   background: var(--color-link-soft);
+  box-shadow: inset 3px 0 0 0 var(--color-clay);
+}
+
+.command-nav__item:not(.command-nav__item--active):hover {
+  background: var(--color-paper-soft);
 }
 
 .command-nav__icon {
@@ -434,7 +438,7 @@ a {
   border: var(--hairline) solid var(--color-line);
   border-radius: var(--radius-large);
   background: var(--color-panel-strong);
-  box-shadow: var(--shadow-control);
+  box-shadow: var(--shadow-card);
 }
 
 .rail-card__heading {
@@ -1163,8 +1167,8 @@ h3 {
 }
 
 .status-badge--warning {
-  color: var(--color-clay);
-  background: color-mix(in srgb, var(--color-honey) 14%, var(--color-cream));
+  color: color-mix(in srgb, var(--color-rust) 80%, var(--color-cocoa));
+  background: var(--color-error-panel);
 }
 
 .setup-form {
@@ -1863,11 +1867,13 @@ h3 {
 }
 
 .agent-config-logo {
+  flex: 0 0 auto;
   width: 1.35rem;
   height: 1.35rem;
-  flex: 0 0 auto;
   border-radius: var(--radius-small);
   overflow: hidden;
+  background: transparent;
+  box-shadow: 0 0 0 var(--hairline) var(--color-line);
 }
 
 .agent-config-logo--codex {
@@ -3060,7 +3066,7 @@ h3 {
   width: 1.6rem;
   height: 1.6rem;
   padding: 0.15rem;
-  border: var(--hairline) solid var(--color-line);
+  border: var(--hairline) solid transparent;
   border-radius: var(--radius-small);
   background: var(--color-panel-strong);
 }
