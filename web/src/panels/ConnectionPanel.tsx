@@ -112,40 +112,42 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
               disabled={props.isSubmittingInit}
             />
           </label>
-          {!props.hasSavedGitHubToken && (
-            <label className="checkbox-control" htmlFor="remember-github-token">
-              <input
-                id="remember-github-token"
-                name="remember-github-token"
-                type="checkbox"
-                checked={props.rememberCheckboxChecked}
-                onChange={(event) => props.onRememberGitHubTokenChange(event.target.checked)}
-                disabled={props.isSubmittingInit || props.isSettingRemote || props.githubToken.trim() === ''}
-              />
-              <span>{props.rememberCheckboxLabel}</span>
-            </label>
-          )}
-          <div className="saved-token-control" role="status" aria-live="polite">
-            <span>{props.savedTokenStatusCopy}</span>
-            <div className="saved-token-actions" aria-label="保存的 GitHub Token 操作">
-              {props.hasSavedGitHubToken && !props.isEditingGitHubToken && (
-                <button className="secondary-action secondary-action--compact" type="button" onClick={props.onEditSavedGitHubToken} disabled={props.isBusy}>
-                  编辑保存的 Token
+          <div className="setup-form__group">
+            {!props.hasSavedGitHubToken && (
+              <label className="checkbox-control" htmlFor="remember-github-token">
+                <input
+                  id="remember-github-token"
+                  name="remember-github-token"
+                  type="checkbox"
+                  checked={props.rememberCheckboxChecked}
+                  onChange={(event) => props.onRememberGitHubTokenChange(event.target.checked)}
+                  disabled={props.isSubmittingInit || props.isSettingRemote || props.githubToken.trim() === ''}
+                />
+                <span>{props.rememberCheckboxLabel}</span>
+              </label>
+            )}
+            <div className="saved-token-control" role="status" aria-live="polite">
+              <span>{props.savedTokenStatusCopy}</span>
+              <div className="saved-token-actions" aria-label="保存的 GitHub Token 操作">
+                {props.hasSavedGitHubToken && !props.isEditingGitHubToken && (
+                  <button className="secondary-action secondary-action--compact" type="button" onClick={props.onEditSavedGitHubToken} disabled={props.isBusy}>
+                    编辑保存的 Token
+                  </button>
+                )}
+                {props.hasSavedGitHubToken && props.isEditingGitHubToken && (
+                  <button className="secondary-action secondary-action--compact" type="button" onClick={props.onCancelGitHubTokenEdit} disabled={props.isBusy}>
+                    取消编辑
+                  </button>
+                )}
+                <button
+                  className="secondary-action secondary-action--compact"
+                  type="button"
+                  onClick={props.onClearSavedGitHubToken}
+                  disabled={!props.hasSavedGitHubToken || props.isClearingGitHubToken}
+                >
+                  {props.isClearingGitHubToken ? '正在清除...' : '清除保存的 Token'}
                 </button>
-              )}
-              {props.hasSavedGitHubToken && props.isEditingGitHubToken && (
-                <button className="secondary-action secondary-action--compact" type="button" onClick={props.onCancelGitHubTokenEdit} disabled={props.isBusy}>
-                  取消编辑
-                </button>
-              )}
-              <button
-                className="secondary-action secondary-action--compact"
-                type="button"
-                onClick={props.onClearSavedGitHubToken}
-                disabled={!props.hasSavedGitHubToken || props.isClearingGitHubToken}
-              >
-                {props.isClearingGitHubToken ? '正在清除...' : '清除保存的 Token'}
-              </button>
+              </div>
             </div>
           </div>
           <button className="primary-action" type="submit" disabled={props.isSubmittingInit || props.isSettingRemote}>

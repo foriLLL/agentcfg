@@ -1247,9 +1247,8 @@ h3 {
 
 .setup-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-3);
-  align-items: end;
   margin-bottom: var(--space-4);
   padding: var(--space-4);
   border: var(--hairline) solid var(--color-line);
@@ -1257,8 +1256,9 @@ h3 {
   background: var(--color-paper-soft);
 }
 
-.setup-form .primary-action {
-  grid-column: 1 / -1;
+.setup-form__group {
+  display: grid;
+  gap: var(--space-3);
 }
 
 .checkbox-control,
