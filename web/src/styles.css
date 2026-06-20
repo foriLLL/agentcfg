@@ -365,7 +365,7 @@ a {
 .workflow-step {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(15rem, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 18rem);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -2061,7 +2061,7 @@ h3 {
 
 .config-associated-files li {
   display: grid;
-  grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr) max-content;
   gap: var(--space-3);
   align-items: center;
   min-width: 0;
@@ -2242,7 +2242,7 @@ h3 {
 
 .target-option {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-4);
@@ -2696,7 +2696,7 @@ h3 {
 
 .rule-file-row {
   display: grid;
-  grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr) max-content;
   gap: var(--space-4);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -3174,7 +3174,7 @@ h3 {
 
 .defaults-quick-edit__row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(12rem, 2fr) auto;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(12rem, 2fr) minmax(6rem, auto);
   gap: var(--space-3);
   align-items: end;
 }
