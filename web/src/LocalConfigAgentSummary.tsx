@@ -1,4 +1,5 @@
 import type { AgentName, ConfigAvailabilityEntry, ConfigFileRuntimeResponse } from './api';
+import { AgentConfigIcon } from './AgentConfigIcon';
 import { formatDate } from './view-model';
 
 type LocalConfigAgentSummaryProps = {
@@ -24,7 +25,10 @@ export function LocalConfigAgentSummary({
     <div className="config-agent-summary" id="config-agent-panel" role="tabpanel" aria-labelledby={configAgent === null ? undefined : `config-agent-${configAgent}-tab`}>
       <div>
         <span>当前 Agent</span>
-        <strong>{targetTitle ?? '请选择 Agent'}</strong>
+        <strong className="config-agent-summary__title">
+          {configAgent !== null && <AgentConfigIcon agent={configAgent} />}
+          <span>{targetTitle ?? '请选择 Agent'}</span>
+        </strong>
       </div>
       <div>
         <span>主配置入口</span>

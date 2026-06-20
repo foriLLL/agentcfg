@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
-import type { AgentConfig, ConfigAvailabilityEntry, RuntimeStateSummary } from './api';
+import type { AgentConfig, AgentName, ConfigAvailabilityEntry, RuntimeStateSummary } from './api';
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
+import { AgentConfigIcon } from './AgentConfigIcon';
+import { agentLabel, formatDate } from './view-model';
 import {
   cacheReadinessBadge,
   conflictBaselineBadge,
@@ -8,7 +10,6 @@ import {
   remoteRevisionBadge,
   syncServiceBadge,
 } from './strings';
-import { formatDate } from './view-model';
 
 type StatusRailProps = {
   readonly runtimeState: RuntimeStateSummary | null;
@@ -42,6 +43,7 @@ export function StatusRail({ commandStatus, configAvailability, runtimeState }: 
           <Detail label="Agent Skills" value={`${commandStatus.skills?.fileCount ?? 0} 个文件`} />
           <Detail label="本地配置" value={`${availableAgents}/${configAvailability.length || 5} Agent 可用`} />
         </dl>
+        <RailAgentAvailability entries={configAvailability} />
       </section>
 
       <section className="rail-card">
@@ -188,5 +190,24 @@ function Detail({ label, value }: { readonly label: string; readonly value: stri
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
+  );
+}
+
+function RailAgentAvailability({ entries }: { readonly entries: readonly ConfigAvailabilityEntry[] }) {
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <ul className="rail-agent-availability" aria-label="本地 Agent 可用性">
+      {entries.map((entry) => (
+        <li
+          key={entry.agent}
+          className={`rail-agent-availability__item rail-agent-availability__item--${entry.available ? 'available' : 'missing'}`}
+          title={`${agentLabel(entry.agent as AgentName)}：${entry.available ? '已检测到' : '未检测到'}`}
+        >
+          <AgentConfigIcon agent={entry.agent as AgentName} />
+        </li>
+      ))}
+    </ul>
   );
 }
