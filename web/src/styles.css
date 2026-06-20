@@ -1081,22 +1081,6 @@ h3 {
   grid-column: 1 / -1;
 }
 
-.onboarding-card,
-.connection-card {
-  grid-column: span 7;
-}
-
-.session-card {
-  grid-column: span 5;
-}
-
-.source-card,
-.remote-card,
-.config-card,
-.conflict-card {
-  grid-column: span 6;
-}
-
 .config-editor-card,
 .config-editor-body,
 .remote-editor-card,
@@ -1104,7 +1088,7 @@ h3 {
 .execute-card,
 .rules-card,
 .sync-card {
-  grid-column: span 12;
+  grid-column: 1 / -1;
 }
 
 .tab-bar {
@@ -2964,7 +2948,7 @@ h3 {
   .execute-card,
   .rules-card,
   .sync-card {
-    grid-column: auto;
+    grid-column: 1 / -1;
   }
 }
 
@@ -3143,7 +3127,6 @@ h3 {
 .sync-targets-panel__advanced[open] > summary {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  box-shadow: inset 3px 0 0 0 var(--color-clay);
 }
 
 .sync-targets-panel__advanced > :not(summary) {
@@ -3153,13 +3136,27 @@ h3 {
 /* PR5: Defaults quick edit */
 
 .defaults-quick-edit {
+  position: relative;
   display: grid;
   gap: var(--space-3);
   padding: var(--space-5);
-  border: 2px solid var(--color-clay);
+  padding-left: calc(var(--space-5) + 3px);
+  border: var(--hairline) solid var(--color-line);
   background: var(--color-panel-strong);
   box-shadow: var(--shadow-card);
   border-radius: var(--radius-large);
+}
+
+.defaults-quick-edit::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-clay);
+  border-top-left-radius: var(--radius-large);
+  border-bottom-left-radius: var(--radius-large);
 }
 
 .defaults-quick-edit__heading h3 {
@@ -3235,7 +3232,6 @@ h3 {
 .remote-source-panel__advanced[open] > summary {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  box-shadow: inset 3px 0 0 0 var(--color-clay);
 }
 
 .remote-source-panel__advanced > :not(summary) {
