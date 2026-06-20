@@ -1857,36 +1857,31 @@ h3 {
 .agent-config-logo {
   width: 1.35rem;
   height: 1.35rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
+  flex: 0 0 auto;
+  border-radius: var(--radius-small);
+  overflow: hidden;
 }
 
 .agent-config-logo--codex {
-  stroke-width: 1.45;
+  color: #0d0d0d;
+  fill: currentColor;
 }
 
 .agent-config-logo--claude {
-  color: #c15f2c;
-  fill: currentColor;
-  stroke: none;
+  background: transparent;
 }
 
 .agent-config-logo--opencode {
   color: #151515;
-  overflow: hidden;
-  border-radius: var(--radius-small);
-  stroke: none;
 }
 
 .agent-config-logo--openclaw {
-  color: #256f55;
+  background: transparent;
+  image-rendering: pixelated;
 }
 
 .agent-config-logo--ohmyopenagent {
-  color: #5146d9;
+  background: transparent;
 }
 
 .config-agent-tab strong,
