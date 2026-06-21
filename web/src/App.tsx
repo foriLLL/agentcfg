@@ -653,6 +653,31 @@ function App() {
             />
           )}
 
+          {activeTab === 'rulesSkills' && (
+            <div className="dashboard-grid dashboard-grid--rules">
+              <section className="empty-state" role="status">
+                <p className="eyebrow">规则与 Skills</p>
+                <h2>规则与 Skills 页面构建中</h2>
+                <p>该功能模块将在后续任务中完善，目前您可以继续访问现有的规则与技能面板：</p>
+              </section>
+              <RulesPanel
+                runtimeState={runtimeState}
+                requestStatePath={requestStatePath}
+                buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
+                onState={commitRuntimeState}
+                onNotice={showNotice}
+              />
+              <section id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
+                <SkillsDirectoryPanel
+                  requestStatePath={requestStatePath}
+                  buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
+                  onState={commitRuntimeState}
+                  onNotice={showNotice}
+                />
+              </section>
+            </div>
+          )}
+
           {activeTab === 'automation' && (
             <SyncPanel
               runtimeState={runtimeState}

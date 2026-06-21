@@ -127,6 +127,80 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
   }
 });
 
+test('Task 7 shell uses redesigned nav and removes permanent right status rail', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-shell-redesign-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    const { startWebServer } = await import('../../src/server');
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: { ...process.env, GITHUB_TOKEN: '' },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('配置同步工作流', 15000);
+
+      const shell = await cdp.evaluate<{
+        navLabels: string[];
+        commandRailVisible: boolean;
+        statusTriggerVisible: boolean;
+        mainWidth: number;
+        contentWidth: number;
+      }>(`(() => {
+        const navLabels = Array.from(document.querySelectorAll('.command-nav__item')).map((item) => item.textContent?.trim() ?? '');
+        const rail = document.querySelector('.command-rail');
+        const commandRailVisible = rail instanceof HTMLElement && window.getComputedStyle(rail).display !== 'none' && window.getComputedStyle(rail).visibility !== 'hidden';
+        const statusTrigger = document.querySelector('.command-status-trigger > summary');
+        const main = document.querySelector('.command-main');
+        const content = document.querySelector('.command-content');
+        return {
+          navLabels,
+          commandRailVisible,
+          statusTriggerVisible: statusTrigger instanceof HTMLElement && statusTrigger.textContent?.includes('状态') === true,
+          mainWidth: main instanceof HTMLElement ? main.getBoundingClientRect().width : 0,
+          contentWidth: content instanceof HTMLElement ? content.getBoundingClientRect().width : 0,
+        };
+      })()`);
+
+      assert.deepEqual(shell.navLabels, ['首页', '配置', '同步', '规则与 Skills', '设置']);
+      assert.equal(shell.commandRailVisible, false, 'Task 7 shell should not render a permanently visible .command-rail');
+      assert.equal(shell.statusTriggerVisible, true, 'Task 7 shell should expose a compact status trigger');
+      assert.equal(shell.mainWidth > 0, true, 'Task 7 shell main workspace was not measurable');
+      assert.equal(shell.mainWidth >= shell.contentWidth - 2, true, 'Task 7 shell main workspace did not reclaim the former right-rail width');
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('Task 5 security keeps saved GitHub Token masked and allows intentional quick API key copy/edit', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-security-'));
   const statePath = join(directory, 'state.json');
@@ -343,27 +417,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.send('Runtime.enable');
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForFunction('document.body?.innerText.includes("状态面板") === true', 15000);
+      await cdp.waitForFunction('document.body?.innerText.includes("状态") === true', 15000);
       await cdp.waitForFunction('document.scrollingElement !== null && document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight');
-      // Redesign Task 3 contract: Shell width / status redesign
-      // Expect to fail in Wave 1 as the right rail is still present.
-      const isCommandRailVisible = await cdp.evaluate<boolean>(`(() => {
-        const rail = document.querySelector(".command-rail");
-        if (!(rail instanceof HTMLElement)) return false;
-        const style = window.getComputedStyle(rail);
-        return style.display !== "none" && style.visibility !== "hidden";
-      })()`);
-      assert.equal(isCommandRailVisible, false, "Redesign contract: .command-rail should not be permanently visible in the workspace");
-
-      const isStatusTriggerVisible = await cdp.evaluate<boolean>(`(() => {
-        // Trigger can be a button/badge somewhere at the top level or in header/sidebar
-        // Look for typical status badge/button or drawer trigger
-        const triggers = Array.from(document.querySelectorAll("button, .status-badge"));
-        return triggers.some(el => el.textContent?.includes("状态") || el.textContent?.includes("已连接") || el.textContent?.includes("连接状态"));
-      })()`);
-      assert.equal(isStatusTriggerVisible, true, "Redesign contract: A top-level status trigger/strip should be visible");
-
-
       await cdp.installFetchRecorder();
       await assertFixtureRootControlHidden(cdp);
       await assertNoDesktopFrame(cdp);

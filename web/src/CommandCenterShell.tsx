@@ -26,6 +26,10 @@ export function CommandCenterShell({ activeTab, children, onTabChange, statusRai
             <p>本地控制台</p>
           </div>
         </div>
+        <details className="command-status-trigger">
+          <summary>状态</summary>
+          {statusRail}
+        </details>
         <nav className="command-nav" aria-label="功能导航">
           {navigationGroups.map((group) => (
             <section className="command-nav__group" key={group.group}>
@@ -55,9 +59,6 @@ export function CommandCenterShell({ activeTab, children, onTabChange, statusRai
           <section className="command-main" aria-label="主工作区">
             {children}
           </section>
-          <aside className="command-rail" aria-label="状态面板">
-            {statusRail}
-          </aside>
         </div>
       </section>
     </main>

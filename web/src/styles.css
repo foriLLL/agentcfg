@@ -302,7 +302,7 @@ a {
 
 .command-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 21.25rem;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -318,11 +318,8 @@ a {
   padding: var(--space-4);
 }
 
-.command-rail {
-  min-width: 0;
-  min-height: 0;
-  padding: var(--space-5);
-  overflow: auto;
+.command-status-trigger {
+  margin-bottom: var(--space-4);
 }
 
 .workflow-page {
@@ -2943,13 +2940,8 @@ h3 {
     white-space: normal;
   }
 
-  .command-main,
-  .command-rail {
+  .command-main {
     overflow: visible;
-  }
-
-  .command-rail {
-    padding: 0 var(--space-5) var(--space-5);
   }
 
   .workflow-step {
@@ -3023,9 +3015,6 @@ h3 {
     padding: var(--space-3);
   }
 
-  .command-rail {
-    padding: 0 var(--space-3) var(--space-3);
-  }
 
   .workflow-heading,
   .workflow-step__body,
