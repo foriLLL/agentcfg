@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { ExecutePanel, type ExecutePanelProps } from './ExecutePanel';
-import { LocalConfigPanel, type LocalConfigPanelProps } from './LocalConfigPanel';
+import type { ReactNode } from "react";
+import { ExecutePanel, type ExecutePanelProps } from "./ExecutePanel";
+import type { LocalConfigPanelProps } from "./LocalConfigPanel";
 
 export type SyncTargetsPanelProps = {
   readonly heading?: ReactNode;
@@ -33,41 +33,11 @@ export type SyncTargetsPanelProps = {
  * a coordinated dry-run API change and is intentionally not bundled
  * here so this commit can ship as pure UI reshuffling.
  */
-export function SyncTargetsPanel({
-  execute,
-  heading,
-  localConfig,
-  rulesPanelNode,
-  skillsPanelNode,
-}: SyncTargetsPanelProps) {
+export function SyncTargetsPanel({ execute, heading }: SyncTargetsPanelProps) {
   return (
     <section className="sync-targets-panel" aria-label="同步到本地">
       {heading}
       <ExecutePanel {...execute} />
-
-      <details className="sync-targets-panel__advanced">
-        <summary>
-          <span>原生配置原文编辑</span>
-          <small>直接编辑当前所选 Agent 的原生配置文件；保存后会让上方预览失效。</small>
-        </summary>
-        <LocalConfigPanel {...localConfig} />
-      </details>
-
-      <details className="sync-targets-panel__advanced">
-        <summary>
-          <span>规则文件</span>
-          <small>同步 Codex / Claude / Gemini 用户级规则文件。</small>
-        </summary>
-        {rulesPanelNode}
-      </details>
-
-      <details className="sync-targets-panel__advanced">
-        <summary>
-          <span>Agent Skills 目录</span>
-          <small>镜像 ~/.agents/skills 与远端 manifest。</small>
-        </summary>
-        {skillsPanelNode}
-      </details>
     </section>
   );
 }

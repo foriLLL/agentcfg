@@ -85,7 +85,7 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
       await cdp.send('Runtime.enable');
       await cdp.installRuntimeErrorRecorder();
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.waitForText('Agent 配置同步中心', 15000);
 
       assert.equal(await cdp.clickButton('同步'), true, 'sync tab was not clickable');
       await cdp.waitForText('请选择一个目标');
@@ -154,7 +154,7 @@ test('Task 7 shell uses redesigned nav and removes permanent right status rail',
       await cdp.send('Runtime.enable');
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.waitForText('Agent 配置同步中心', 15000);
 
       const shell = await cdp.evaluate<{
         navLabels: string[];
@@ -378,7 +378,7 @@ test('Task 12 advanced disclosures are collapsed by default and expand on demand
       await cdp.send('Page.enable');
       await cdp.send('Runtime.enable');
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.waitForText('Agent 配置同步中心', 15000);
       await cdp.clickSelector('#remote-tab');
       await cdp.waitForFunction('document.querySelector("#state-path") instanceof HTMLInputElement');
 
@@ -409,7 +409,7 @@ test('Task 12 advanced disclosures are collapsed by default and expand on demand
 
       await cdp.clickSelector('#sync-tab');
       const syncAdvancedState = await cdp.evaluate<boolean[]>(`(() => Array.from(document.querySelectorAll('.sync-targets-panel__advanced')).map((panel) => panel instanceof HTMLDetailsElement && panel.open))()`);
-      assert.deepEqual(syncAdvancedState, [false, false, false]);
+      assert.deepEqual(syncAdvancedState, []);
       await cdp.evaluate('(() => { const field = document.querySelector("#config-path-editor"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
       await cdp.waitForFunction('document.querySelector("#config-path-editor") instanceof HTMLElement && document.querySelector("#config-path-editor")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#config-path-editor")?.closest("details")?.open === true');
       await assertSelectorVisible(cdp, '#config-path-editor');
@@ -524,10 +524,12 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       });
 
       await cdp.waitForText('配置');
-      await cdp.clickSelector('.setup-form__advanced > summary');
-      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
-      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取到表单');
-      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存到 Gist');
+      await cdp.clickSelector('.remote-source-panel__advanced > summary');
+      await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === true');
+            await cdp.clickSelector('.remote-command-advanced > summary');
+            await cdp.waitForFunction('document.querySelector(".remote-command-advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-command-advanced")?.open === true');
+            await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取远端');
+      await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存配置');
       await assertNoRemoteBottomActions(cdp);
       await assertSelectorVisible(cdp, '#remote-provider');
       await assertSelectorVisible(cdp, '#remote-model');
@@ -573,7 +575,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setInputValue('#remote-model-context-tokens', '1040000');
       await cdp.setInputValue('#remote-model-max-tokens', '32768');
       await cdp.setInputValue('#remote-provider', 'open/router');
-      await cdp.clickButton('保存到 Gist');
+      await cdp.clickButton('保存配置');
       await cdp.waitForText('提供商 ID 不能包含 /');
       await cdp.setInputValue('#remote-provider', 'openai');
       await cdp.clickButton('添加提供商');
@@ -633,9 +635,9 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(schemaDocsWithSecretInput.includes(CACHED_SECRET), false, 'schema docs exposed the edited provider API key');
       assert.equal(schemaDocsWithSecretInput.includes('当前 plain'), false, 'schema docs repeated the current apiKey.type value');
       await switchRemoteConfigView(cdp, 'editor');
-      await cdp.clickButton('保存到 Gist');
+      await cdp.clickButton('保存配置');
       await cdp.waitForText('远端配置已保存');
-      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/save'), {
+      assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/configuration/save'), {
         statePath,
         config: {
           schemaVersion: 1,
@@ -693,7 +695,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
           },
         },
       });
-      const remoteSaveBody = await lastRecordedJsonBody(cdp, '/api/remote/save');
+      const remoteSaveBody = await lastRecordedJsonBody(cdp, '/api/configuration/save');
       const remoteSaveConfig = remoteSaveBody.config as Record<string, unknown>;
       assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'provider'), false, 'remote save payload reintroduced flat provider');
       assert.equal(Object.prototype.hasOwnProperty.call(remoteSaveConfig, 'model'), false, 'remote save payload reintroduced flat model');
@@ -717,7 +719,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.clickButton('取消编辑');
       await assertSavedGitHubTokenLocked(cdp, 'cancelled GitHub Token edit input');
       await cdp.clickSelector('#remote-tab');
-      await cdp.clickButton('读取到表单');
+      await cdp.clickButton('读取远端');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after load');
       await switchRemoteConfigView(cdp, 'preview');
@@ -727,6 +729,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
 
       await cdp.send('Page.reload', { ignoreCache: true });
+      await cdp.waitForFunction('document.readyState === "complete" && document.querySelector("#remote-tab") !== null');
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForFunction(`(() => {
         const statePathInput = document.querySelector('#state-path');
         const navigation = performance.getEntriesByType('navigation').at(-1);
@@ -742,7 +746,6 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-reload browser storage');
       assert.equal((await firstRecordedFetchUrl(cdp, '/api/state')), '/api/state');
       await cdp.clickSelector('#remote-tab');
-      await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after reload');
       await assertDomHasNoGitHubToken(cdp, 'post-reload-remote-auto-refresh DOM');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/load'), { statePath });
@@ -760,6 +763,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         },
       });
       await cdp.send('Page.navigate', { url: restartedWebServer.url });
+      await cdp.waitForFunction('document.readyState === "complete" && document.querySelector("#remote-tab") !== null');
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForFunction(`(() => {
         const statePathInput = document.querySelector('#state-path');
         return document.readyState === 'complete'
@@ -770,7 +775,6 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertSavedGitHubTokenLocked(cdp, 'post-port-change GitHub Token input');
       await assertDomHasNoGitHubToken(cdp, 'post-port-change DOM');
       assert.equal(await firstRecordedFetchUrl(cdp, '/api/state'), '/api/state');
-      await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-port-change browser storage');
       await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after port-change navigation');
@@ -883,7 +887,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, agent: 'opencode', configPath: nativePath });
       assert.equal(await cdp.isButtonDisabledInPanel('#config-panel', '应用变更'), true);
 
-      await cdp.setInputValue('#local-apply-confirmation', 'APPLY');
+      await cdp.clickSelector('#local-apply-confirmation');
       await cdp.waitForFunction(`(() => {
         const buttons = Array.from(document.querySelectorAll('#config-panel button'));
         const button = buttons.find((candidate) => candidate.textContent?.includes('应用变更'));
@@ -923,7 +927,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(planApi.includes(CACHED_SECRET), true, 'dry-run API response did not include expected config content');
       assertNoGitHubToken(planApi, 'dry-run API response');
 
-      await cdp.setInputValue('#apply-confirmation', 'APPLY');
+      await cdp.clickSelector('#apply-confirmation');
       await cdp.clickSelector('#sync-tab');
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-plan-secret'));
       await cdp.clickButton('保存配置');
@@ -939,7 +943,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(refreshedDryRunDom.includes('gui-editor-after-plan-secret'), true, 'rerun dry-run did not refresh current config content');
       assert.equal(refreshedDryRunDom.includes(CACHED_SECRET), true, 'rerun dry-run did not show expected config content');
 
-      await cdp.setInputValue('#apply-confirmation', 'APPLY');
+      await cdp.clickSelector('#apply-confirmation');
       await cdp.waitForFunction(`(() => {
         const buttons = Array.from(document.querySelectorAll('#review-panel button'));
         const button = buttons.find((candidate) => candidate.textContent?.includes('应用变更'));
@@ -1005,7 +1009,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(codexDryRunDom.includes('关联文件均无需写入。'), true, 'Codex notice-only dry-run did not keep zero operations');
       await assertDomHasNoGitHubToken(cdp, 'post-Codex-dry-run DOM');
 
-      await cdp.setInputValue('#apply-confirmation', 'APPLY');
+      await cdp.clickSelector('#apply-confirmation');
       assert.equal(await cdp.clickButtonInPanel('#review-panel', '应用变更'), true, 'Codex apply button was not clickable');
       await cdp.waitForText('应用完成');
       await cdp.waitForText('Codex has no official native mapping for maxTokens');

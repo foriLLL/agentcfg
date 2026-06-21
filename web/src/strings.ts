@@ -115,7 +115,7 @@ export const BUTTONS = {
 
 export const GATES = {
   applyConfirmEyebrow: '应用前确认',
-  applyConfirmTitle: '输入 APPLY 解锁应用',
+  applyConfirmTitle: '请审阅变更并确认应用',
   applyConfirmHint: '只有所选目标与最近一次预览匹配时才会解锁。',
   applyConfirmPlaceholder: 'APPLY',
 } as const;
