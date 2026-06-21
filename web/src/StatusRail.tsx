@@ -3,6 +3,7 @@ import type { AgentConfig, AgentName, ConfigAvailabilityEntry, RuntimeStateSumma
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
 import { AgentConfigIcon } from './AgentConfigIcon';
 import { agentLabel, formatDate } from './view-model';
+import { maskApiKey } from './utils';
 import {
   cacheReadinessBadge,
   conflictBaselineBadge,
@@ -20,63 +21,37 @@ type StatusRailProps = {
 export function StatusRail({ commandStatus, configAvailability, runtimeState }: StatusRailProps) {
   const availableAgents = configAvailability.filter((entry) => entry.available).length;
   const gistBadge = gistConnectionBadge(runtimeState);
+  const cacheBadge = cacheReadinessBadge(runtimeState);
   const serviceBadge = syncServiceBadge(commandStatus.service?.installed);
 
   return (
-    <div className="status-rail">
-      <section className="rail-card">
-        <div className="rail-card__heading">
-          <h2>状态面板</h2>
-          <span className={`status-badge status-badge--${gistBadge.tone}`}>{gistBadge.label}</span>
-        </div>
-        <dl className="rail-list">
-          <Detail label="Gist" value={runtimeState?.gist.id ?? '未设置'} />
-          <Detail label="缓存" value={runtimeState?.cache.updatedAt === undefined ? cacheReadinessBadge(runtimeState).label : formatDate(runtimeState.cache.updatedAt)} />
-          <Detail label="远端版本" value={runtimeState?.remote?.revision ?? '未返回'} />
-        </dl>
-      </section>
-
-      <section className="rail-card">
-        <h2>同步对象</h2>
-        <dl className="rail-list">
-          <Detail label="规则文件" value={`${commandStatus.ruleFiles?.existingCount ?? 0}/${commandStatus.ruleFiles?.totalCount ?? 3} 本地存在`} />
-          <Detail label="Agent Skills" value={`${commandStatus.skills?.fileCount ?? 0} 个文件`} />
-          <Detail label="本地配置" value={`${availableAgents}/${configAvailability.length || 5} Agent 可用`} />
-        </dl>
-        <RailAgentAvailability entries={configAvailability} />
-      </section>
-
-      <section className="rail-card">
-        <h2>自动同步</h2>
-        <dl className="rail-list">
-          <Detail label="设置" value={runtimeState?.autoSync?.enabled === true ? `每 ${runtimeState.autoSync.intervalMinutes} 分钟` : '未启用'} />
-          <Detail label="系统服务" value={serviceBadge.label} />
-          <Detail label="最近结果" value={runtimeState?.lastSyncRun?.status ?? '暂无'} />
-        </dl>
-      </section>
-
-      <section className="rail-card">
-        <h2>运行状态</h2>
-        {commandStatus.error === undefined ? (
-          <dl className="rail-list">
-            <Detail label="状态读取" value={commandStatus.isLoading ? '刷新中' : '正常'} />
-            <Detail label="最近同步" value={runtimeState?.lastSyncRun?.completedAt === undefined ? '暂无记录' : formatDate(runtimeState.lastSyncRun.completedAt)} />
-          </dl>
-        ) : (
-          <p className="rail-error">{commandStatus.error}</p>
+    <div className="status-rail status-drawer">
+      <div className="status-drawer__summary">
+        <span className={`status-badge status-badge--${gistBadge.tone}`}>{gistBadge.label}</span>
+        <span className={`status-badge status-badge--${cacheBadge.tone}`}>{cacheBadge.label}</span>
+        <span className="status-badge status-badge--ready">{availableAgents} Agent 可用</span>
+        {runtimeState?.autoSync?.enabled && (
+          <span className="status-badge status-badge--ready">自动同步开</span>
         )}
-      </section>
+      </div>
+      
+      {commandStatus.error && (
+        <p className="rail-error">{commandStatus.error}</p>
+      )}
 
-      <RailDetails runtimeState={runtimeState} />
+      <div className="status-drawer__details">
+        <RailDetails runtimeState={runtimeState} commandStatus={commandStatus} configAvailability={configAvailability} />
+      </div>
     </div>
   );
 }
 
-function RailDetails({ runtimeState }: { readonly runtimeState: RuntimeStateSummary | null }) {
+function RailDetails({ runtimeState, commandStatus, configAvailability }: StatusRailProps) {
   const gistBadge = gistConnectionBadge(runtimeState);
   const cacheBadge = cacheReadinessBadge(runtimeState);
   const remoteBadge = remoteRevisionBadge(runtimeState);
   const conflictBadge = conflictBaselineBadge(runtimeState);
+  const serviceBadge = syncServiceBadge(commandStatus.service?.installed);
 
   return (
     <details className="rail-card rail-card--collapsible" id="status-details">
@@ -115,6 +90,18 @@ function RailDetails({ runtimeState }: { readonly runtimeState: RuntimeStateSumm
         </RailDetailGroup>
 
         <RailDetailGroup
+          eyebrow="同步"
+          title="自动同步状态"
+          tone={serviceBadge.tone}
+          badge={serviceBadge.label}
+        >
+          <Detail label="设置" value={runtimeState?.autoSync?.enabled === true ? `每 ${runtimeState.autoSync.intervalMinutes} 分钟` : '未启用'} />
+          <Detail label="系统服务" value={serviceBadge.label} />
+          <Detail label="最近结果" value={runtimeState?.lastSyncRun?.status ?? '暂无'} />
+          <Detail label="最近同步" value={runtimeState?.lastSyncRun?.completedAt === undefined ? '暂无记录' : formatDate(runtimeState.lastSyncRun.completedAt)} />
+        </RailDetailGroup>
+
+        <RailDetailGroup
           eyebrow="缓存"
           title="完整配置摘要"
           tone={cacheBadge.tone}
@@ -134,7 +121,6 @@ function RailDetails({ runtimeState }: { readonly runtimeState: RuntimeStateSumm
           badge={conflictBadge.label}
         >
           <Detail label="基线状态" value={runtimeState?.conflict.present ? '已保存远端基线元数据' : '尚未保存远端基线'} />
-          <Detail label="页面含义" value={runtimeState?.conflict.present ? '这是上次拉取或保存时记录的远端版本，用于以后与本地缓存比对。' : '拉取或保存远端配置后，会在这里记录版本基线供后续比较。'} />
           <Detail label="Base revision" value={runtimeState?.conflict.baseRevision ?? '无'} />
           <Detail label="Base ETag" value={runtimeState?.conflict.baseETag ?? '无'} />
         </RailDetailGroup>
@@ -175,7 +161,7 @@ function RailConfigSummary({ config }: { readonly config: AgentConfig }) {
       <Detail label="提供方" value={config.defaults.provider} />
       <Detail label="模型" value={config.defaults.model} />
       <Detail label="Base URL" value={provider?.baseURL ?? '未设置'} />
-      <Detail label="API 密钥" value={provider?.apiKey.value ?? '未设置'} />
+      <Detail label="API 密钥" value={maskApiKey(provider?.apiKey?.value)} />
     </>
   );
 }

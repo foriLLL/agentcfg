@@ -3361,3 +3361,25 @@ h3 {
   align-items: center;
   gap: var(--space-2);
 }
+
+/* Redesigned Status Drawer */
+.status-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+  width: 100%;
+}
+
+.status-drawer__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.status-drawer__details {
+  width: 100%;
+  max-width: 100%;
+  margin-top: var(--space-2);
+}
