@@ -88,30 +88,38 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
               disabled={props.isGitHubTokenLocked || props.isSubmittingInit || props.isSettingRemote}
             />
           </label>
-          <label htmlFor="gist-id">
-            Gist ID（高级兼容，可选）
-            <input
-              id="gist-id"
-              name="gist-id"
-              value={props.gistId}
-              onChange={(event) => props.onGistIdChange(event.target.value)}
-              placeholder="私有 Gist ID"
-              autoComplete="off"
-              disabled={props.isSubmittingInit}
-            />
-          </label>
-          <label htmlFor="state-path">
-            状态路径（可选）
-            <input
-              id="state-path"
-              name="state-path"
-              value={props.statePath}
-              onChange={(event) => props.onStatePathChange(event.target.value)}
-              placeholder={props.runtimeState?.statePath ?? '~/.agentcfg/state.json'}
-              autoComplete="off"
-              disabled={props.isSubmittingInit}
-            />
-          </label>
+          <details className="setup-form__advanced">
+            <summary>
+              <span>高级连接选项</span>
+              <small>手动指定 Gist ID 与状态路径；正常首次使用不需要展开。</small>
+            </summary>
+            <div className="setup-form__advanced-fields">
+              <label htmlFor="gist-id">
+                Gist ID（高级兼容，可选）
+                <input
+                  id="gist-id"
+                  name="gist-id"
+                  value={props.gistId}
+                  onChange={(event) => props.onGistIdChange(event.target.value)}
+                  placeholder="私有 Gist ID"
+                  autoComplete="off"
+                  disabled={props.isSubmittingInit}
+                />
+              </label>
+              <label htmlFor="state-path">
+                状态路径（可选）
+                <input
+                  id="state-path"
+                  name="state-path"
+                  value={props.statePath}
+                  onChange={(event) => props.onStatePathChange(event.target.value)}
+                  placeholder={props.runtimeState?.statePath ?? '~/.agentcfg/state.json'}
+                  autoComplete="off"
+                  disabled={props.isSubmittingInit}
+                />
+              </label>
+            </div>
+          </details>
           <div className="setup-form__group">
             {!props.hasSavedGitHubToken && (
               <label className="checkbox-control" htmlFor="remember-github-token">

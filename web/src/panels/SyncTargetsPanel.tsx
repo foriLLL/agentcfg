@@ -21,8 +21,8 @@ export type SyncTargetsPanelProps = {
  *   3. Rule files (collapsed)       Codex/Claude/Gemini *.md sync
  *   4. Agent Skills (collapsed)     ~/.agents/skills mirror
  *
- * Each <details> is collapsed by default. The user reaches every
- * historic tab in one place, but the primary action remains the
+ * Each advanced <details> is collapsed by default. The user reaches
+ * every historic tab in one place, but the primary action remains the
  * agent-config dry-run/apply sitting at the top of the tab. PR4-c1
  * already removed the four corresponding nav entries; this commit
  * gives the leftover panels a single home.
@@ -45,7 +45,7 @@ export function SyncTargetsPanel({
       {heading}
       <ExecutePanel {...execute} />
 
-      <details className="sync-targets-panel__advanced" open>
+      <details className="sync-targets-panel__advanced">
         <summary>
           <span>原生配置原文编辑</span>
           <small>直接编辑当前所选 Agent 的原生配置文件；保存后会让上方预览失效。</small>
@@ -53,7 +53,7 @@ export function SyncTargetsPanel({
         <LocalConfigPanel {...localConfig} />
       </details>
 
-      <details className="sync-targets-panel__advanced" open>
+      <details className="sync-targets-panel__advanced">
         <summary>
           <span>规则文件</span>
           <small>同步 Codex / Claude / Gemini 用户级规则文件。</small>

@@ -352,6 +352,86 @@ test('Task 5 RED contract masks cached API key in dashboard and status surfaces 
   }
 });
 
+test('Task 12 advanced disclosures are collapsed by default and expand on demand', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-advanced-visible-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    const { startWebServer } = await import('../../src/server');
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: { ...process.env, GITHUB_TOKEN: '' },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.clickButton('配置');
+      await cdp.waitForFunction('document.querySelector("#state-path") instanceof HTMLInputElement');
+
+      const initialAdvancedState = await cdp.evaluate<{ setupOpen: boolean; remoteOpen: boolean; syncPanelCount: number }>(`(() => {
+        const setupField = document.querySelector('#state-path');
+        const remoteField = document.querySelector('#remote-provider');
+        return {
+          setupOpen: setupField instanceof HTMLElement && setupField.closest('details') instanceof HTMLDetailsElement && setupField.closest('details')?.open === true,
+          remoteOpen: remoteField instanceof HTMLElement && remoteField.closest('details') instanceof HTMLDetailsElement && remoteField.closest('details')?.open === true,
+          syncPanelCount: document.querySelectorAll('.sync-targets-panel__advanced').length,
+        };
+      })()`);
+
+      assert.deepEqual(initialAdvancedState, {
+        setupOpen: false,
+        remoteOpen: false,
+        syncPanelCount: 0,
+      });
+
+      await cdp.evaluate('(() => { const field = document.querySelector("#state-path"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
+      await cdp.waitForFunction('document.querySelector("#state-path") instanceof HTMLElement && document.querySelector("#state-path")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#state-path")?.closest("details")?.open === true');
+      await cdp.setInputValue('#state-path', statePath);
+
+      await cdp.clickButton('远端真源');
+      await cdp.evaluate('(() => { const field = document.querySelector("#remote-provider"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
+      await cdp.waitForFunction('document.querySelector("#remote-provider") instanceof HTMLElement && document.querySelector("#remote-provider")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#remote-provider")?.closest("details")?.open === true');
+      await assertSelectorVisible(cdp, '#remote-provider');
+
+      await cdp.clickButton('同步');
+      const syncAdvancedState = await cdp.evaluate<boolean[]>(`(() => Array.from(document.querySelectorAll('.sync-targets-panel__advanced')).map((panel) => panel instanceof HTMLDetailsElement && panel.open))()`);
+      assert.deepEqual(syncAdvancedState, [false, false, false]);
+      await cdp.evaluate('(() => { const field = document.querySelector("#config-path-editor"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
+      await cdp.waitForFunction('document.querySelector("#config-path-editor") instanceof HTMLElement && document.querySelector("#config-path-editor")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#config-path-editor")?.closest("details")?.open === true');
+      await assertSelectorVisible(cdp, '#config-path-editor');
+      await assertSelectorVisible(cdp, '#config-editor');
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 // This long-flow test records the current legacy GUI until the redesign replaces it;
 // Task 2/6 contracts own the future IA/copy, so these labels are not product requirements.
 test('web GUI completes init pull diff dry-run preview and confirmed apply', async () => {
@@ -444,6 +524,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'initial browser storage');
 
       await cdp.setInputValue('#github-token', GITHUB_TOKEN);
+      await cdp.clickSelector('.setup-form__advanced > summary');
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
       await cdp.setInputValue('#state-path', statePath);
       await cdp.waitForFunction('document.querySelector("#remember-github-token") instanceof HTMLInputElement && !document.querySelector("#remember-github-token").disabled');
       await cdp.clickSelector('#remember-github-token');
@@ -457,6 +539,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       });
 
       await cdp.waitForText('远端真源');
+      await cdp.clickSelector('.setup-form__advanced > summary');
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
       await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取到表单');
       await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '保存到 Gist');
       await assertNoRemoteBottomActions(cdp);
@@ -773,6 +857,8 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.buttonDisabled('#config-agent-opencode-tab'), false, 'OpenCode config target was disabled even though its config existed');
       assert.equal(await cdp.buttonDisabled('#config-agent-claude-tab'), true, 'Claude Code config target was not disabled when its config was missing');
       await cdp.clickSelector('#config-agent-opencode-tab');
+      await cdp.clickSelector('.sync-targets-panel__advanced > summary');
+      await cdp.waitForFunction('document.querySelector(".sync-targets-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".sync-targets-panel__advanced")?.open === true');
       await assertConfigEditorLayout(cdp);
       await assertButtonVisibleInPanel(cdp, '#config-panel', '预览 (Dry-run)');
       await assertButtonVisibleInPanel(cdp, '#config-panel', '应用变更');

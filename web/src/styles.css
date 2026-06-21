@@ -1259,8 +1259,6 @@ h3 {
   font-weight: 800;
 }
 
-.remote-command-card span {
-}
 
 .remote-command-card strong {
   color: inherit;
@@ -1305,6 +1303,43 @@ h3 {
 .setup-form__group {
   display: grid;
   gap: var(--space-3);
+}
+
+.setup-form__advanced {
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  background: var(--color-cream);
+}
+
+.setup-form__advanced > summary {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  cursor: pointer;
+}
+
+.setup-form__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.setup-form__advanced > summary > span {
+  font-weight: 800;
+}
+
+.setup-form__advanced > summary > small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+}
+
+.setup-form__advanced[open] > summary {
+  border-bottom: var(--hairline) solid var(--color-line);
+}
+
+.setup-form__advanced-fields {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
 }
 
 .checkbox-control,
