@@ -6,35 +6,24 @@ import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
 import { StatusRail } from './StatusRail';
 import { SyncPanel } from './SyncPanel';
 import { WorkflowOverview } from './WorkflowOverview';
+import type { EditableAgentConfig } from './api';
 import { buildCommandCenterWorkflow, buildOnboardingWorkflow, isFirstRun } from './command-center-model';
 import type { AppTab } from './navigation';
 import { useCommandCenterStatus } from './useCommandCenterStatus';
-import {
-  type EditableAgentConfig,
-  type AgentName,
-  type ApplyAgentResult,
-  type ConfigAvailabilityEntry,
-  type ConfigFileRuntimeResponse,
-  type PlanApplyRuntimeResponse,
-  type RuntimeStateSummary,
-} from './api';
 import {
   agentLabel,
   buildRemoteYamlPreview,
   buildSetupSteps,
   configToDraft,
-  formatDate,
   formatError,
   remoteAccessWarningForHostname,
   type Step,
 } from './view-model';
 import { NOTICES } from './strings';
 import { RemoteSourcePanel } from './panels/RemoteSourcePanel';
+import { RulesSkillsPanel } from './panels/RulesSkillsPanel';
 import { SyncTargetsPanel } from './panels/SyncTargetsPanel';
-import {
-  type OhMyOpenAgentAssignmentKind,
-  type RemoteConfigView,
-} from './panels/RemoteConfigPanel';
+import { type OhMyOpenAgentAssignmentKind } from './panels/RemoteConfigPanel';
 import {
   buildRemoteModelReferenceOptions,
   modelDraft,
@@ -141,8 +130,6 @@ function App() {
 
   const setupSteps = useMemo<Step[]>(() => buildSetupSteps(runtimeState), [runtimeState]);
   const requestStatePath = statePath.trim() === '' ? runtimeState?.statePath : statePath.trim();
-  const reviewKey = usePlanStore((state) => state.planKey ?? '');
-  const planKey = usePlanStore((state) => state.planKey);
   const hasSavedGitHubToken = runtimeState?.secrets?.hasGitHubToken === true;
   const isBusy = isSubmittingInit || isPulling || isPlanning || isApplying || isSettingRemote || isLoadingRemote || isSavingRemote || isClearingGitHubToken || loadState === 'loading';
   const hasReviewTarget = targetMode !== '';
@@ -235,10 +222,6 @@ function App() {
 
   function showNotice(tone: Notice['tone'], title: string, copy: string): void {
     setNotice({ tone, title, copy });
-  }
-
-  function replaceRemoteDraft(nextDraft: EditableAgentConfig): void {
-    useRemoteDraftStore.getState().replaceDraft(nextDraft);
   }
 
   async function handleInitSubmit(event: SyntheticEvent<HTMLFormElement>): Promise<void> {
@@ -647,6 +630,11 @@ function App() {
                 isPlanCurrent,
                 applyResults,
               }}
+            />
+          )}
+
+          {activeTab === 'rulesSkills' && (
+            <RulesSkillsPanel
               rulesPanelNode={
                 <RulesPanel
                   runtimeState={runtimeState}
@@ -667,31 +655,6 @@ function App() {
                 </section>
               }
             />
-          )}
-
-          {activeTab === 'rulesSkills' && (
-            <div className="dashboard-grid dashboard-grid--rules">
-              <section className="empty-state" role="status">
-                <p className="eyebrow">规则与 Skills</p>
-                <h2>规则与 Skills 页面构建中</h2>
-                <p>该功能模块将在后续任务中完善，目前您可以继续访问现有的规则与技能面板：</p>
-              </section>
-              <RulesPanel
-                runtimeState={runtimeState}
-                requestStatePath={requestStatePath}
-                buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
-                onState={commitRuntimeState}
-                onNotice={showNotice}
-              />
-              <section id="skills-panel" role="tabpanel" aria-labelledby="skills-tab">
-                <SkillsDirectoryPanel
-                  requestStatePath={requestStatePath}
-                  buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
-                  onState={commitRuntimeState}
-                  onNotice={showNotice}
-                />
-              </section>
-            </div>
           )}
 
           {activeTab === 'automation' && (

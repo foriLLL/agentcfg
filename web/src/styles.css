@@ -1171,6 +1171,151 @@ h3 {
   min-height: 0;
 }
 
+.rules-skills-page {
+  display: grid;
+  gap: var(--space-5);
+  min-height: 100%;
+}
+
+.rules-skills-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, auto);
+  gap: var(--space-5);
+  align-items: stretch;
+  min-width: 0;
+  padding: var(--space-7);
+  overflow: hidden;
+  border: var(--hairline) solid color-mix(in srgb, var(--color-link) 24%, var(--color-line));
+  border-radius: calc(var(--radius-large) + var(--space-1));
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--color-link-soft) 88%, transparent), transparent 32%),
+    linear-gradient(135deg, var(--color-panel-strong), var(--color-paper-soft));
+  box-shadow: var(--shadow-hero);
+}
+
+.rules-skills-hero::after {
+  position: absolute;
+  right: calc(var(--space-8) * -1);
+  bottom: calc(var(--space-8) * -1);
+  width: 14rem;
+  height: 14rem;
+  border: var(--hairline) solid color-mix(in srgb, var(--color-link) 28%, transparent);
+  border-radius: 42% 58% 48% 52%;
+  background: color-mix(in srgb, var(--color-link) 8%, transparent);
+  content: "";
+}
+
+.rules-skills-hero__copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-3);
+  max-width: 54rem;
+}
+
+.rules-skills-hero h2 {
+  margin: 0;
+  color: var(--color-cocoa);
+  font-size: var(--text-heading);
+  line-height: var(--line-tight);
+  letter-spacing: -0.05em;
+}
+
+.rules-skills-hero p:not(.eyebrow),
+.rules-skills-primer__card p {
+  margin: 0;
+  color: var(--color-coffee);
+  font-size: var(--text-lead);
+  line-height: var(--line-body);
+}
+
+.rules-skills-hero code,
+.rules-skills-primer__card code {
+  padding: 0.08rem 0.32rem;
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-small);
+  color: var(--color-link);
+  background: var(--color-panel-strong);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.rules-skills-hero__badge {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  gap: var(--space-2);
+  min-width: 13rem;
+  padding: var(--space-5);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: rgb(255 255 255 / 72%);
+  box-shadow: var(--shadow-card);
+}
+
+.rules-skills-hero__badge span {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rules-skills-hero__badge strong {
+  color: var(--color-link);
+  font-family: var(--font-mono);
+  font-size: var(--text-card-title);
+}
+
+.rules-skills-primer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.rules-skills-primer__card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.rules-skills-primer__card--accent {
+  border-color: color-mix(in srgb, var(--color-link) 30%, var(--color-line));
+  background: linear-gradient(180deg, var(--color-panel-strong), var(--color-sage));
+}
+
+.rules-skills-primer__index {
+  display: inline-grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--radius-pill);
+  color: var(--color-link);
+  background: var(--color-link-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-weight: 900;
+}
+
+.rules-skills-primer__card h3 {
+  margin: 0 0 var(--space-2);
+  color: var(--color-cocoa);
+  font-size: var(--text-card-title);
+}
+
+.rules-skills-panels {
+  display: grid;
+  gap: var(--space-5);
+}
+
 .card {
   padding: var(--space-5);
   border: var(--hairline) solid var(--color-line);
@@ -3039,6 +3184,8 @@ h3 {
   }
 
   .dashboard-grid,
+  .rules-skills-hero,
+  .rules-skills-primer,
   .setup-form,
   .remote-config-layout,
   .ohmy-openagent-editor__groups,
