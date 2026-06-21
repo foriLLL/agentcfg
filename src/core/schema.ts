@@ -15,7 +15,12 @@ export type ModelConfig = {
   contextWindow?: number;
   contextTokens?: number;
   maxTokens?: number;
+  supportsVision?: boolean;
 };
+
+export const PROVIDER_PROTOCOLS = ['openai-compatible', 'anthropic-compatible'] as const;
+
+export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];
 
 export const OH_MY_OPENAGENT_AGENT_NAMES = [
   'sisyphus',
@@ -59,6 +64,7 @@ export type OhMyOpenAgentConfig = {
 };
 
 export type ProviderConfig = {
+  protocol?: ProviderProtocol;
   baseURL: string;
   apiKey: PlainApiKey;
   modelDiscovery?: {
@@ -226,10 +232,15 @@ function serializeProvider(provider: ProviderConfig): ProviderConfig {
       serializedModel.maxTokens = model.maxTokens;
     }
 
+    if (model.supportsVision !== undefined) {
+      serializedModel.supportsVision = model.supportsVision;
+    }
+
     serializedModels[modelId] = serializedModel;
   }
 
   const serializedProvider: ProviderConfig = {
+    ...(provider.protocol === undefined ? {} : { protocol: provider.protocol }),
     baseURL: provider.baseURL,
     apiKey: {
       type: provider.apiKey.type,
@@ -241,6 +252,7 @@ function serializeProvider(provider: ProviderConfig): ProviderConfig {
   if (provider.modelDiscovery !== undefined) {
     return {
       baseURL: serializedProvider.baseURL,
+      ...(serializedProvider.protocol === undefined ? {} : { protocol: serializedProvider.protocol }),
       apiKey: serializedProvider.apiKey,
       modelDiscovery: {
         path: provider.modelDiscovery.path,
@@ -322,6 +334,7 @@ function validateProvider(providerId: string, value: unknown, issues: string[]):
     issues.push(`${path}.baseURL is required and must be a non-empty string`);
   }
 
+  const protocol = validateProviderProtocol(`${path}.protocol`, value.protocol, issues);
   const apiKey = validateApiKey(`${path}.apiKey`, value.apiKey, issues);
   const modelDiscovery = validateModelDiscovery(`${path}.modelDiscovery`, value.modelDiscovery, issues);
   const models = validateModels(`${path}.models`, value.models, issues);
@@ -331,6 +344,7 @@ function validateProvider(providerId: string, value: unknown, issues: string[]):
   }
 
   const provider: ProviderConfig = {
+    ...(protocol === undefined ? {} : { protocol }),
     baseURL: value.baseURL,
     apiKey,
     models,
@@ -341,6 +355,19 @@ function validateProvider(providerId: string, value: unknown, issues: string[]):
   }
 
   return provider;
+}
+
+function validateProviderProtocol(path: string, value: unknown, issues: string[]): ProviderProtocol | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isProviderProtocol(value)) {
+    issues.push(`${path} must be one of ${PROVIDER_PROTOCOLS.join(', ')} when present`);
+    return undefined;
+  }
+
+  return value;
 }
 
 function validateApiKey(path: string, value: unknown, issues: string[]): PlainApiKey | undefined {
@@ -455,6 +482,15 @@ function validateModelConfig(path: string, value: unknown, issues: string[]): Mo
       valid = false;
     } else {
       model.maxTokens = value.maxTokens;
+    }
+  }
+
+  if (value.supportsVision !== undefined) {
+    if (typeof value.supportsVision !== 'boolean') {
+      issues.push(`${path}.supportsVision must be a boolean when present`);
+      valid = false;
+    } else {
+      model.supportsVision = value.supportsVision;
     }
   }
 
@@ -576,6 +612,10 @@ function isKnownProviderModelReference(value: string, providers: Record<string, 
 
 function isOhMyOpenAgentModelVariant(value: unknown): value is OhMyOpenAgentModelVariant {
   return typeof value === 'string' && (OH_MY_OPENAGENT_MODEL_VARIANTS as readonly string[]).includes(value);
+}
+
+function isProviderProtocol(value: unknown): value is ProviderProtocol {
+  return typeof value === 'string' && (PROVIDER_PROTOCOLS as readonly string[]).includes(value);
 }
 
 function normalizeSchemaVersion(value: unknown): number | undefined {

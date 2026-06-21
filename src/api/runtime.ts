@@ -87,6 +87,8 @@ import type {
   PullRuntimeResponse,
   SaveRemoteConfigRuntimeRequest,
   SaveRemoteConfigRuntimeResponse,
+  SaveConfigurationRuntimeRequest,
+  SaveConfigurationRuntimeResponse,
   SetupRemoteConfigRuntimeRequest,
   SetupRemoteConfigRuntimeResponse,
   LoadRemoteConfigRuntimeRequest,
@@ -247,13 +249,20 @@ export async function saveRemoteConfigRuntime(
       existingState.gist === undefined
         ? await createSecretAgentConfigGist(content, gistOptions)
         : await updateGistAgentConfig(existingState.gist.id, content, gistOptions);
-    const state = await writeRemoteConfigState(request.statePath, saved.id, config, saved.metadata);
+    const state = await writeRemoteConfigStateAfterSave(request.statePath, saved.id, config, saved.metadata);
 
     await rememberGitHubTokenIfRequested(request, token);
     return { state: await summarizeState(state, request.statePath), config, remote: state.remote };
   } catch (error) {
     throw toRuntimeApiError(error);
   }
+}
+
+export async function saveConfigurationRuntime(
+  request: SaveConfigurationRuntimeRequest,
+  options: RuntimeServiceOptions = {},
+): Promise<SaveConfigurationRuntimeResponse> {
+  return saveRemoteConfigRuntime(request, options);
 }
 
 export async function clearSavedGitHubTokenRuntime(
@@ -892,6 +901,30 @@ async function writeRemoteConfigState(
   };
   await writeLocalState(state, statePath);
   return state;
+}
+
+async function writeRemoteConfigStateAfterSave(
+  statePath: string | undefined,
+  gistId: string,
+  config: CanonicalAgentConfig,
+  metadata: { revision?: string; etag?: string },
+): Promise<AgentCfgState> {
+  try {
+    return await writeRemoteConfigState(statePath, gistId, config, metadata);
+  } catch (error) {
+    throw new RuntimeApiError(
+      'cache-refresh-error',
+      `Remote config was saved, but local cache refresh failed: ${formatErrorMessage(error)}`,
+      {
+        gistId,
+        remote: omitUndefined({ revision: metadata.revision, etag: metadata.etag }),
+      },
+    );
+  }
+}
+
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {

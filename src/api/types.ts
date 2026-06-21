@@ -18,12 +18,18 @@ export type RuntimeApiErrorCode =
   | 'state-error'
   | 'gist-error'
   | 'provider-error'
+  | 'cache-refresh-error'
   | 'validation-error'
   | 'diff-error'
   | 'apply-error';
 
 export type RuntimeApiErrorDetails = {
   results?: ApiApplyAgentResult[];
+  gistId?: string;
+  remote?: {
+    revision?: string;
+    etag?: string;
+  };
 };
 
 export type RuntimeRequest = {
@@ -126,6 +132,10 @@ export type SaveRemoteConfigRuntimeResponse = {
   config: CanonicalAgentConfig;
   remote?: RemoteRevisionMetadata;
 };
+
+export type SaveConfigurationRuntimeRequest = SaveRemoteConfigRuntimeRequest;
+
+export type SaveConfigurationRuntimeResponse = SaveRemoteConfigRuntimeResponse;
 
 export type RuntimeTargetRequest = RuntimeRequest & {
   agent?: AdapterName;

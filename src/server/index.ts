@@ -26,6 +26,7 @@ import {
   planManagedRuleFilesRuntime,
   planApplyRuntime,
   pullRuntime,
+  saveConfigurationRuntime,
   saveRemoteConfigRuntime,
   saveConfigFileRuntime,
   saveAutoSyncRuntime,
@@ -55,6 +56,7 @@ import {
   type PullRuntimeResponse,
   type RuntimeApiErrorDetails,
   type RuntimeRequest,
+  type SaveConfigurationRuntimeResponse,
   type SaveConfigFileRuntimeResponse,
   type SaveRemoteConfigRuntimeResponse,
   type SetupRemoteConfigRuntimeResponse,
@@ -106,6 +108,7 @@ type ApiHandlerResult =
   | SetupRemoteConfigRuntimeResponse
   | LoadRemoteConfigRuntimeResponse
   | SaveRemoteConfigRuntimeResponse
+  | SaveConfigurationRuntimeResponse
   | ClearSavedGitHubTokenRuntimeResponse
   | ManagedAgentSkillsStatusRuntimeResponse
   | ManagedAgentSkillsRemoteRuntimeResponse
@@ -273,6 +276,11 @@ async function dispatchApiRequest(
   if (requestUrl.pathname === '/api/remote/save') {
     assertMethod(request, ['POST']);
     return saveRemoteConfigRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
+  }
+
+  if (requestUrl.pathname === '/api/configuration/save') {
+    assertMethod(request, ['POST']);
+    return saveConfigurationRuntime(await readRuntimeRequest(request, options), gistRuntimeOptions(options));
   }
 
   if (requestUrl.pathname === '/api/github-token/clear') {
@@ -625,6 +633,9 @@ function statusForRuntimeError(error: RuntimeApiError): number {
   }
   if (error.code === 'provider-error') {
     return 502;
+  }
+  if (error.code === 'cache-refresh-error') {
+    return 500;
   }
   return 400;
 }

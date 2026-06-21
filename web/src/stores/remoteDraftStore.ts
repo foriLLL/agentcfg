@@ -1,13 +1,12 @@
 import { create } from 'zustand';
 import {
   loadRemoteConfigRuntime,
-  saveRemoteConfigRuntime,
+  saveConfigurationRuntime,
   type EditableAgentConfig,
   type OhMyOpenAgentModelAssignment,
 } from '../api';
 import {
   emptyProviderDraft,
-  modelDraft,
   providerDraft,
   removeUnknownOhMyOpenAgentReferences,
   renameModelDraft,
@@ -332,7 +331,7 @@ export const useRemoteDraftStore = create<RemoteDraftStore>((set, get) => ({
     set({ isSaving: true });
     try {
       const tokenRequest = buildGitHubTokenRequestFromRuntime();
-      const response = await saveRemoteConfigRuntime({ ...tokenRequest, config: draft });
+      const response = await saveConfigurationRuntime({ ...tokenRequest, config: draft });
       useRuntimeStore.getState().commitRuntimeState(response.state);
       get().replaceDraft(configToDraft(response.config));
       set({ status: '远端配置已保存。表单和预览已回填最终写入的完整值。' });

@@ -11,6 +11,8 @@ import type {
 
 export type OhMyOpenAgentAssignmentKind = 'agents' | 'categories';
 
+const PROVIDER_PROTOCOLS = ['openai-compatible', 'anthropic-compatible'] as const;
+
 /**
  * Pure draft mutators for the remote agentcfg.yaml editor.
  *
@@ -253,6 +255,9 @@ export function validateRemoteDraft(config: EditableAgentConfig): string | null 
     if (provider.baseURL.trim() === '') {
       return `${providerLabel} 的 Base URL 不能为空。`;
     }
+    if (provider.protocol !== undefined && !(PROVIDER_PROTOCOLS as readonly string[]).includes(provider.protocol)) {
+      return `${providerLabel} 的协议必须是 openai-compatible 或 anthropic-compatible。`;
+    }
     if (provider.apiKey.value.trim() === '') {
       return `${providerLabel} 的 API Key 不能为空；Web 页面不隐藏或沿用不可见密钥。`;
     }
@@ -277,6 +282,9 @@ export function validateRemoteDraft(config: EditableAgentConfig): string | null 
         if (model[field] !== undefined && (!Number.isInteger(model[field]) || (model[field] as number) <= 0)) {
           return `${providerLabel}/${modelLabel} 的 ${field} 必须留空或填写正整数。`;
         }
+      }
+      if (model.supportsVision !== undefined && typeof model.supportsVision !== 'boolean') {
+        return `${providerLabel}/${modelLabel} 的 supportsVision 必须留空或填写布尔值。`;
       }
     }
   }

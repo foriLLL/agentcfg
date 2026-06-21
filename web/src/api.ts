@@ -18,6 +18,7 @@ export type AgentConfigDefaults = {
 };
 
 export type ProviderConfig = {
+  protocol?: ProviderProtocol;
   baseURL: string;
   apiKey: {
     type: 'plain';
@@ -34,7 +35,10 @@ export type ModelConfig = {
   contextWindow?: number;
   contextTokens?: number;
   maxTokens?: number;
+  supportsVision?: boolean;
 };
+
+export type ProviderProtocol = 'openai-compatible' | 'anthropic-compatible';
 
 export type OhMyOpenAgentModelVariant = 'max' | 'high' | 'medium' | 'low' | 'xhigh';
 
@@ -379,6 +383,13 @@ export async function loadRemoteConfigRuntime(request: GitHubTokenRuntimeRequest
 
 export async function saveRemoteConfigRuntime(request: GitHubTokenRuntimeRequest & { config: EditableAgentConfig }): Promise<RemoteConfigRuntimeResponse & { config: AgentConfig }> {
   return requestJson<RemoteConfigRuntimeResponse & { config: AgentConfig }>('/api/remote/save', {
+    method: 'POST',
+    body: JSON.stringify(compactRequest(request)),
+  });
+}
+
+export async function saveConfigurationRuntime(request: GitHubTokenRuntimeRequest & { config: EditableAgentConfig }): Promise<RemoteConfigRuntimeResponse & { config: AgentConfig }> {
+  return requestJson<RemoteConfigRuntimeResponse & { config: AgentConfig }>('/api/configuration/save', {
     method: 'POST',
     body: JSON.stringify(compactRequest(request)),
   });

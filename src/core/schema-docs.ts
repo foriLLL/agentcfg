@@ -5,6 +5,7 @@ export type AgentConfigSchemaFieldPath =
   | 'defaults.model'
   | 'providers'
   | 'providers.<provider>'
+  | 'providers.<provider>.protocol'
   | 'providers.<provider>.baseURL'
   | 'providers.<provider>.apiKey'
   | 'providers.<provider>.apiKey.type'
@@ -17,6 +18,7 @@ export type AgentConfigSchemaFieldPath =
   | 'providers.<provider>.models.<model>.contextWindow'
   | 'providers.<provider>.models.<model>.contextTokens'
   | 'providers.<provider>.models.<model>.maxTokens'
+  | 'providers.<provider>.models.<model>.supportsVision'
   | 'ohMyOpenAgent'
   | 'ohMyOpenAgent.agents'
   | 'ohMyOpenAgent.agents.<agent>'
@@ -76,7 +78,14 @@ export const AGENTCFG_SCHEMA_DOCS: readonly AgentConfigSchemaDoc[] = [
     label: '提供商配置',
     type: 'object',
     required: true,
-    description: '单个提供商的配置，包括端点、明文可见的 API Key、可选模型发现路径与模型目录。提供商 ID 不能包含 /，以避免 OhMyOpenAgent provider/model 引用产生歧义。',
+    description: '单个提供商的配置，包括可选协议、端点、明文可见的 API Key、可选模型发现路径与模型目录。提供商 ID 不能包含 /，以避免 OhMyOpenAgent provider/model 引用产生歧义。',
+  },
+  {
+    path: 'providers.<provider>.protocol',
+    label: '提供商协议',
+    type: 'openai-compatible | anthropic-compatible',
+    required: false,
+    description: '可选的提供商协议类型。提供时只能是 openai-compatible 或 anthropic-compatible；省略时保持旧配置兼容，不自动推断协议。',
   },
   {
     path: 'providers.<provider>.baseURL',
@@ -161,6 +170,13 @@ export const AGENTCFG_SCHEMA_DOCS: readonly AgentConfigSchemaDoc[] = [
     type: 'positive integer',
     required: false,
     description: '可选的模型最大输出 token 数。提供时必须是正整数。',
+  },
+  {
+    path: 'providers.<provider>.models.<model>.supportsVision',
+    label: '模型视觉能力',
+    type: 'boolean',
+    required: false,
+    description: '可选的模型图片或视觉输入能力标记。提供时必须是布尔值。',
   },
   {
     path: 'ohMyOpenAgent',
