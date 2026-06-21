@@ -12,6 +12,9 @@ const CHROME_PATH = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/
 const CACHED_SECRET = ['gui', 'cached', 'secret'].join('-');
 const NATIVE_SECRET = ['gui', 'native', 'secret'].join('-');
 const GITHUB_TOKEN = 'gui-github-token';
+const TASK5_GITHUB_TOKEN = ['task5', 'github', 'token'].join('-');
+const TASK5_API_KEY = ['sk', 'test', '1234567890abcdef'].join('-');
+const TASK5_EDITED_API_KEY = ['sk', 'test', 'edited', 'abcdef123456'].join('-');
 const SAVED_GITHUB_TOKEN_MASK = '************';
 const VALID_AGENTCFG_YAML = [
   'schemaVersion: 1',
@@ -26,6 +29,26 @@ const VALID_AGENTCFG_YAML = [
   `      value: ${CACHED_SECRET}`,
   '    modelDiscovery:',
   '      path: /models',
+  '    models:',
+  '      gpt-4.1-mini:',
+  '        variant: chat',
+  '        contextWindow: 1047576',
+  '        contextTokens: 1040000',
+  '        maxTokens: 32768',
+  '',
+].join('\n');
+
+const TASK5_AGENTCFG_YAML = [
+  'schemaVersion: 1',
+  'defaults:',
+  '  provider: openai',
+  '  model: gpt-4.1-mini',
+  'providers:',
+  '  openai:',
+  '    baseURL: https://api.openai.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  `      value: ${TASK5_API_KEY}`,
   '    models:',
   '      gpt-4.1-mini:',
   '        variant: chat',
@@ -86,6 +109,157 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
       assert.equal(health.appMounted, true, 'target click unmounted the app shell');
       assert.equal(health.reviewPanelMounted, true, 'target click blanked the sync review panel');
       assert.equal(health.bodyTextLength > 0, true, 'target click left a blank UI');
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('Task 5 security keeps saved GitHub Token masked and allows intentional quick API key copy/edit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-security-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let fakeGist: Awaited<ReturnType<typeof startFakeGistServer>> | undefined;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    await writeTask5SecurityState(statePath);
+    await writeFile(join(directory, 'secrets.json'), `${JSON.stringify({ githubToken: TASK5_GITHUB_TOKEN }, null, 2)}\n`);
+    const { startWebServer } = await import('../../src/server');
+    fakeGist = await startFakeGistServer({
+      status: 200,
+      etag: 'W/"task5-load-etag"',
+      body: buildGistBody(TASK5_AGENTCFG_YAML, 'task5-load-revision'),
+    });
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: {
+        ...process.env,
+        AGENTCFG_GIST_API_BASE_URL: fakeGist.apiBaseUrl,
+        GITHUB_TOKEN: '',
+      },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.installRuntimeErrorRecorder();
+      await cdp.installClipboardRecorder();
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.clickButton('远端真源');
+      await cdp.waitForText('GitHub Token 已以明文保存到本机 secrets.json');
+      await cdp.waitForText('远端配置已自动刷新');
+      await assertSavedGitHubTokenLocked(cdp, 'Task 5 saved GitHub Token input');
+      await assertDomValuesDoNotContain(cdp, TASK5_GITHUB_TOKEN, 'Task 5 saved GitHub Token DOM values');
+
+      await assertSelectorVisible(cdp, '#defaults-quick-api-key');
+      const maskedApiKey = await cdp.inputValue('#defaults-quick-api-key');
+      assert.equal(maskedApiKey, maskTask5QuickApiKey(TASK5_API_KEY));
+      assert.equal(maskedApiKey.includes(TASK5_API_KEY), false, 'Task 5 quick API key default display exposed the full key');
+
+      assert.equal(await cdp.clickSelector('.api-key-copy-button'), true, 'Task 5 quick API key copy button was not clickable');
+      assert.deepEqual(await cdp.clipboardWrites(), [TASK5_API_KEY]);
+      assert.deepEqual(await cdp.runtimeErrors(), []);
+
+      assert.equal(await cdp.focusSelector('#defaults-quick-api-key'), true, 'Task 5 quick API key input was not focusable');
+      await cdp.waitForFunction(`document.querySelector('#defaults-quick-api-key') instanceof HTMLInputElement && document.querySelector('#defaults-quick-api-key').value === ${JSON.stringify(TASK5_API_KEY)}`);
+      assert.equal(await cdp.setInputValue('#defaults-quick-api-key', TASK5_EDITED_API_KEY), true, 'Task 5 quick API key input did not accept edits');
+      assert.equal(await cdp.inputValue('#defaults-quick-api-key'), TASK5_EDITED_API_KEY);
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    await fakeGist?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('Task 5 RED contract masks cached API key in dashboard and status surfaces by default', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-security-red-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    await writeTask5SecurityState(statePath);
+    const { startWebServer } = await import('../../src/server');
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: { ...process.env, GITHUB_TOKEN: '' },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('配置同步工作流', 15000);
+
+      const highLevelSurfaces = await cdp.evaluate<{ overviewText: string; statusRailText: string; statusDetailsText: string }>(`(() => ({
+        overviewText: document.querySelector('#overview-panel')?.textContent ?? '',
+        statusRailText: document.querySelector('.status-rail')?.textContent ?? '',
+        statusDetailsText: document.querySelector('#status-details')?.textContent ?? '',
+      }))()`);
+      assert.equal(
+        highLevelSurfaces.overviewText.includes(TASK5_API_KEY),
+        false,
+        'Task 5 RED contract: Home/dashboard surface must not show the full cached API key by default',
+      );
+      assert.equal(
+        highLevelSurfaces.statusRailText.includes(TASK5_API_KEY),
+        false,
+        'Task 5 RED contract: Status/debug rail must mask cached provider API keys by default',
+      );
+      assert.equal(
+        highLevelSurfaces.statusDetailsText.includes(TASK5_API_KEY),
+        false,
+        'Task 5 RED contract: Collapsed status details must not keep full provider API keys in default text content',
+      );
+      assert.equal(
+        highLevelSurfaces.statusRailText.includes(maskTask5QuickApiKey(TASK5_API_KEY)) || highLevelSurfaces.statusRailText.includes('***MASKED***'),
+        true,
+        'Task 5 RED contract: Status/debug surface should show a masked API key affordance instead of removing the field',
+      );
     } finally {
       await cdp.close();
     }
@@ -859,12 +1033,38 @@ class CdpPage {
     return this.evaluate<boolean>(source);
   }
 
+  async installClipboardRecorder(): Promise<boolean> {
+    const source = `(() => {
+      if (window.__agentcfgClipboardRecorderInstalled === true) {
+        return true;
+      }
+      const writes = [];
+      Object.defineProperty(window, '__agentcfgClipboardWrites', { value: writes, configurable: true });
+      Object.defineProperty(window, '__agentcfgClipboardRecorderInstalled', { value: true, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText: async (text) => {
+            writes.push(String(text));
+          },
+        },
+        configurable: true,
+      });
+      return true;
+    })()`;
+    await this.send('Page.addScriptToEvaluateOnNewDocument', { source });
+    return this.evaluate<boolean>(source);
+  }
+
   recordedFetchBodies(): Promise<Array<{ url: string; body?: string }>> {
     return this.evaluate<Array<{ url: string; body?: string }>>(`window.__agentcfgFetchBodies ?? []`);
   }
 
   runtimeErrors(): Promise<string[]> {
     return this.evaluate<string[]>('window.__agentcfgRuntimeErrors ?? []');
+  }
+
+  clipboardWrites(): Promise<string[]> {
+    return this.evaluate<string[]>('window.__agentcfgClipboardWrites ?? []');
   }
 
   async waitForFunction(expression: string, timeoutMs = 5000): Promise<void> {
@@ -934,6 +1134,16 @@ class CdpPage {
       if (!(element instanceof HTMLElement)) return false;
       element.click();
       return true;
+    })()`);
+  }
+
+  focusSelector(selector: string): Promise<boolean> {
+    return this.evaluate<boolean>(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!(element instanceof HTMLElement)) return false;
+      element.focus();
+      element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      return document.activeElement === element;
     })()`);
   }
 
@@ -1174,6 +1384,14 @@ async function assertBrowserStorageHasNoSecretsOrStatePath(cdp: CdpPage, statePa
   assertNoGitHubToken(serializedStorage, label);
   assert.equal(serializedStorage.includes(statePath), false, `${label} persisted the state path in browser storage`);
   assert.equal(serializedStorage.includes('statePath'), false, `${label} persisted a statePath key in browser storage`);
+}
+
+async function assertDomValuesDoNotContain(cdp: CdpPage, secret: string, label: string): Promise<void> {
+  const domValues = await cdp.evaluate<string>(`(() => {
+    const fieldValues = Array.from(document.querySelectorAll('input, textarea')).map((field) => field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? field.value : '');
+    return [document.body?.textContent ?? '', ...fieldValues].join(${JSON.stringify('\n')});
+  })()`);
+  assert.equal(domValues.includes(secret), false, `${label} exposed ${secret}`);
 }
 
 async function assertSavedGitHubTokenLocked(cdp: CdpPage, label: string): Promise<void> {
@@ -1624,6 +1842,66 @@ function assertCodexNoticePayload(notices: CodexNotice[] | undefined, label: str
 
 function assertNoGitHubToken(text: string, label: string): void {
   assert.equal(text.includes(GITHUB_TOKEN), false, `${label} exposed the GitHub Token`);
+}
+
+async function writeTask5SecurityState(statePath: string): Promise<void> {
+  const config = task5AgentConfig();
+  await writeFile(statePath, `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      gist: { id: 'task5-gist-id' },
+      remote: {
+        revision: 'task5-revision',
+        etag: 'W/"task5-etag"',
+        pulledAt: '2026-06-22T00:00:00.000Z',
+      },
+      cache: {
+        config,
+        updatedAt: '2026-06-22T00:00:00.000Z',
+      },
+      conflict: {
+        baseConfig: config,
+        baseRevision: 'task5-revision',
+        baseETag: 'W/"task5-etag"',
+      },
+    },
+    null,
+    2,
+  )}\n`);
+}
+
+function task5AgentConfig() {
+  return {
+    schemaVersion: 1,
+    defaults: {
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+    },
+    providers: {
+      openai: {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: TASK5_API_KEY,
+        },
+        models: {
+          'gpt-4.1-mini': {
+            variant: 'chat',
+            contextWindow: 1047576,
+            contextTokens: 1040000,
+            maxTokens: 32768,
+          },
+        },
+      },
+    },
+  };
+}
+
+function maskTask5QuickApiKey(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') return '';
+  if (trimmed.length <= 12) return `${trimmed.slice(0, 3)}••••${trimmed.slice(-2)}`;
+  return `${trimmed.slice(0, 7)}••••••••••••${trimmed.slice(-6)}`;
 }
 
 function delay(ms: number): Promise<void> {
