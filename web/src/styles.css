@@ -348,6 +348,60 @@ a {
   line-height: var(--line-body);
 }
 
+.product-overview {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.75fr) minmax(0, 1.25fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.product-overview__intro {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: linear-gradient(180deg, var(--color-panel-strong), var(--color-paper-soft));
+  box-shadow: var(--shadow-control);
+}
+
+.product-overview__intro h3 {
+  color: var(--color-cocoa);
+  font-size: var(--text-title);
+  line-height: var(--line-heading);
+}
+
+.product-overview__intro p:not(.eyebrow),
+.product-capability span {
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
+.product-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.product-capability {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+}
+
+.product-capability strong {
+  color: var(--color-cocoa);
+  font-size: var(--text-body);
+}
+
 .workflow-list {
   position: relative;
   display: grid;
@@ -3181,6 +3235,41 @@ h3 {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
+}
+
+.api-key-input-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control-height);
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.api-key-copy-button,
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0;
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-medium);
+  color: var(--color-link);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+
+.api-key-copy-button:not(:disabled):hover,
+.icon-action:not(:disabled):hover {
+  border-color: var(--color-link);
+  background: var(--color-link-soft);
+  transform: translateY(calc(var(--space-1) * -1));
+}
+
+.api-key-copy-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 @media (max-width: 720px) {
