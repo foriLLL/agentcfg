@@ -96,41 +96,41 @@ export function RemoteConfigPanel(props: RemoteConfigPanelProps) {
             <p className="eyebrow">远端配置</p>
             <h2>用表单生成并保存 agentcfg.yaml，不需要手写 Gist 内容。</h2>
           </div>
-          <div className="section-actions remote-command-panel" aria-label="远端配置操作">
-            <StatusBadge tone={gistBadge.tone}>{gistBadge.label}</StatusBadge>
-            <button
-              className="remote-command-card"
-              type="button"
-              onClick={props.onLoadRemoteConfig}
-              disabled={props.isLoadingRemote || props.isSavingRemote}
-            >
-              <span>Gist → 表单</span>
-              <strong>{props.isLoadingRemote ? BUTTONS.loadRemoteRunning : BUTTONS.loadRemote}</strong>
-              <small>只更新当前页面，不写本地 Agent。</small>
-            </button>
-            <button
-              className="remote-command-card remote-command-card--primary"
-              type={props.remoteConfigView === 'editor' ? 'submit' : 'button'}
-              form={props.remoteConfigView === 'editor' ? 'remote-config-form' : undefined}
-              onClick={
-                props.remoteConfigView === 'editor'
-                  ? undefined
-                  : () => {
-                      void props.onSaveRemoteConfig();
-                    }
-              }
-              disabled={props.isSavingRemote}
-            >
-              <span>表单 → Gist</span>
-              <strong>{props.isSavingRemote ? BUTTONS.saveRemoteRunning : BUTTONS.saveRemote}</strong>
-              <small>把当前表单写入 agentcfg.yaml。</small>
-            </button>
-            <button className="remote-command-card" type="button" onClick={props.onPull} disabled={props.isBusy}>
-              <span>Gist → 本地缓存</span>
-              <strong>{props.isPulling ? BUTTONS.pullCacheRunning : BUTTONS.pullCache}</strong>
-              <small>更新 dry-run 和应用使用的本地基线。</small>
-            </button>
-          </div>
+          <StatusBadge tone={gistBadge.tone}>{gistBadge.label}</StatusBadge>
+        </div>
+        <div className="remote-command-panel" aria-label="远端配置操作">
+          <button
+            className="remote-command-card"
+            type="button"
+            onClick={props.onLoadRemoteConfig}
+            disabled={props.isLoadingRemote || props.isSavingRemote}
+          >
+            <span>Gist → 表单</span>
+            <strong>{props.isLoadingRemote ? BUTTONS.loadRemoteRunning : BUTTONS.loadRemote}</strong>
+            <small>只更新当前页面，不写本地 Agent。</small>
+          </button>
+          <button
+            className="remote-command-card remote-command-card--primary"
+            type={props.remoteConfigView === 'editor' ? 'submit' : 'button'}
+            form={props.remoteConfigView === 'editor' ? 'remote-config-form' : undefined}
+            onClick={
+              props.remoteConfigView === 'editor'
+                ? undefined
+                : () => {
+                    void props.onSaveRemoteConfig();
+                  }
+            }
+            disabled={props.isSavingRemote}
+          >
+            <span>表单 → Gist</span>
+            <strong>{props.isSavingRemote ? BUTTONS.saveRemoteRunning : BUTTONS.saveRemote}</strong>
+            <small>把当前表单写入 agentcfg.yaml。</small>
+          </button>
+          <button className="remote-command-card" type="button" onClick={props.onPull} disabled={props.isBusy}>
+            <span>Gist → 本地缓存</span>
+            <strong>{props.isPulling ? BUTTONS.pullCacheRunning : BUTTONS.pullCache}</strong>
+            <small>更新 dry-run 和应用使用的本地基线。</small>
+          </button>
         </div>
         <div className="config-editor-meta" role="status" aria-live="polite">
           <span>{props.remoteStatus}</span>

@@ -1220,20 +1220,21 @@ h3 {
 }
 
 .remote-command-panel {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(14rem, 1fr));
   gap: var(--space-3);
   align-items: stretch;
   width: 100%;
+  margin-top: calc(var(--space-2) * -1);
+  margin-bottom: var(--space-4);
 }
 
 .remote-command-card {
-  flex: 1;
   display: grid;
   gap: var(--space-1);
   min-width: 0;
-  min-height: 4.1rem;
-  padding: var(--space-4);
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
   border: var(--hairline) solid var(--color-line-strong);
   border-radius: var(--radius-medium);
   color: var(--color-cocoa);
@@ -1249,10 +1250,10 @@ h3 {
 }
 
 .remote-command-card--primary {
-  border-top: 4px solid var(--color-clay);
+  border-left: 4px solid var(--color-clay);
   border-bottom-color: color-mix(in srgb, var(--color-link) 44%, var(--color-line-strong));
-  border-left-color: color-mix(in srgb, var(--color-link) 44%, var(--color-line-strong));
   border-right-color: color-mix(in srgb, var(--color-link) 44%, var(--color-line-strong));
+  border-top-color: color-mix(in srgb, var(--color-link) 44%, var(--color-line-strong));
   background: var(--color-panel-strong);
   box-shadow: 0 var(--space-2) var(--space-5) color-mix(in srgb, var(--color-link) 14%, transparent);
 }
@@ -1272,7 +1273,7 @@ h3 {
 
 .remote-command-card strong {
   color: inherit;
-  font-size: var(--text-small);
+  font-size: var(--text-body);
 }
 
 .status-badge {
