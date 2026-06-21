@@ -199,3 +199,48 @@ test('apply() posts the current selected target and clears confirmation on succe
     reset();
   }
 });
+
+test('apply() preserves per-target failure details from apply-error responses', async () => {
+  reset();
+  useRuntimeStore.setState({ statePath: '/custom' });
+  usePlanStore.getState().setTargetMode('all');
+  usePlanStore.getState().setConfirmationText('APPLY');
+
+  const partialResults: ApplyAgentResult[] = [
+    { agent: 'opencode', status: 'applied', changes: [], notices: [], backups: ['/tmp/opencode.backup'] },
+    {
+      agent: 'codex',
+      status: 'failed',
+      changes: [],
+      notices: [],
+      backups: [],
+      error: 'Refusing to write read-only existing file: /tmp/config.toml',
+    },
+  ];
+  const restore = stubFetchOnce(async (url) => {
+    assert.match(url, /\/api\/apply$/);
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: {
+          code: 'apply-error',
+          message: 'Apply validation failed; no files were written.',
+          details: { results: partialResults },
+        },
+      }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    );
+  });
+
+  try {
+    const outcome = await usePlanStore.getState().apply();
+    assert.equal(outcome.ok, false);
+    if (outcome.ok) return;
+    assert.deepEqual(outcome.results, partialResults);
+    assert.deepEqual(usePlanStore.getState().applyResults, partialResults);
+    assert.equal(usePlanStore.getState().confirmationText, 'APPLY');
+  } finally {
+    restore();
+    reset();
+  }
+});

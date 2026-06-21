@@ -168,12 +168,71 @@ export function buildRemoteYamlPreview(config: EditableAgentConfig): string {
 
 export function formatError(error: unknown): string {
   if (error instanceof RuntimeClientError) {
-    return error.message;
+    return formatRuntimeClientError(error);
   }
   if (error instanceof Error) {
     return error.message;
   }
   return '发生意外运行时错误。';
+}
+
+export function formatRuntimeClientError(error: RuntimeClientError): string {
+  const message = error.message.trim() === '' ? '运行时没有返回错误详情。' : error.message.trim();
+  const nextAction = nextActionForRuntimeError(error, message);
+  return `原因：${message} 下一步：${nextAction}`;
+}
+
+export function formatRemoteValidationError(message: string): string {
+  const cause = message.trim() === '' ? '远端配置未通过 agentcfg.yaml schema 校验。' : message.trim();
+  return `原因：${cause} 下一步：按提示修正 schema、provider、model 或必填字段后再保存。`;
+}
+
+function nextActionForRuntimeError(error: RuntimeClientError, message: string): string {
+  if (error.code === 'gist-error') {
+    if (/401|403|bad credentials|Resource not accessible|token/i.test(message)) {
+      return '确认 GitHub Token 仍有效并包含 gist 权限，然后重新连接；如果目标 Gist 已被删除，请重新创建或填写新的 Gist ID。';
+    }
+    if (/404|not found/i.test(message)) {
+      return '确认 Gist ID 没有填错且 Gist 未被删除；必要时返回配置页重新创建远端配置。';
+    }
+    return '检查网络与 GitHub Gist 权限后重试；远端不可用时本地文件不会被写入。';
+  }
+
+  if (error.code === 'validation-error') {
+    return '按提示修正 agentcfg.yaml 的 schema、provider、model 或必填字段后再保存/拉取。';
+  }
+
+  if (error.code === 'provider-error') {
+    return '检查 Provider Base URL、模型发现路径和 API Key；这只影响模型发现，不会自动修改本地配置。';
+  }
+
+  if (error.code === 'cache-refresh-error') {
+    return '远端保存可能已经成功，请修复本地状态路径权限或磁盘问题后重新刷新缓存，避免继续使用旧缓存。';
+  }
+
+  if (error.code === 'state-error' && /No cached agentcfg\.yaml/i.test(message)) {
+    return '先在配置页连接或保存远端配置，确保本地缓存存在，再运行预览、应用或自动同步。';
+  }
+
+  if (error.code === 'apply-error') {
+    if (hasApplyResults(error)) {
+      return '查看下方每个目标的失败原因；已成功或无变化的目标会保留各自状态，修复失败目标后重新预览并应用。';
+    }
+    if (/permission|EACCES|EPERM|read-only|Refusing to write/i.test(message)) {
+      return '检查本地配置文件或目录权限，确保当前用户可写，再重新预览并应用。';
+    }
+    return '修复本地配置文件、路径或权限问题后重新预览；失败时不会隐藏备份路径或错误详情。';
+  }
+
+  if (error.code === 'invalid-request' && /githubToken is required/i.test(message)) {
+    return '粘贴带 gist 权限的 GitHub Token，或在设置中保存 Token 后重试。';
+  }
+
+  if (error.code === 'invalid-request') {
+    return '检查当前表单输入和目标选择，修正后重试。';
+  }
+
+  return '根据错误详情修正输入或本地环境后重试。';
 }
 
 export function formatManagedValue(change: ManagedDiffChange | undefined, side: 'current' | 'expected'): string {
@@ -195,7 +254,7 @@ export function formatStatus(status: ApplyAgentResult['status'] | undefined): st
     return '已应用';
   }
   if (status === 'unchanged') {
-    return '无变化';
+    return '无变化（无需写入）';
   }
   if (status === 'failed') {
     return '失败';
@@ -204,6 +263,27 @@ export function formatStatus(status: ApplyAgentResult['status'] | undefined): st
     return '已取消';
   }
   return status;
+}
+
+export function applyResultNextAction(result: ApplyAgentResult): string | undefined {
+  if (result.status !== 'failed') {
+    return undefined;
+  }
+  const error = result.error ?? '';
+  if (/permission|EACCES|EPERM|read-only|Refusing to write/i.test(error)) {
+    return '检查该目标配置文件和关联 Env 文件的写入权限，然后重新预览并应用。';
+  }
+  if (/Missing .* native config|ENOENT|not found/i.test(error)) {
+    return '创建缺失的原生配置文件，或在路径输入框填写已有配置文件后重新预览。';
+  }
+  if (/parser|valid|schema|unsupported|ambiguous/i.test(error)) {
+    return '修正该目标原生配置格式或 agentcfg schema 后重新预览。';
+  }
+  return '按失败原因修复该目标后重新预览并应用；其他目标的状态已在各自卡片中保留。';
+}
+
+export function applyResultsAreNoOp(results: readonly ApplyAgentResult[]): boolean {
+  return results.length > 0 && results.every((result) => result.status === 'unchanged');
 }
 
 export function formatFileMode(mode: number): string {
@@ -272,11 +352,17 @@ function ohMyOpenAgentFieldLabel(field: ManagedField): string | null {
 }
 
 export function extractApplyResults(error: unknown): ApplyAgentResult[] | undefined {
-  if (!(error instanceof RuntimeClientError) || !isRecord(error.details)) {
+  if (!hasApplyResults(error)) {
     return undefined;
   }
-  const results = error.details.results;
-  return Array.isArray(results) ? (results as ApplyAgentResult[]) : undefined;
+  return error.details.results as ApplyAgentResult[];
+}
+
+function hasApplyResults(error: unknown): error is RuntimeClientError & { details: { results: ApplyAgentResult[] } } {
+  if (!(error instanceof RuntimeClientError) || !isRecord(error.details)) {
+    return false;
+  }
+  return Array.isArray(error.details.results);
 }
 
 function yamlScalar(value: string): string {

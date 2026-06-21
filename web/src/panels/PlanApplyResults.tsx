@@ -8,6 +8,7 @@ import type {
 import { AgentConfigIcon } from '../AgentConfigIcon';
 import { FileDiffViewer } from '../FileDiffViewer';
 import { applyStatusTone } from '../strings';
+import { applyResultNextAction } from '../view-model';
 import {
   MANAGED_FIELDS,
   agentLabel,
@@ -82,7 +83,10 @@ export function ApplyResults({ results }: { results: ApplyAgentResult[] | null }
 
   return (
     <section className="result-stack" aria-label="应用结果">
-      <ResultHeading eyebrow="应用" title="写入结果" />
+      <ResultHeading eyebrow="应用" title={applyResultsTitle(results)} />
+      {results.some((result) => result.status === 'failed') && (
+        <EmptyCopy title="部分目标未完成" copy="逐个查看失败目标的失败原因和下一步；成功或无变化的目标会保留各自状态。" />
+      )}
       {results.map((result) => (
         <article className="agent-result-card" key={result.agent}>
           <div className="agent-result-card__header">
@@ -95,7 +99,8 @@ export function ApplyResults({ results }: { results: ApplyAgentResult[] | null }
           <dl className="detail-list compact-detail-list">
             {result.configPath !== undefined && <Detail label="原生配置" value={result.configPath} />}
             {result.envPath !== undefined && <Detail label="Env 文件" value={result.envPath} />}
-            {result.error !== undefined && <Detail label="错误" value={result.error} />}
+            {result.error !== undefined && <Detail label="失败原因" value={result.error} />}
+            {applyResultNextAction(result) !== undefined && <Detail label="下一步" value={applyResultNextAction(result) ?? ''} />}
           </dl>
           <NoticeList notices={result.notices} />
           <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
@@ -175,6 +180,16 @@ function NoticeList({ notices }: { notices: ManagedDiffNotice[] }) {
       </ul>
     </div>
   );
+}
+
+function applyResultsTitle(results: ApplyAgentResult[]): string {
+  if (results.length > 0 && results.every((result) => result.status === 'unchanged')) {
+    return '全部无变化，无需写入';
+  }
+  if (results.some((result) => result.status === 'failed')) {
+    return '写入结果（逐目标检查）';
+  }
+  return '写入结果';
 }
 
 function FieldRows({ changes }: { changes: ManagedDiffChange[] }) {

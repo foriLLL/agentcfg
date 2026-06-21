@@ -356,6 +356,76 @@ test('Task 5 RED contract masks cached API key in dashboard and status surfaces 
   }
 });
 
+test('Task 20 first-run invalid GitHub Token explains cause and next action', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-task20-invalid-token-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let fakeGist: Awaited<ReturnType<typeof startFakeGistServer>> | undefined;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    fakeGist = await startFakeGistServer({
+      status: 401,
+      body: { message: 'Bad credentials' },
+    });
+    const { startWebServer } = await import('../../src/server');
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: {
+        ...process.env,
+        AGENTCFG_GIST_API_BASE_URL: fakeGist.apiBaseUrl,
+        GITHUB_TOKEN: '',
+      },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.installRuntimeErrorRecorder();
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('Agent 配置同步中心', 15000);
+      assert.equal(await cdp.clickButton('开始设置'), true, 'Task 20 first-run CTA did not navigate to Configuration');
+      await cdp.waitForFunction('document.querySelector("#connection-panel") !== null');
+
+      await cdp.setInputValue('#github-token', 'invalid-github-token');
+      await cdp.clickSelector('.setup-form__advanced > summary');
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
+      await cdp.setInputValue('#state-path', statePath);
+      await cdp.submitForm('.setup-form');
+
+      await cdp.waitForText('Token 配置失败');
+      await cdp.waitForText('GitHub Gist list failed with 401 Unauthorized');
+      await cdp.waitForText('下一步：确认 GitHub Token 仍有效并包含 gist 权限');
+      assert.deepEqual(await cdp.runtimeErrors(), []);
+      assert.equal(fakeGist.requests[0]?.authorization, 'Bearer invalid-github-token');
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    await fakeGist?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('Task 18 first-run flow connects, configures, previews, and applies from redesigned Home', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-task18-first-run-'));
   const statePath = join(directory, 'state.json');

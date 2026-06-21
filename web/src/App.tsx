@@ -12,10 +12,12 @@ import type { AppTab } from './navigation';
 import { useCommandCenterStatus } from './useCommandCenterStatus';
 import {
   agentLabel,
+  applyResultsAreNoOp,
   buildRemoteYamlPreview,
   buildSetupSteps,
   configToDraft,
   formatError,
+  formatRemoteValidationError,
   remoteAccessWarningForHostname,
   type Step,
 } from './view-model';
@@ -309,7 +311,7 @@ function App() {
       return;
     }
     if (outcome.kind === 'validation') {
-      setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: outcome.message });
+      setNotice({ tone: 'error', title: NOTICES.remoteValidationFailed, copy: formatRemoteValidationError(outcome.message) });
     } else {
       setNotice({ tone: 'error', title: NOTICES.remoteSaveFailed, copy: formatError(outcome.error) });
     }
@@ -421,7 +423,16 @@ function App() {
     setNotice(null);
     const outcome = await usePlanStore.getState().plan();
     if (outcome.ok) {
-      setNotice({ tone: 'success', title: NOTICES.dryRunSucceeded, copy: '检查操作路径，然后输入 APPLY 解锁写入。' });
+      const results = usePlanStore.getState().planResponse?.results ?? [];
+      if (applyResultsAreNoOp(results)) {
+        setNotice({
+          tone: 'success',
+          title: NOTICES.dryRunNoChanges,
+          copy: '所选目标已经与中央配置一致，本次预览不会写入任何文件。可直接结束，或切换目标后重新预览。',
+        });
+      } else {
+        setNotice({ tone: 'success', title: NOTICES.dryRunSucceeded, copy: '检查操作路径，然后勾选确认解锁写入。' });
+      }
       return;
     }
     if (outcome.targetMissing === true) {
@@ -438,7 +449,12 @@ function App() {
     setNotice(null);
     const outcome = await usePlanStore.getState().apply();
     if (outcome.ok) {
-      setNotice({ tone: 'success', title: NOTICES.applySucceeded, copy: '所选代理文件已更新，控制台状态已刷新。' });
+      const results = usePlanStore.getState().applyResults ?? [];
+      if (applyResultsAreNoOp(results)) {
+        setNotice({ tone: 'success', title: NOTICES.applyNoChanges, copy: '所有所选目标均无变化，没有文件被改写，控制台状态已刷新。' });
+      } else {
+        setNotice({ tone: 'success', title: NOTICES.applySucceeded, copy: '所选代理文件已更新；无变化或失败的目标会在结果卡片中逐项显示。' });
+      }
     } else {
       setNotice({ tone: 'error', title: NOTICES.applyFailed, copy: formatError(outcome.error) });
     }

@@ -135,8 +135,10 @@ export const NOTICES = {
   tokenCleared: '已清除本地 Token',
   tokenClearFailed: '清除 Token 失败',
   dryRunSucceeded: '预览完成',
+  dryRunNoChanges: '预览完成：无需写入',
   dryRunFailed: '预览失败',
   applySucceeded: '应用完成',
+  applyNoChanges: '应用完成：无需写入',
   applyFailed: '应用失败',
   configLoadFailed: '配置加载失败',
   configSaveFailed: '配置保存失败',
@@ -147,7 +149,7 @@ export function applyStatusLabel(status: ApplyAgentStatus | undefined): string {
   if (status === undefined) return '未返回';
   if (status === 'would-change') return '将会变更';
   if (status === 'applied') return '已应用';
-  if (status === 'unchanged') return '无变化';
+  if (status === 'unchanged') return '无变化（无需写入）';
   if (status === 'failed') return '失败';
   if (status === 'cancelled') return '已取消';
   return status;

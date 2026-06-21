@@ -5,13 +5,17 @@ import { parse as parseYaml } from 'yaml';
 import test from 'node:test';
 import {
   agentSupportsManagedFieldDiff,
+  applyResultNextAction,
+  applyResultsAreNoOp,
   buildRemoteYamlPreview,
+  formatError,
+  formatRemoteValidationError,
   localReviewActionCopyForAgent,
   remoteAccessWarningForHostname,
   statusLabel,
   statusTone,
 } from '../../web/src/view-model';
-import type { EditableAgentConfig, RuntimeStateSummary } from '../../web/src/api';
+import { RuntimeClientError, type ApplyAgentResult, type EditableAgentConfig, type RuntimeStateSummary } from '../../web/src/api';
 
 test('buildRemoteYamlPreview serializes the complete nested remote config', () => {
   const config: EditableAgentConfig = {
@@ -176,6 +180,69 @@ test('OhMyOpenAgent uses dry-run instead of field-level diff in the web flow', (
   assert.equal(agentSupportsManagedFieldDiff('ohmyopenagent'), false);
   assert.equal(localReviewActionCopyForAgent('ohmyopenagent'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
   assert.equal(localReviewActionCopyForAgent('opencode'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+});
+
+test('formatError gives GitHub Token failures a clear cause and next action', () => {
+  const error = new RuntimeClientError(
+    {
+      code: 'gist-error',
+      message: 'GitHub Gist list failed with 401 Unauthorized: Bad credentials',
+    },
+    502,
+  );
+
+  const copy = formatError(error);
+
+  assert.match(copy, /原因：GitHub Gist list failed with 401 Unauthorized/);
+  assert.match(copy, /下一步：确认 GitHub Token 仍有效并包含 gist 权限/);
+  assert.match(copy, /Gist 已被删除/);
+});
+
+test('formatRemoteValidationError gives invalid schema failures a next action', () => {
+  const copy = formatRemoteValidationError('providers.openai.apiKey.value is required');
+
+  assert.match(copy, /原因：providers\.openai\.apiKey\.value is required/);
+  assert.match(copy, /下一步：按提示修正 schema、provider、model 或必填字段后再保存/);
+});
+
+test('formatError and apply result helpers keep partial apply failures actionable per target', () => {
+  const results: ApplyAgentResult[] = [
+    { agent: 'opencode', status: 'applied', changes: [], notices: [], backups: ['/tmp/opencode.backup'] },
+    {
+      agent: 'codex',
+      status: 'failed',
+      changes: [],
+      notices: [],
+      backups: [],
+      error: 'Refusing to write read-only existing file: /tmp/config.toml',
+    },
+  ];
+  const error = new RuntimeClientError(
+    {
+      code: 'apply-error',
+      message: 'Apply validation failed; no files were written.',
+      details: { results },
+    },
+    400,
+  );
+
+  assert.equal(applyResultsAreNoOp(results), false);
+  assert.match(formatError(error), /查看下方每个目标的失败原因/);
+  assert.equal(
+    applyResultNextAction(results[1] as ApplyAgentResult),
+    '检查该目标配置文件和关联 Env 文件的写入权限，然后重新预览并应用。',
+  );
+});
+
+test('applyResultsAreNoOp treats unchanged preview/apply results as successful no-op', () => {
+  assert.equal(
+    applyResultsAreNoOp([
+      { agent: 'opencode', status: 'unchanged', changes: [], notices: [], backups: [] },
+      { agent: 'codex', status: 'unchanged', changes: [], notices: [], backups: [] },
+    ]),
+    true,
+  );
+  assert.equal(applyResultsAreNoOp([]), false);
 });
 
 test('App wires the remote access warning helper into toast notifications', async () => {
