@@ -1652,6 +1652,29 @@ h3 {
   gap: var(--space-4);
 }
 
+.apply-group {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.apply-group__title {
+  font-size: var(--text-h4);
+  font-weight: 600;
+}
+
+.apply-group__description {
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.backup-notice {
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  margin-top: calc(var(--space-2) * -1);
+}
+
 .review-layout {
   grid-template-columns: minmax(18rem, 0.78fr) minmax(0, 1.22fr);
   align-items: start;

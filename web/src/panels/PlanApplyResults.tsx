@@ -68,6 +68,7 @@ export function PlanResults({
           <NoticeList notices={plan.notices} />
           <PlanAssociatedFiles plan={plan} />
           <PathList title="将写入路径" paths={plan.operationPaths} empty="关联文件均无需写入。" />
+          {plan.operationPaths.length > 0 && <p className="backup-notice">写入前将自动创建备份。</p>}
           <FilePreviewList previews={plan.filePreviews} />
           {agentSupportsManagedFieldDiff(plan.agent) && <FieldRows changes={plan.changes} />}
         </article>
@@ -81,33 +82,59 @@ export function ApplyResults({ results }: { results: ApplyAgentResult[] | null }
     return <EmptyCopy title="暂无应用结果" copy="确认写入后，已应用、失败与备份路径会显示在这里。" />;
   }
 
+  const failed = results.filter((r) => r.status === 'failed');
+  const applied = results.filter((r) => r.status === 'applied' || r.status === 'would-change');
+  const unchanged = results.filter((r) => r.status === 'unchanged' || r.status === 'cancelled');
+
   return (
     <section className="result-stack" aria-label="应用结果">
       <ResultHeading eyebrow="应用" title={applyResultsTitle(results)} />
-      {results.some((result) => result.status === 'failed') && (
-        <EmptyCopy title="部分目标未完成" copy="逐个查看失败目标的失败原因和下一步；成功或无变化的目标会保留各自状态。" />
+      {failed.length > 0 && (
+        <div className="apply-group apply-group--failed">
+          <h3 className="apply-group__title">失败目标 ({failed.length})</h3>
+          <EmptyCopy title="部分目标未完成" copy="逐个查看失败目标的失败原因和下一步；成功或无变化的目标会保留各自状态。" />
+          {failed.map((result) => <AgentResultCard key={result.agent} result={result} />)}
+        </div>
       )}
-      {results.map((result) => (
-        <article className="agent-result-card" key={result.agent}>
-          <div className="agent-result-card__header">
-            <h3>
-              <AgentConfigIcon agent={result.agent} />
-              {agentLabel(result.agent)}
-            </h3>
-            <StatusBadge tone={applyStatusTone(result.status)}>{formatStatus(result.status)}</StatusBadge>
-          </div>
-          <dl className="detail-list compact-detail-list">
-            {result.configPath !== undefined && <Detail label="原生配置" value={result.configPath} />}
-            {result.envPath !== undefined && <Detail label="Env 文件" value={result.envPath} />}
-            {result.error !== undefined && <Detail label="失败原因" value={result.error} />}
-            {applyResultNextAction(result) !== undefined && <Detail label="下一步" value={applyResultNextAction(result) ?? ''} />}
-          </dl>
-          <NoticeList notices={result.notices} />
-          <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
-          {agentSupportsManagedFieldDiff(result.agent) && <FieldRows changes={result.changes} />}
-        </article>
-      ))}
+
+      {applied.length > 0 && (
+        <div className="apply-group apply-group--applied">
+          <h3 className="apply-group__title">已应用目标 ({applied.length})</h3>
+          <p className="apply-group__description">未托管字段已保留。如需回滚，请还原备份路径下的文件。</p>
+          {applied.map((result) => <AgentResultCard key={result.agent} result={result} />)}
+        </div>
+      )}
+
+      {unchanged.length > 0 && (
+        <div className="apply-group apply-group--unchanged">
+          <h3 className="apply-group__title">无变化目标 ({unchanged.length})</h3>
+          {unchanged.map((result) => <AgentResultCard key={result.agent} result={result} />)}
+        </div>
+      )}
     </section>
+  );
+}
+
+function AgentResultCard({ result }: { result: ApplyAgentResult }) {
+  return (
+    <article className="agent-result-card">
+      <div className="agent-result-card__header">
+        <h3>
+          <AgentConfigIcon agent={result.agent} />
+          {agentLabel(result.agent)}
+        </h3>
+        <StatusBadge tone={applyStatusTone(result.status)}>{formatStatus(result.status)}</StatusBadge>
+      </div>
+      <dl className="detail-list compact-detail-list">
+        {result.configPath !== undefined && <Detail label="原生配置" value={result.configPath} />}
+        {result.envPath !== undefined && <Detail label="Env 文件" value={result.envPath} />}
+        {result.error !== undefined && <Detail label="失败原因" value={result.error} />}
+        {applyResultNextAction(result) !== undefined && <Detail label="下一步" value={applyResultNextAction(result) ?? ''} />}
+      </dl>
+      <NoticeList notices={result.notices} />
+      <PathList title="备份路径" paths={result.backups} empty="未返回备份。" />
+      {agentSupportsManagedFieldDiff(result.agent) && <FieldRows changes={result.changes} />}
+    </article>
   );
 }
 
