@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { AgentName, ApplyAgentResult, ApplyPlanSummary, RuntimeStateSummary } from '../api';
 import { AgentConfigIcon } from '../AgentConfigIcon';
-import { BUTTONS, GATES, dryRunReadinessBadge } from '../strings';
+import { BUTTONS, GATES, previewReadinessBadge } from '../strings';
 import { StatusBadge } from '../widgets';
 import { ApplyResults, PlanResults } from './PlanApplyResults';
 
@@ -53,7 +53,7 @@ export type ExecutePanelProps = {
  * #review-panel grid.
  */
 export function ExecutePanel(props: ExecutePanelProps) {
-  const dryRunBadge = dryRunReadinessBadge({ hasPlan: props.isPlanCurrent, hasTarget: props.targetMode !== '' });
+  const dryRunBadge = previewReadinessBadge({ hasPlan: props.isPlanCurrent, hasTarget: props.targetMode !== '' });
 
   return (
     <section className="dashboard-grid" id="execute-panel" role="tabpanel" aria-labelledby="execute-tab">

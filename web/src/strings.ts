@@ -1,18 +1,3 @@
-/**
- * Centralized UI strings for the agentcfg Web Console.
- *
- * Goals:
- * - Pin one wording per concept (do not let "已连接" / "状态已连接" / "已绑定 Gist"
- *   coexist for the same state).
- * - Map every status badge to a single tone (`ready` / `pending` / `warning`).
- * - Provide one canonical phrase for shared verbs (Dry-run / Apply / 应用前确认),
- *   so every panel can render the same text without re-inventing it.
- *
- * Imports:
- * - Panels read tones via `gistTone()` / `cacheTone()` etc. and read fixed
- *   copy via the BUTTONS / GATES / NOTICES exports.
- */
-
 import type { ApplyAgentStatus, RuntimeStateSummary } from './api';
 
 export type StatusTone = 'ready' | 'pending' | 'warning';
@@ -22,47 +7,62 @@ export type StatusBadgeCopy = {
   readonly label: string;
 };
 
-// ----------------------------------------------------------------------------
-// Status badge copy
-// ----------------------------------------------------------------------------
+export const NAV = {
+  home: '首页',
+  config: '配置',
+  sync: '同步',
+  rulesAndSkills: '规则与 Skills',
+  settings: '设置',
+  overview: '概览',
+  remote: '远端真源',
+  syncToLocal: '同步到本地',
+  automation: '自动化',
+  groupOverview: '工作台',
+  groupConfiguration: '配置',
+  groupSystem: '系统',
+} as const;
 
-/** Whether the local state knows which Gist to talk to. */
+export const ACTIONS = {
+  saveConfig: '保存配置',
+  saveConfigRunning: '正在保存配置…',
+  previewChanges: '预览变更',
+  previewChangesRunning: '正在预览变更…',
+  previewChangesRetry: '重新预览',
+  applyChanges: '应用变更',
+  applyChangesRunning: '正在应用变更…',
+} as const;
+
 export function gistConnectionBadge(state: RuntimeStateSummary | null): StatusBadgeCopy {
   return state?.gist.present === true
     ? { tone: 'ready', label: '已连接' }
     : { tone: 'pending', label: '未连接' };
 }
 
-/** Whether agentcfg has cached a snapshot of the remote agentcfg.yaml. */
 export function cacheReadinessBadge(state: RuntimeStateSummary | null): StatusBadgeCopy {
   return state?.cache.present === true
     ? { tone: 'ready', label: '已缓存' }
     : { tone: 'pending', label: '未缓存' };
 }
 
-/** Whether remote revision/etag metadata has been recorded. */
 export function remoteRevisionBadge(state: RuntimeStateSummary | null): StatusBadgeCopy {
   return state?.remote !== undefined
     ? { tone: 'ready', label: '已同步' }
     : { tone: 'pending', label: '尚未拉取' };
 }
 
-/** Conflict-detection baseline metadata. */
 export function conflictBaselineBadge(state: RuntimeStateSummary | null): StatusBadgeCopy {
   return state?.conflict.present === true
     ? { tone: 'ready', label: '已记录基线' }
     : { tone: 'pending', label: '未记录基线' };
 }
 
-/** Background sync system service. */
 export function syncServiceBadge(installed: boolean | undefined): StatusBadgeCopy {
   return installed === true
     ? { tone: 'ready', label: '服务已安装' }
     : { tone: 'pending', label: '服务未安装' };
 }
 
-/** Dry-run readiness gate for the apply flow. */
-export function dryRunReadinessBadge(input: {
+export function previewReadinessBadge(input: {
   readonly hasPlan: boolean;
   readonly hasTarget: boolean;
 }): StatusBadgeCopy {
@@ -75,7 +75,6 @@ export function dryRunReadinessBadge(input: {
   return { tone: 'warning', label: '需要重新预览' };
 }
 
-/** Native config editor draft state. */
 export function configDraftBadge(input: {
   readonly loaded: boolean;
   readonly dirty: boolean;
@@ -89,49 +88,37 @@ export function configDraftBadge(input: {
   return { tone: 'ready', label: '已同步' };
 }
 
-// ----------------------------------------------------------------------------
-// Apply / dry-run / GitHub action verbs
-//
-// One canonical phrase per verb so every panel reads the same text instead of
-// rolling "执行 dry-run" / "预览更改" / "Dry-run" in three separate panels.
-// ----------------------------------------------------------------------------
+export const DEBUG = {
+  cache: '本地缓存',
+  revision: 'Revision',
+  etag: 'ETag',
+  baseline: '基线',
+  statePath: '状态路径',
+  gistId: 'Gist ID',
+  rawYaml: '原始 YAML',
+  schemaDocs: 'Schema 文档',
+} as const;
 
 export const BUTTONS = {
-  /** Run a non-destructive plan that previews what would change. */
   dryRun: '预览 (Dry-run)',
-  /** Resolve a stale plan after the target/path changed. */
   dryRunRetry: '重新预览',
-  /** While the dry-run request is in flight. */
   dryRunRunning: '正在预览…',
-  /** Final write step. */
   apply: '应用变更',
-  /** While the apply request is in flight. */
   applyRunning: '正在应用…',
-  /** Pull `agentcfg.yaml` from Gist into the local cache. */
   pullCache: '刷新本地缓存',
   pullCacheRunning: '正在刷新…',
-  /** Read `agentcfg.yaml` from Gist into the editor draft. */
   loadRemote: '读取远端',
   loadRemoteRunning: '正在读取…',
-  /** Save the editor draft back to Gist. */
   saveRemote: '保存到 Gist',
   saveRemoteRunning: '正在保存…',
 } as const;
 
 export const GATES = {
-  /** Apply confirmation gate (replaces "强确认门禁"). */
   applyConfirmEyebrow: '应用前确认',
   applyConfirmTitle: '输入 APPLY 解锁应用',
   applyConfirmHint: '只有所选目标与最近一次预览匹配时才会解锁。',
-  /** Confirm input placeholder. */
   applyConfirmPlaceholder: 'APPLY',
 } as const;
-
-// ----------------------------------------------------------------------------
-// Toast notice titles
-//
-// Pin one title per outcome.
-// ----------------------------------------------------------------------------
 
 export const NOTICES = {
   connected: '状态已连接',
@@ -155,10 +142,6 @@ export const NOTICES = {
   configSaveFailed: '配置保存失败',
   selectTarget: '请选择目标',
 } as const;
-
-// ----------------------------------------------------------------------------
-// Apply / dry-run status mapping (per-agent result row).
-// ----------------------------------------------------------------------------
 
 export function applyStatusLabel(status: ApplyAgentStatus | undefined): string {
   if (status === undefined) return '未返回';
