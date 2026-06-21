@@ -123,6 +123,16 @@ test('parses and normalizes the canonical multi-provider YAML fixture', () => {
   assert.deepEqual(config, EXPECTED_CANONICAL_CONFIG);
 });
 
+test('accepts legacy provider catalog configs without protocol or vision metadata', () => {
+  const config = parseCanonicalAgentConfig(readFileSync(VALID_FIXTURE, 'utf8'));
+  const openaiProvider = config.providers.openai as unknown as Record<string, unknown>;
+  const openaiModel = config.providers.openai.models['gpt-4.1-mini'] as unknown as Record<string, unknown>;
+
+  assert.equal(openaiProvider.protocol, undefined);
+  assert.equal(openaiModel.supportsVision, undefined);
+  assert.deepEqual(config.defaults, { provider: 'openai', model: 'gpt-4.1-mini' });
+});
+
 test('serializes the canonical multi-provider shape without masking provider API keys', () => {
   const serialized = serializeCanonicalAgentConfig(EXPECTED_CANONICAL_CONFIG);
   const reparsed = parseAgentConfigYaml(serialized);

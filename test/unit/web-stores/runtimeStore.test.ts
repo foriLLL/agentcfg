@@ -38,6 +38,28 @@ const STATE_FIXTURE: RuntimeStateSummary = {
   secrets: { hasGitHubToken: true },
 };
 
+const LEGACY_CACHED_STATE_FIXTURE: RuntimeStateSummary = {
+  ...STATE_FIXTURE,
+  cache: {
+    present: true,
+    updatedAt: '2026-06-14T00:00:00.000Z',
+    config: {
+      schemaVersion: 1,
+      defaults: { provider: 'openai', model: 'gpt-4.1-mini' },
+      providers: {
+        openai: {
+          baseURL: 'https://api.openai.com/v1',
+          apiKey: { type: 'plain', value: 'sk-openai' },
+          models: {
+            'gpt-4.1-mini': {},
+          },
+        },
+      },
+    },
+  },
+  secrets: { hasGitHubToken: true },
+};
+
 test('runtimeStore.bootstrap commits state and reports auto-load flag when token + gist present', async () => {
   resetRuntimeStore();
   const restore = stubFetch(async (url) => {
@@ -53,6 +75,32 @@ test('runtimeStore.bootstrap commits state and reports auto-load flag when token
     assert.equal(useRuntimeStore.getState().state?.gist.id, 'gist-123');
     assert.equal(useRuntimeStore.getState().gistId, 'gist-123');
     assert.equal(useRuntimeStore.getState().statePath, '/tmp/agentcfg-state.json');
+  } finally {
+    restore();
+    resetRuntimeStore();
+  }
+});
+
+test('runtimeStore.bootstrap preserves legacy cached config and boolean-only saved-token status', async () => {
+  resetRuntimeStore();
+  const restore = stubFetch(async (url) => {
+    assert.match(url, /\/api\/state/);
+    return envelope({ state: LEGACY_CACHED_STATE_FIXTURE });
+  });
+  try {
+    const outcome = await useRuntimeStore.getState().bootstrap();
+    assert.equal(outcome.ok, true);
+    if (!outcome.ok) return;
+
+    const state = useRuntimeStore.getState().state;
+    const provider = state?.cache.config?.providers.openai as unknown as Record<string, unknown>;
+    const model = state?.cache.config?.providers.openai.models['gpt-4.1-mini'] as unknown as Record<string, unknown>;
+    assert.equal(state?.cache.present, true);
+    assert.equal(provider.protocol, undefined);
+    assert.equal(model.supportsVision, undefined);
+    assert.deepEqual(state?.secrets, { hasGitHubToken: true });
+    assert.deepEqual(Object.keys(state?.secrets ?? {}).sort(), ['hasGitHubToken']);
+    assert.equal(useRuntimeStore.getState().githubToken, '');
   } finally {
     restore();
     resetRuntimeStore();

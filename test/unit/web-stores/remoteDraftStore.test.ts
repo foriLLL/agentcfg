@@ -45,6 +45,39 @@ test('replaceDraft picks first valid provider/model when defaults are stale', ()
   reset();
 });
 
+test('replaceDraft accepts legacy cached configs without protocol or supportsVision fields', () => {
+  reset();
+  const legacy: EditableAgentConfig = {
+    schemaVersion: 1,
+    defaults: { provider: 'openai', model: 'gpt-4.1-mini' },
+    providers: {
+      openai: {
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: { type: 'plain', value: 'sk-openai' },
+        modelDiscovery: { path: '/models' },
+        models: {
+          'gpt-4.1-mini': {
+            variant: 'chat',
+            contextWindow: 1047576,
+            contextTokens: 1047576,
+            maxTokens: 32768,
+          },
+        },
+      },
+    },
+  };
+
+  useRemoteDraftStore.getState().replaceDraft(legacy);
+  const state = useRemoteDraftStore.getState();
+
+  assert.equal(state.editorProviderId, 'openai');
+  assert.equal(state.editorModelId, 'gpt-4.1-mini');
+  assert.equal(state.draft.providers.openai.protocol, undefined);
+  assert.equal(state.draft.providers.openai.models['gpt-4.1-mini'].supportsVision, undefined);
+  assert.deepEqual(state.draft, legacy);
+  reset();
+});
+
 test('addProvider produces a unique id and focuses it', () => {
   reset();
   useRemoteDraftStore.getState().replaceDraft(TWO_PROVIDERS_DRAFT);

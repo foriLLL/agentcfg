@@ -53,6 +53,34 @@ const CANONICAL_CONFIG = {
   },
 } as const;
 
+const LEGACY_CACHED_CONFIG = {
+  schemaVersion: 1,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      modelDiscovery: {
+        path: '/models',
+      },
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'chat',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+        },
+      },
+    },
+  },
+} as const;
+
 const METADATA_CONFIG = {
   ...CANONICAL_CONFIG,
   providers: {
@@ -393,6 +421,72 @@ test('remote operations can remember, reuse, and clear a local GitHub token with
     ]);
   } finally {
     await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime state summary loads legacy cached config and saved-token status without exposing token value', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-legacy-state-'));
+  const statePath = join(directory, 'state.json');
+  const secretsPath = join(directory, 'secrets.json');
+  const savedToken = 'persisted-github-token-secret';
+
+  try {
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          gist: { id: 'legacy-gist-id' },
+          remote: {
+            revision: 'legacy-revision',
+            etag: 'W/"legacy-etag"',
+            pulledAt: '2026-05-01T00:00:00.000Z',
+          },
+          cache: {
+            config: LEGACY_CACHED_CONFIG,
+            updatedAt: '2026-05-01T00:00:00.000Z',
+          },
+          conflict: {
+            baseConfig: LEGACY_CACHED_CONFIG,
+            baseRevision: 'legacy-revision',
+            baseETag: 'W/"legacy-etag"',
+          },
+          autoSync: {
+            enabled: true,
+            intervalMinutes: 30,
+            targets: ['codex', 'opencode'],
+          },
+          lastSyncRun: {
+            status: 'success',
+            startedAt: '2026-05-01T01:00:00.000Z',
+            completedAt: '2026-05-01T01:00:03.000Z',
+            message: 'legacy cached run',
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    await writeFile(secretsPath, `${JSON.stringify({ githubToken: savedToken }, null, 2)}\n`);
+
+    const response = await getRuntimeState({ statePath });
+    const responseJson = JSON.stringify(response);
+    const provider = response.state.cache.config?.providers.openai as unknown as Record<string, unknown>;
+    const model = response.state.cache.config?.providers.openai.models['gpt-4.1-mini'] as unknown as Record<string, unknown>;
+
+    assert.deepEqual(response.state.gist, { present: true, id: 'legacy-gist-id' });
+    assert.equal(response.state.cache.present, true);
+    assert.deepEqual(response.state.cache.config, LEGACY_CACHED_CONFIG);
+    assert.equal(provider.protocol, undefined);
+    assert.equal(model.supportsVision, undefined);
+    assert.deepEqual(response.state.secrets, { hasGitHubToken: true });
+    assert.deepEqual(Object.keys(response.state.secrets ?? {}).sort(), ['hasGitHubToken']);
+    assert.equal(response.state.autoSync?.enabled, true);
+    assert.equal(response.state.lastSyncRun?.status, 'success');
+    assert.equal(responseJson.includes(savedToken), false);
+    assert.equal(responseJson.includes('githubToken'), false);
+  } finally {
     await rm(directory, { force: true, recursive: true });
   }
 });
@@ -1276,24 +1370,6 @@ function codexNativeToml(): string {
     '[model_providers.openai]',
     'base_url = "https://api.openai.com/v1"',
     'env_key = "AGENTCFG_OPENAI_API_KEY"',
-    '',
-  ].join('\n');
-}
-
-function remoteYaml(apiKey: string): string {
-  return [
-    'schemaVersion: 1',
-    'defaults:',
-    '  provider: anthropic',
-    '  model: claude-3-5-sonnet',
-    'providers:',
-    '  anthropic:',
-    '    baseURL: https://api.anthropic.com/v1',
-    '    apiKey:',
-    '      type: plain',
-    `      value: ${apiKey}`,
-    '    models:',
-    '      claude-3-5-sonnet: {}',
     '',
   ].join('\n');
 }

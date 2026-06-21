@@ -20,6 +20,35 @@ describe('Command Center Model', () => {
     conflict: { present: false },
   };
 
+  const legacyCachedState: RuntimeStateSummary = {
+    statePath: '/test/path',
+    schemaVersion: 1,
+    gist: { present: true, id: 'legacy-gist' },
+    cache: {
+      present: true,
+      updatedAt: '2025-01-01T12:00:00Z',
+      config: {
+        schemaVersion: 1,
+        defaults: { provider: 'openai', model: 'gpt-4.1-mini' },
+        providers: {
+          openai: {
+            baseURL: 'https://api.openai.com/v1',
+            apiKey: { type: 'plain', value: 'sk-visible-openai' },
+            models: {
+              'gpt-4.1-mini': {
+                variant: 'chat',
+                contextWindow: 1047576,
+                contextTokens: 1047576,
+                maxTokens: 32768,
+              },
+            },
+          },
+        },
+      },
+    },
+    conflict: { present: false },
+  };
+
   const baseInput: WorkflowModelInput = {
     runtimeState: emptyState,
     status: {
@@ -48,6 +77,21 @@ describe('Command Center Model', () => {
       runtimeState: { ...emptyState, cache: { present: true } },
     };
     assert.equal(isFirstRun(input), false);
+  });
+
+  test('legacy cached config is treated as a returning-user Home model', () => {
+    const input = {
+      ...baseInput,
+      runtimeState: legacyCachedState,
+    };
+
+    assert.equal(isFirstRun(input), false);
+    const steps = buildCommandCenterWorkflow(input);
+    assert.equal(steps[0].id, 'remote-source');
+    assert.equal(steps[0].status, 'complete');
+    assert.equal(steps[1].id, 'sync-targets');
+    assert.equal(steps[1].status, 'pending');
+    assert.equal(steps[1].action.kind, 'navigate');
   });
 
   test('buildOnboardingWorkflow creates first-run steps', () => {
