@@ -169,8 +169,27 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.send('Runtime.enable');
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForFunction('document.body?.innerText.includes("连接状态") === true', 15000);
+      await cdp.waitForFunction('document.body?.innerText.includes("状态面板") === true', 15000);
       await cdp.waitForFunction('document.scrollingElement !== null && document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight');
+      // Redesign Task 3 contract: Shell width / status redesign
+      // Expect to fail in Wave 1 as the right rail is still present.
+      const isCommandRailVisible = await cdp.evaluate<boolean>(`(() => {
+        const rail = document.querySelector(".command-rail");
+        if (!(rail instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(rail);
+        return style.display !== "none" && style.visibility !== "hidden";
+      })()`);
+      assert.equal(isCommandRailVisible, false, "Redesign contract: .command-rail should not be permanently visible in the workspace");
+
+      const isStatusTriggerVisible = await cdp.evaluate<boolean>(`(() => {
+        // Trigger can be a button/badge somewhere at the top level or in header/sidebar
+        // Look for typical status badge/button or drawer trigger
+        const triggers = Array.from(document.querySelectorAll("button, .status-badge"));
+        return triggers.some(el => el.textContent?.includes("状态") || el.textContent?.includes("已连接") || el.textContent?.includes("连接状态"));
+      })()`);
+      assert.equal(isStatusTriggerVisible, true, "Redesign contract: A top-level status trigger/strip should be visible");
+
+
       await cdp.installFetchRecorder();
       await assertFixtureRootControlHidden(cdp);
       await assertNoDesktopFrame(cdp);
