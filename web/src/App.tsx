@@ -6,7 +6,7 @@ import { SkillsDirectoryPanel } from './SkillsDirectoryPanel';
 import { StatusRail } from './StatusRail';
 import { SyncPanel } from './SyncPanel';
 import { WorkflowOverview } from './WorkflowOverview';
-import { buildCommandCenterWorkflow } from './command-center-model';
+import { buildCommandCenterWorkflow, buildOnboardingWorkflow, isFirstRun } from './command-center-model';
 import type { AppTab } from './navigation';
 import { useCommandCenterStatus } from './useCommandCenterStatus';
 import {
@@ -180,13 +180,21 @@ function App() {
   });
   const workflowSteps = useMemo(
     () =>
-      buildCommandCenterWorkflow({
-        runtimeState,
-        status: commandCenterStatus,
-        isPlanCurrent,
-        canReview,
-        applyResults,
-      }),
+      isFirstRun({ runtimeState, status: commandCenterStatus, isPlanCurrent, canReview, applyResults })
+        ? buildOnboardingWorkflow({
+            runtimeState,
+            status: commandCenterStatus,
+            isPlanCurrent,
+            canReview,
+            applyResults,
+          })
+        : buildCommandCenterWorkflow({
+            runtimeState,
+            status: commandCenterStatus,
+            isPlanCurrent,
+            canReview,
+            applyResults,
+          }),
     [applyResults, canReview, commandCenterStatus, isPlanCurrent, runtimeState],
   );
 

@@ -35,6 +35,68 @@ export type WorkflowModelInput = {
   readonly applyResults: readonly ApplyAgentResult[] | null;
 };
 
+export function isFirstRun(input: WorkflowModelInput): boolean {
+  return input.runtimeState?.cache.present !== true;
+}
+
+export function buildOnboardingWorkflow(input: WorkflowModelInput): WorkflowStep[] {
+  const hasGist = input.runtimeState?.gist.present === true;
+  const hasCache = input.runtimeState?.cache.present === true;
+  const hasPlan = input.isPlanCurrent;
+  const hasApplied = input.applyResults?.some((result) => result.status === 'applied') === true;
+
+  return [
+    {
+      id: 'onboarding-connect',
+      order: 1,
+      title: '连接 GitHub',
+      copy: '提供 Token 并创建私有 Gist 作为远端真源。',
+      detail: hasGist ? '已连接' : '等待 GitHub Token。',
+      status: hasGist ? 'complete' : 'ready',
+      target: 'remote',
+      action: { kind: 'navigate', target: 'remote', label: hasGist ? '查看远端' : '开始设置' },
+    },
+    {
+      id: 'onboarding-config',
+      order: 2,
+      title: '配置默认模型',
+      copy: '设置默认使用的模型与 API Key。',
+      detail: hasCache ? '已缓存' : hasGist ? '等待创建并加载配置。' : '需要先连接 GitHub。',
+      status: hasCache ? 'complete' : hasGist ? 'ready' : 'blocked',
+      target: 'remote',
+      action: { kind: 'navigate', target: 'remote', label: hasCache ? '修改配置' : '配置模型' },
+    },
+    {
+      id: 'onboarding-sync',
+      order: 3,
+      title: '应用到本地',
+      copy: '预览变更并将配置分发到本机各 Agent。',
+      detail: hasApplied
+        ? '已成功应用。'
+        : hasPlan
+          ? '预览就绪，等待确认。'
+          : input.canReview
+            ? '配置已就绪，可运行预览。'
+            : hasCache
+              ? '请在同步页面选择目标。'
+              : '需要先完成模型配置。',
+      status: hasApplied
+        ? 'complete'
+        : hasPlan
+          ? 'ready'
+          : input.canReview
+            ? 'ready'
+            : hasCache
+              ? 'pending'
+              : 'blocked',
+      target: 'sync',
+      action: input.canReview
+        ? { kind: 'dry-run', label: BUTTONS.dryRun }
+        : { kind: 'navigate', target: 'sync', label: hasPlan ? '去应用' : '进入同步' },
+    },
+  ];
+}
+
 /**
  * Three-step workflow that mirrors the new top-level IA:
  *
