@@ -2957,6 +2957,11 @@ h3 {
     align-items: stretch;
   }
 
+  .product-overview,
+  .product-capability-grid {
+    grid-template-columns: 1fr;
+  }
+
   .app-header {
     grid-template-columns: 1fr;
   }
