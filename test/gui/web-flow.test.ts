@@ -35,6 +35,77 @@ const VALID_AGENTCFG_YAML = [
   '',
 ].join('\n');
 
+test('web GUI selecting a sync target stays mounted without React/zustand snapshot loop', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-target-regression-'));
+  const statePath = join(directory, 'state.json');
+  const browserProfile = join(directory, 'chrome-profile');
+  const chromePort = await getFreePort();
+  const previousHome = process.env.HOME;
+  let webServer: AgentCfgWebServer | undefined;
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    process.env.HOME = directory;
+    const { startWebServer } = await import('../../src/server');
+    webServer = await startWebServer({
+      host: '127.0.0.1',
+      port: 0,
+      statePath,
+      assetsDir: resolve(process.cwd(), 'web', 'dist'),
+      env: { ...process.env, GITHUB_TOKEN: '' },
+    });
+    chrome = launchChrome(chromePort, browserProfile, previousHome);
+    const cdp = await openCdpPage(chromePort, 'about:blank');
+
+    try {
+      await cdp.send('Page.enable');
+      await cdp.send('Runtime.enable');
+      await cdp.installRuntimeErrorRecorder();
+      await cdp.send('Page.navigate', { url: webServer.url });
+      await cdp.waitForText('配置同步工作流', 15000);
+
+      assert.equal(await cdp.clickButton('同步到本地'), true, 'sync tab was not clickable');
+      await cdp.waitForText('请选择一个目标');
+      assert.equal(await cdp.clickSelector('input[name="target-mode"][value="opencode"]'), true, 'OpenCode target was not clickable');
+      await cdp.waitForFunction(`(() => {
+        const target = document.querySelector('input[name="target-mode"][value="opencode"]');
+        const reviewPanel = document.querySelector('#review-panel');
+        return target instanceof HTMLInputElement && target.checked && reviewPanel instanceof HTMLElement;
+      })()`);
+      await delay(250);
+
+      const health = await cdp.evaluate<{ appMounted: boolean; reviewPanelMounted: boolean; bodyTextLength: number }>(`(() => ({
+        appMounted: document.querySelector('.command-shell') !== null,
+        reviewPanelMounted: document.querySelector('#review-panel') !== null,
+        bodyTextLength: document.body?.innerText.trim().length ?? 0,
+      }))()`);
+      const runtimeErrors = await cdp.runtimeErrors();
+      const targetClickLoopErrors = runtimeErrors.filter((message) => /React error #185|Minified React error #185|getSnapshot should be cached|Maximum update depth|Too many re-renders/i.test(message));
+
+      assert.deepEqual(targetClickLoopErrors, []);
+      assert.equal(health.appMounted, true, 'target click unmounted the app shell');
+      assert.equal(health.reviewPanelMounted, true, 'target click blanked the sync review panel');
+      assert.equal(health.bodyTextLength > 0, true, 'target click left a blank UI');
+    } finally {
+      await cdp.close();
+    }
+  } finally {
+    if (chrome !== undefined) {
+      chrome.kill('SIGTERM');
+      await waitForProcessExit(chrome);
+    }
+    await webServer?.close();
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+// This long-flow test records the current legacy GUI until the redesign replaces it;
+// Task 2/6 contracts own the future IA/copy, so these labels are not product requirements.
 test('web GUI completes init pull diff dry-run preview and confirmed apply', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-flow-'));
   const statePath = join(directory, 'state.json');
@@ -98,7 +169,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.send('Runtime.enable');
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForFunction('document.body?.innerText.includes("连接状态") === true');
+      await cdp.waitForFunction('document.body?.innerText.includes("连接状态") === true', 15000);
       await cdp.waitForFunction('document.scrollingElement !== null && document.scrollingElement.scrollHeight <= document.scrollingElement.clientHeight');
       await cdp.installFetchRecorder();
       await assertFixtureRootControlHidden(cdp);
@@ -740,8 +811,41 @@ class CdpPage {
     return this.evaluate<boolean>(source);
   }
 
+  async installRuntimeErrorRecorder(): Promise<boolean> {
+    const source = `(() => {
+      if (window.__agentcfgRuntimeErrorRecorderInstalled === true) {
+        return true;
+      }
+      const messages = [];
+      const stringify = (value) => {
+        if (typeof value === 'string') return value;
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      };
+      Object.defineProperty(window, '__agentcfgRuntimeErrors', { value: messages, configurable: true });
+      Object.defineProperty(window, '__agentcfgRuntimeErrorRecorderInstalled', { value: true, configurable: true });
+      window.addEventListener('error', (event) => messages.push(String(event.message ?? '')));
+      window.addEventListener('unhandledrejection', (event) => messages.push(stringify(event.reason)));
+      const originalConsoleError = console.error.bind(console);
+      console.error = (...args) => {
+        messages.push(args.map(stringify).join(' '));
+        originalConsoleError(...args);
+      };
+      return true;
+    })()`;
+    await this.send('Page.addScriptToEvaluateOnNewDocument', { source });
+    return this.evaluate<boolean>(source);
+  }
+
   recordedFetchBodies(): Promise<Array<{ url: string; body?: string }>> {
     return this.evaluate<Array<{ url: string; body?: string }>>(`window.__agentcfgFetchBodies ?? []`);
+  }
+
+  runtimeErrors(): Promise<string[]> {
+    return this.evaluate<string[]>('window.__agentcfgRuntimeErrors ?? []');
   }
 
   async waitForFunction(expression: string, timeoutMs = 5000): Promise<void> {
@@ -752,7 +856,8 @@ class CdpPage {
       }
       await delay(50);
     }
-    throw new Error(`Timed out waiting for browser condition: ${expression}`);
+    const bodyText = await this.evaluate<string>('document.body?.innerText.slice(0, 500) ?? ""');
+    throw new Error(`Timed out waiting for browser condition: ${expression}; body=${JSON.stringify(bodyText)}`);
   }
 
   waitForText(text: string, timeoutMs = 5000): Promise<void> {

@@ -7,7 +7,7 @@ import {
   usePlanStore,
   useRuntimeStore,
 } from '../../../web/src/stores';
-import type { ApplyPlanSummary, PlanApplyRuntimeResponse, RuntimeStateSummary } from '../../../web/src/api';
+import type { ApplyAgentResult, ApplyPlanSummary, PlanApplyRuntimeResponse, RuntimeStateSummary } from '../../../web/src/api';
 
 const INITIAL_PLAN_SLOT = usePlanStore.getState();
 const INITIAL_RUNTIME_SLOT = useRuntimeStore.getState();
@@ -90,6 +90,21 @@ test('selectTargetRequest carries the runtime statePath and the configPath overr
   reset();
 });
 
+test('target readiness is derivable from primitive targetMode while selectTargetRequest remains an object builder', () => {
+  reset();
+  useRuntimeStore.setState({ statePath: '/custom' });
+  usePlanStore.getState().setTargetMode('opencode');
+
+  const state = usePlanStore.getState();
+  const firstRequest = selectTargetRequest(state);
+  const secondRequest = selectTargetRequest(state);
+
+  assert.equal(state.targetMode !== '', true);
+  assert.deepEqual(firstRequest, secondRequest);
+  assert.notEqual(firstRequest, secondRequest, 'selectTargetRequest should not be used directly as a React/zustand hook selector');
+  reset();
+});
+
 test('selectIsPlanCurrent is true only when planKey matches the current selectPlanKey', () => {
   reset();
   usePlanStore.getState().setTargetMode('codex');
@@ -135,6 +150,50 @@ test('plan() stores response + key on success', async () => {
     assert.deepEqual(state.planResponse, fakeResponse);
     assert.notEqual(state.planKey, null);
     assert.equal(state.planKey, selectPlanKey(state));
+  } finally {
+    restore();
+    reset();
+  }
+});
+
+test('apply() posts the current selected target and clears confirmation on success', async () => {
+  reset();
+  useRuntimeStore.setState({ statePath: '/custom' });
+  usePlanStore.getState().setTargetMode('opencode');
+  usePlanStore.getState().setConfigPath('  /opt/opencode.jsonc  ');
+  usePlanStore.getState().setConfirmationText('APPLY');
+
+  const fakeResults: ApplyAgentResult[] = [
+    { agent: 'opencode', status: 'applied', changes: [], notices: [], backups: ['/tmp/backup'] },
+  ];
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const restore = stubFetchOnce(async (url, init) => {
+    requests.push({ url, body: JSON.parse(String(init?.body ?? '{}')) as unknown });
+    if (/\/api\/apply$/.test(url)) {
+      return jsonEnvelope({ results: fakeResults });
+    }
+    assert.match(url, /\/api\/state/);
+    return jsonEnvelope({ state: STATE_FIXTURE });
+  });
+
+  try {
+    const outcome = await usePlanStore.getState().apply();
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(requests, [
+      {
+        url: '/api/apply',
+        body: {
+          statePath: '/custom',
+          agent: 'opencode',
+          configPath: '/opt/opencode.jsonc',
+          confirm: 'APPLY',
+        },
+      },
+      { url: '/api/state?statePath=%2Fcustom', body: {} },
+    ]);
+    const state = usePlanStore.getState();
+    assert.deepEqual(state.applyResults, fakeResults);
+    assert.equal(state.confirmationText, '');
   } finally {
     restore();
     reset();
