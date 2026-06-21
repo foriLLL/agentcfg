@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { AGENTCFG_SCHEMA_DOCS, type AgentConfigSchemaDoc } from '../../../src/core/schema-docs';
-import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS } from '../../../src/core/schema';
+import { OH_MY_OPENAGENT_AGENT_NAMES, OH_MY_OPENAGENT_CATEGORY_NAMES, OH_MY_OPENAGENT_MODEL_VARIANTS, PROVIDER_PROTOCOLS } from '../../../src/core/schema';
 import type { EditableAgentConfig, OhMyOpenAgentModelAssignment, RuntimeStateSummary } from '../api';
 import { BUTTONS, gistConnectionBadge } from '../strings';
 import { StatusBadge } from '../widgets';
@@ -100,17 +100,7 @@ export function RemoteConfigPanel(props: RemoteConfigPanelProps) {
         </div>
         <div className="remote-command-panel" aria-label="远端配置操作">
           <button
-            className="remote-command-card"
-            type="button"
-            onClick={props.onLoadRemoteConfig}
-            disabled={props.isLoadingRemote || props.isSavingRemote}
-          >
-            <span>Gist → 表单</span>
-            <strong>{props.isLoadingRemote ? BUTTONS.loadRemoteRunning : BUTTONS.loadRemote}</strong>
-            <small>只更新当前页面，不写本地 Agent。</small>
-          </button>
-          <button
-            className="remote-command-card remote-command-card--primary"
+            className="primary-action"
             type={props.remoteConfigView === 'editor' ? 'submit' : 'button'}
             form={props.remoteConfigView === 'editor' ? 'remote-config-form' : undefined}
             onClick={
@@ -122,15 +112,19 @@ export function RemoteConfigPanel(props: RemoteConfigPanelProps) {
             }
             disabled={props.isSavingRemote}
           >
-            <span>表单 → Gist</span>
-            <strong>{props.isSavingRemote ? BUTTONS.saveRemoteRunning : BUTTONS.saveRemote}</strong>
-            <small>把当前表单写入 agentcfg.yaml。</small>
+            {props.isSavingRemote ? BUTTONS.saveRemoteRunning : '保存配置'}
           </button>
-          <button className="remote-command-card" type="button" onClick={props.onPull} disabled={props.isBusy}>
-            <span>Gist → 本地缓存</span>
-            <strong>{props.isPulling ? BUTTONS.pullCacheRunning : BUTTONS.pullCache}</strong>
-            <small>更新 dry-run 和应用使用的本地基线。</small>
-          </button>
+          <details className="remote-command-advanced">
+            <summary>高级远端操作</summary>
+            <div>
+              <button className="secondary-action secondary-action--compact" type="button" onClick={props.onLoadRemoteConfig} disabled={props.isLoadingRemote || props.isSavingRemote}>
+                {props.isLoadingRemote ? BUTTONS.loadRemoteRunning : BUTTONS.loadRemote}
+              </button>
+              <button className="secondary-action secondary-action--compact" type="button" onClick={props.onPull} disabled={props.isBusy}>
+                {props.isPulling ? BUTTONS.pullCacheRunning : BUTTONS.pullCache}
+              </button>
+            </div>
+          </details>
         </div>
         <div className="config-editor-meta" role="status" aria-live="polite">
           <span>{props.remoteStatus}</span>
@@ -211,6 +205,20 @@ export function RemoteConfigPanel(props: RemoteConfigPanelProps) {
                   提供商 ID
                   <input id="remote-provider" value={props.selectedRemoteProviderId} onChange={(event) => props.onRemoteProviderIdChange(event.target.value)} autoComplete="off" disabled={props.isSavingRemote} />
                 </label>
+                <label htmlFor="remote-provider-protocol">
+                  API 协议
+                  <select
+                    id="remote-provider-protocol"
+                    value={props.selectedRemoteProvider.protocol ?? ''}
+                    onChange={(event) => props.onUpdateRemoteProvider((provider) => withOptionalString(provider, 'protocol', event.target.value))}
+                    disabled={props.isSavingRemote}
+                  >
+                    <option value="">未指定（兼容旧配置）</option>
+                    {PROVIDER_PROTOCOLS.map((protocol) => (
+                      <option value={protocol} key={protocol}>{protocol}</option>
+                    ))}
+                  </select>
+                </label>
                 <label htmlFor="remote-base-url">
                   Base URL
                   <input
@@ -290,15 +298,25 @@ export function RemoteConfigPanel(props: RemoteConfigPanelProps) {
                   <input id="remote-model" value={props.selectedRemoteModelId} onChange={(event) => props.onRemoteModelIdChange(event.target.value)} autoComplete="off" disabled={props.isSavingRemote} />
                 </label>
                 <label htmlFor="remote-model-variant">
-                  variant 元数据
+                  variant / 思考深度
                   <input
                     id="remote-model-variant"
                     value={props.selectedRemoteModel.variant ?? ''}
                     onChange={(event) => props.onUpdateRemoteModel((model) => withOptionalString(model, 'variant', event.target.value))}
-                    placeholder="chat（可选）"
+                    placeholder="chat / thinking-high（可选）"
                     autoComplete="off"
                     disabled={props.isSavingRemote}
                   />
+                </label>
+                <label className="remote-config-checkbox" htmlFor="remote-model-supports-vision">
+                  <input
+                    id="remote-model-supports-vision"
+                    type="checkbox"
+                    checked={props.selectedRemoteModel.supportsVision === true}
+                    onChange={(event) => props.onUpdateRemoteModel((model) => withOptionalBoolean(model, 'supportsVision', event.target.checked))}
+                    disabled={props.isSavingRemote}
+                  />
+                  <span>支持图片 / Vision</span>
                 </label>
                 <label htmlFor="remote-model-context-window">
                   Limit Context（上下文窗口）
@@ -642,10 +660,24 @@ function withOptionalNumber<T extends Record<string, unknown>, K extends keyof T
   return { ...record, [key]: Number(value) };
 }
 
+function withOptionalBoolean<T extends Record<string, unknown>, K extends keyof T>(
+  record: T,
+  key: K,
+  checked: boolean,
+): T {
+  if (!checked) {
+    const nextRecord = { ...record };
+    delete nextRecord[key];
+    return nextRecord;
+  }
+
+  return { ...record, [key]: true };
+}
+
 function formatOptionalNumber(value: number | undefined): string {
   return value === undefined ? '' : String(value);
 }
 
 function modelMetadataCount(model: EditableAgentConfig['providers'][string]['models'][string]): number {
-  return [model.variant, model.contextWindow, model.contextTokens, model.maxTokens].filter((value) => value !== undefined).length;
+  return [model.variant, model.contextWindow, model.contextTokens, model.maxTokens, model.supportsVision].filter((value) => value !== undefined).length;
 }
