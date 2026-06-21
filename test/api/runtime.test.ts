@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -87,6 +87,55 @@ const DISCOVERY_CONFIG = {
       },
       models: {
         'gpt-4.1-mini': {},
+      },
+    },
+  },
+} as const;
+
+
+
+const PROTOCOL_CATALOG_CONFIG = {
+  schemaVersion: 1,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      protocol: 'openai-compatible',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      modelDiscovery: {
+        path: '/models',
+      },
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'thinking-medium',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+          supportsVision: true,
+        },
+      },
+    },
+    anthropic: {
+      protocol: 'anthropic-compatible',
+      baseURL: 'https://api.anthropic.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: 'sk-api-anthropic',
+      },
+      models: {
+        'claude-3-5-sonnet': {
+          variant: 'thinking-high',
+          contextWindow: 200000,
+          contextTokens: 180000,
+          maxTokens: 8192,
+          supportsVision: true,
+        },
       },
     },
   },
@@ -343,6 +392,136 @@ test('remote operations can remember, reuse, and clear a local GitHub token with
       { url: '/remembered-gist-id', method: 'GET', authorization: 'Bearer remember-token' },
     ]);
   } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+
+
+test('one-step save configuration validates protocol catalog, writes Gist, and refreshes cache baseline', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-one-step-save-'));
+  const statePath = join(directory, 'state.json');
+  const server = await startFakeGistServer({
+    status: 201,
+    etag: 'W/"one-step-etag"',
+    body: { id: 'one-step-gist-id', ...buildGistBody('', 'one-step-revision') },
+  });
+
+  try {
+    const saved = await saveRemoteConfigRuntime(
+      { statePath, githubToken: 'one-step-token', config: PROTOCOL_CATALOG_CONFIG },
+      { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+    );
+    const openaiProvider = saved.config.providers.openai as unknown as Record<string, unknown>;
+    const anthropicProvider = saved.config.providers.anthropic as unknown as Record<string, unknown>;
+    const openaiModel = saved.config.providers.openai.models['gpt-4.1-mini'] as unknown as Record<string, unknown>;
+    const createBody = JSON.parse(server.requests[0]?.body ?? '{}');
+    const savedYaml = createBody.files['agentcfg.yaml'].content as string;
+
+    assert.equal(openaiProvider.protocol, 'openai-compatible', 'saved config should preserve the OpenAI-compatible provider protocol');
+    assert.equal(anthropicProvider.protocol, 'anthropic-compatible', 'saved config should preserve the Anthropic-compatible provider protocol');
+    assert.deepEqual(
+      {
+        contextWindow: openaiModel.contextWindow,
+        contextTokens: openaiModel.contextTokens,
+        maxTokens: openaiModel.maxTokens,
+        variant: openaiModel.variant,
+        supportsVision: openaiModel.supportsVision,
+      },
+      {
+        contextWindow: 1047576,
+        contextTokens: 1047576,
+        maxTokens: 32768,
+        variant: 'thinking-medium',
+        supportsVision: true,
+      },
+      'saved model metadata should include context window, context tokens, output tokens, thinking variant, and image/vision support',
+    );
+    assert.match(savedYaml, /protocol: openai-compatible/);
+    assert.match(savedYaml, /protocol: anthropic-compatible/);
+    assert.match(savedYaml, /supportsVision: true/);
+    assert.equal(saved.state.gist.id, 'one-step-gist-id');
+    assert.equal(saved.remote?.revision, 'one-step-revision');
+    assert.equal(saved.remote?.etag, 'W/"one-step-etag"');
+    assert.deepEqual(saved.state.cache.config, saved.config, 'one-step save should refresh the local cache with the saved config');
+    assert.deepEqual(saved.state.conflict.baseConfig, saved.config, 'one-step save should refresh the local baseline with the saved config');
+    assert.equal(saved.state.conflict.baseRevision, 'one-step-revision');
+    assert.equal(saved.state.conflict.baseETag, 'W/"one-step-etag"');
+    assert.equal(JSON.stringify(saved).includes('one-step-token'), false);
+    assert.deepEqual(server.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
+      { url: '/', method: 'POST', authorization: 'Bearer one-step-token' },
+    ]);
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('one-step save configuration rejects unsupported provider protocol before writing Gist', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-one-step-protocol-'));
+  const statePath = join(directory, 'state.json');
+  const server = await startFakeGistServer({ status: 201, body: { id: 'unused-gist-id', ...buildGistBody('', 'unused-revision') } });
+  const unsupportedProtocolConfig = {
+    ...PROTOCOL_CATALOG_CONFIG,
+    providers: {
+      ...PROTOCOL_CATALOG_CONFIG.providers,
+      openai: {
+        ...PROTOCOL_CATALOG_CONFIG.providers.openai,
+        protocol: 'browser-compatible',
+      },
+    },
+  } as const;
+
+  try {
+    await assert.rejects(
+      saveRemoteConfigRuntime(
+        { statePath, githubToken: 'one-step-token', config: unsupportedProtocolConfig },
+        { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+      ),
+      (error: unknown) =>
+        error instanceof RuntimeApiError &&
+        error.code === 'validation-error' &&
+        /providers\.openai\.protocol/.test(error.message) &&
+        /openai-compatible/.test(error.message) &&
+        /anthropic-compatible/.test(error.message),
+    );
+    assert.equal(server.requests.length, 0, 'unsupported provider protocols should fail validation before any Gist write');
+  } finally {
+    await server.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('one-step save configuration reports cache refresh failure after remote write', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-one-step-cache-failure-'));
+  const statePath = join(directory, 'state.json');
+  const server = await startFakeGistServer({
+    status: 201,
+    etag: 'W/"cache-failure-etag"',
+    body: { id: 'cache-failure-gist-id', ...buildGistBody('', 'cache-failure-revision') },
+  });
+
+  try {
+    await writeStateWithConfig(statePath, CANONICAL_CONFIG);
+    await chmod(directory, 0o500);
+    await assert.rejects(
+      saveRemoteConfigRuntime(
+        { statePath, githubToken: 'one-step-token', config: PROTOCOL_CATALOG_CONFIG },
+        { gistOptions: { apiBaseUrl: server.apiBaseUrl, env: {} } },
+      ),
+      (error: unknown) =>
+        error instanceof RuntimeApiError &&
+        (error as { code?: string }).code === 'cache-refresh-error' &&
+        /Remote config was saved, but local cache refresh failed/.test(error.message) &&
+        JSON.stringify((error as { details?: unknown }).details).includes('cache-failure-gist-id') &&
+        !error.message.includes('one-step-token'),
+    );
+    assert.deepEqual(server.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
+      { url: '/', method: 'POST', authorization: 'Bearer one-step-token' },
+    ]);
+  } finally {
+    await chmod(directory, 0o700).catch(() => undefined);
     await server.close();
     await rm(directory, { force: true, recursive: true });
   }

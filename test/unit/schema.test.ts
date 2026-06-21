@@ -22,6 +22,45 @@ const INVALID_DISCOVERY_PATH_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-d
 const INVALID_EMPTY_API_KEY_FIXTURE = resolve(CANONICAL_FIXTURE_DIR, 'invalid-empty-api-key.yaml');
 const CJK_COPY_PATTERN = /[\u3400-\u9fff]/u;
 
+
+
+const PROTOCOL_CATALOG_YAML = [
+  'schemaVersion: 1',
+  'defaults:',
+  '  provider: openai',
+  '  model: gpt-4.1-mini',
+  'providers:',
+  '  openai:',
+  '    protocol: openai-compatible',
+  '    baseURL: https://api.openai.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  '      value: sk-test-visible-openai',
+  '    modelDiscovery:',
+  '      path: /models',
+  '    models:',
+  '      gpt-4.1-mini:',
+  '        variant: thinking-medium',
+  '        contextWindow: 1047576',
+  '        contextTokens: 1047576',
+  '        maxTokens: 32768',
+  '        supportsVision: true',
+  '  anthropic:',
+  '    protocol: anthropic-compatible',
+  '    baseURL: https://api.anthropic.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  '      value: sk-ant-visible-anthropic',
+  '    models:',
+  '      claude-3-5-sonnet-latest:',
+  '        variant: thinking-high',
+  '        contextWindow: 200000',
+  '        contextTokens: 180000',
+  '        maxTokens: 8192',
+  '        supportsVision: true',
+  '',
+].join('\n');
+
 const EXPECTED_CANONICAL_CONFIG = {
   schemaVersion: 1,
   defaults: {
@@ -91,6 +130,76 @@ test('serializes the canonical multi-provider shape without masking provider API
   assert.deepEqual(reparsed, EXPECTED_CANONICAL_CONFIG);
   assert.match(serialized, /sk-test-visible-openai/);
   assert.match(serialized, /sk-ant-visible-anthropic/);
+});
+
+
+
+test('provider catalog schema preserves OpenAI-compatible and Anthropic-compatible protocol capabilities', () => {
+  const config = parseCanonicalAgentConfig(PROTOCOL_CATALOG_YAML);
+  const openaiProvider = config.providers.openai as unknown as Record<string, unknown>;
+  const anthropicProvider = config.providers.anthropic as unknown as Record<string, unknown>;
+  const openaiModel = config.providers.openai.models['gpt-4.1-mini'] as unknown as Record<string, unknown>;
+  const anthropicModel = config.providers.anthropic.models['claude-3-5-sonnet-latest'] as unknown as Record<string, unknown>;
+
+  assert.equal(openaiProvider.protocol, 'openai-compatible', 'OpenAI-compatible provider protocol should be preserved in the catalog');
+  assert.equal(anthropicProvider.protocol, 'anthropic-compatible', 'Anthropic-compatible provider protocol should be preserved in the catalog');
+  assert.deepEqual(
+    {
+      contextWindow: openaiModel.contextWindow,
+      contextTokens: openaiModel.contextTokens,
+      maxTokens: openaiModel.maxTokens,
+      variant: openaiModel.variant,
+      supportsVision: openaiModel.supportsVision,
+    },
+    {
+      contextWindow: 1047576,
+      contextTokens: 1047576,
+      maxTokens: 32768,
+      variant: 'thinking-medium',
+      supportsVision: true,
+    },
+    'OpenAI-compatible model should preserve context, output, thinking variant, and image/vision metadata',
+  );
+  assert.deepEqual(
+    {
+      contextWindow: anthropicModel.contextWindow,
+      contextTokens: anthropicModel.contextTokens,
+      maxTokens: anthropicModel.maxTokens,
+      variant: anthropicModel.variant,
+      supportsVision: anthropicModel.supportsVision,
+    },
+    {
+      contextWindow: 200000,
+      contextTokens: 180000,
+      maxTokens: 8192,
+      variant: 'thinking-high',
+      supportsVision: true,
+    },
+    'Anthropic-compatible model should preserve context, output, thinking variant, and image/vision metadata',
+  );
+});
+
+test('provider catalog schema rejects unsupported provider protocols and invalid vision metadata', () => {
+  assert.throws(
+    () => parseCanonicalAgentConfig(PROTOCOL_CATALOG_YAML.replace('protocol: openai-compatible', 'protocol: browser-compatible')),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /providers\.openai\.protocol/);
+      assert.match(error.message, /openai-compatible/);
+      assert.match(error.message, /anthropic-compatible/);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => parseCanonicalAgentConfig(PROTOCOL_CATALOG_YAML.replace('supportsVision: true', 'supportsVision: maybe')),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /providers\.openai\.models\.gpt-4\.1-mini\.supportsVision/);
+      assert.match(error.message, /boolean/);
+      return true;
+    },
+  );
 });
 
 test('rejects unsupported schema versions before native config parsing', () => {

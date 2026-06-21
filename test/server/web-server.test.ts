@@ -71,6 +71,102 @@ const DISCOVERY_CONFIG = {
   },
 } as const;
 
+
+
+const PROTOCOL_CATALOG_CONFIG = {
+  schemaVersion: 1,
+  defaults: {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+  },
+  providers: {
+    openai: {
+      protocol: 'openai-compatible',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      modelDiscovery: {
+        path: '/models',
+      },
+      models: {
+        'gpt-4.1-mini': {
+          variant: 'thinking-medium',
+          contextWindow: 1047576,
+          contextTokens: 1047576,
+          maxTokens: 32768,
+          supportsVision: true,
+        },
+      },
+    },
+    anthropic: {
+      protocol: 'anthropic-compatible',
+      baseURL: 'https://api.anthropic.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: 'server-anthropic-secret',
+      },
+      models: {
+        'claude-3-5-sonnet': {
+          variant: 'thinking-high',
+          contextWindow: 200000,
+          contextTokens: 180000,
+          maxTokens: 8192,
+          supportsVision: true,
+        },
+      },
+    },
+  },
+} as const;
+
+
+
+test('web server exposes one-step configuration save endpoint that refreshes cache baseline', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-one-step-save-'));
+  const statePath = join(directory, 'state.json');
+  const gistServer = await startFakeGistServer({
+    status: 201,
+    etag: 'W/"server-one-step-etag"',
+    body: { id: 'server-one-step-gist-id', ...buildGistBody('', 'server-one-step-revision') },
+  });
+  const server = await startWebServer({
+    host: '127.0.0.1',
+    port: 0,
+    statePath,
+    assetsDir: join(directory, 'missing-assets'),
+    env: { ...process.env, AGENTCFG_GIST_API_BASE_URL: gistServer.apiBaseUrl },
+  });
+
+  try {
+    const saved = await requestJson(server.url, '/api/configuration/save', {
+      githubToken: 'server-one-step-token',
+      config: PROTOCOL_CATALOG_CONFIG,
+    });
+    const savedJson = JSON.stringify(saved.body);
+
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.ok, true);
+    if (saved.body.ok !== true) throw new Error('Expected one-step save success');
+    assert.equal(savedJson.includes('server-one-step-token'), false);
+    assert.equal(saved.body.data.state.gist.id, 'server-one-step-gist-id');
+    assert.equal(saved.body.data.remote.revision, 'server-one-step-revision');
+    assert.equal(saved.body.data.remote.etag, 'W/"server-one-step-etag"');
+    assert.deepEqual(saved.body.data.state.cache.config, saved.body.data.config);
+    assert.deepEqual(saved.body.data.state.conflict.baseConfig, saved.body.data.config);
+    assert.equal(saved.body.data.config.providers.openai.protocol, 'openai-compatible');
+    assert.equal(saved.body.data.config.providers.anthropic.protocol, 'anthropic-compatible');
+    assert.equal(saved.body.data.config.providers.openai.models['gpt-4.1-mini'].supportsVision, true);
+    assert.deepEqual(gistServer.requests.map(({ url, method, authorization }) => ({ url, method, authorization })), [
+      { url: '/', method: 'POST', authorization: 'Bearer server-one-step-token' },
+    ]);
+  } finally {
+    await server.close();
+    await gistServer.close();
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('web server exposes JSON runtime endpoints with visible provider API keys', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-server-api-'));
   const statePath = join(directory, 'state.json');
