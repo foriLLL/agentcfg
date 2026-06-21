@@ -87,7 +87,7 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
       await cdp.send('Page.navigate', { url: webServer.url });
       await cdp.waitForText('配置同步工作流', 15000);
 
-      assert.equal(await cdp.clickButton('同步到本地'), true, 'sync tab was not clickable');
+      assert.equal(await cdp.clickButton('同步'), true, 'sync tab was not clickable');
       await cdp.waitForText('请选择一个目标');
       assert.equal(await cdp.clickSelector('input[name="target-mode"][value="opencode"]'), true, 'OpenCode target was not clickable');
       await cdp.waitForFunction(`(() => {
@@ -241,8 +241,8 @@ test('Task 5 security keeps saved GitHub Token masked and allows intentional qui
       await cdp.installRuntimeErrorRecorder();
       await cdp.installClipboardRecorder();
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForText('配置同步工作流', 15000);
-      await cdp.clickButton('远端真源');
+      await cdp.waitForText('工作台', 15000);
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('GitHub Token 已以明文保存到本机 secrets.json');
       await cdp.waitForText('远端配置已自动刷新');
       await assertSavedGitHubTokenLocked(cdp, 'Task 5 saved GitHub Token input');
@@ -307,7 +307,7 @@ test('Task 5 RED contract masks cached API key in dashboard and status surfaces 
       await cdp.send('Page.enable');
       await cdp.send('Runtime.enable');
       await cdp.send('Page.navigate', { url: webServer.url });
-      await cdp.waitForText('配置同步工作流', 15000);
+      await cdp.waitForText('工作台', 15000);
 
       const highLevelSurfaces = await cdp.evaluate<{ overviewText: string; statusRailText: string; statusDetailsText: string }>(`(() => ({
         overviewText: document.querySelector('#overview-panel')?.textContent ?? '',
@@ -379,7 +379,7 @@ test('Task 12 advanced disclosures are collapsed by default and expand on demand
       await cdp.send('Runtime.enable');
       await cdp.send('Page.navigate', { url: webServer.url });
       await cdp.waitForText('配置同步工作流', 15000);
-      await cdp.clickButton('配置');
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForFunction('document.querySelector("#state-path") instanceof HTMLInputElement');
 
       const initialAdvancedState = await cdp.evaluate<{ setupOpen: boolean; remoteOpen: boolean; syncPanelCount: number }>(`(() => {
@@ -402,12 +402,12 @@ test('Task 12 advanced disclosures are collapsed by default and expand on demand
       await cdp.waitForFunction('document.querySelector("#state-path") instanceof HTMLElement && document.querySelector("#state-path")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#state-path")?.closest("details")?.open === true');
       await cdp.setInputValue('#state-path', statePath);
 
-      await cdp.clickButton('远端真源');
+      await cdp.clickSelector('#remote-tab');
       await cdp.evaluate('(() => { const field = document.querySelector("#remote-provider"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
       await cdp.waitForFunction('document.querySelector("#remote-provider") instanceof HTMLElement && document.querySelector("#remote-provider")?.closest("details") instanceof HTMLDetailsElement && document.querySelector("#remote-provider")?.closest("details")?.open === true');
       await assertSelectorVisible(cdp, '#remote-provider');
 
-      await cdp.clickButton('同步');
+      await cdp.clickSelector('#sync-tab');
       const syncAdvancedState = await cdp.evaluate<boolean[]>(`(() => Array.from(document.querySelectorAll('.sync-targets-panel__advanced')).map((panel) => panel instanceof HTMLDetailsElement && panel.open))()`);
       assert.deepEqual(syncAdvancedState, [false, false, false]);
       await cdp.evaluate('(() => { const field = document.querySelector("#config-path-editor"); const details = field instanceof HTMLElement ? field.closest("details") : null; if (details instanceof HTMLDetailsElement) { details.open = true; } })()');
@@ -502,26 +502,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.installFetchRecorder();
       await assertFixtureRootControlHidden(cdp);
       await assertNoDesktopFrame(cdp);
-      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 638, deviceScaleFactor: 1, mobile: false });
-      await cdp.waitForFunction(`(() => {
-        const appShell = document.querySelector('.app-shell');
-        const header = document.querySelector('.app-header');
-        const tabViewport = document.querySelector('.tab-viewport');
-        const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
-        if (!(appShell instanceof HTMLElement) || !(header instanceof HTMLElement) || !(tabViewport instanceof HTMLElement) || tabButtons.length === 0) {
-          return false;
-        }
-        const appShellRect = appShell.getBoundingClientRect();
-        const headerRect = header.getBoundingClientRect();
-        const shellIsFlush = Math.abs(appShellRect.left) <= 1 && Math.abs(window.innerWidth - appShellRect.right) <= 1 && Math.abs(appShellRect.top) <= 1;
-        const tabsStaySingleLine = tabButtons.every((button) => button instanceof HTMLElement && window.getComputedStyle(button).whiteSpace === 'nowrap');
-        const headerUsesDesktopColumns = window.getComputedStyle(header).gridTemplateColumns.split(' ').filter(Boolean).length === 3;
-        const viewportOwnsScroll = ['auto', 'scroll'].includes(window.getComputedStyle(tabViewport).overflowY);
-        return shellIsFlush && tabsStaySingleLine && headerUsesDesktopColumns && headerRect.height < 120 && viewportOwnsScroll;
-      })()`);
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
       await assertDomHasNoGitHubToken(cdp, 'initial DOM');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'initial browser storage');
+      await cdp.clickSelector("#remote-tab");
+      await cdp.waitForFunction("document.querySelector(\".setup-form\") !== null");
 
       await cdp.setInputValue('#github-token', GITHUB_TOKEN);
       await cdp.clickSelector('.setup-form__advanced > summary');
@@ -538,7 +523,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
         rememberGitHubToken: true,
       });
 
-      await cdp.waitForText('远端真源');
+      await cdp.waitForText('配置');
       await cdp.clickSelector('.setup-form__advanced > summary');
       await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
       await assertButtonVisibleBeforeScroll(cdp, '#remote-panel', '读取到表单');
@@ -731,7 +716,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assert.equal(await cdp.inputValue('#github-token'), 'replacement-token-draft', 'GitHub Token replacement draft was not editable');
       await cdp.clickButton('取消编辑');
       await assertSavedGitHubTokenLocked(cdp, 'cancelled GitHub Token edit input');
-      await cdp.clickButton('远端真源');
+      await cdp.clickSelector('#remote-tab');
       await cdp.clickButton('读取到表单');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the loaded value after load');
@@ -756,7 +741,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-reload DOM');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-reload browser storage');
       assert.equal((await firstRecordedFetchUrl(cdp, '/api/state')), '/api/state');
-      await cdp.clickButton('远端真源');
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after reload');
       await assertDomHasNoGitHubToken(cdp, 'post-reload-remote-auto-refresh DOM');
@@ -786,7 +771,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await assertDomHasNoGitHubToken(cdp, 'post-port-change DOM');
       assert.equal(await firstRecordedFetchUrl(cdp, '/api/state'), '/api/state');
       await assertBrowserStorageHasNoSecretsOrStatePath(cdp, statePath, 'post-port-change browser storage');
-      await cdp.clickButton('远端真源');
+      await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('远端配置已自动刷新');
       assert.equal(await cdp.inputValue('#remote-api-key'), CACHED_SECRET, 'API key input did not show the auto-refreshed value after port-change navigation');
       assert.deepEqual(await cdp.evaluate(`(() => {
@@ -839,7 +824,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       const stateAfterTokenClear = await readFile(statePath, 'utf8');
       assert.equal(stateAfterTokenClear.includes(GITHUB_TOKEN), false, 'state file exposed the GitHub Token after token clear');
 
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
       await cdp.waitForText('OpenCode');
       await cdp.waitForText('Claude Code');
       await cdp.waitForFunction(`(() => {
@@ -920,7 +905,7 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-local-apply-secret'));
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
 
       await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)');
       await cdp.waitForText('预览完成');
@@ -939,11 +924,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       assertNoGitHubToken(planApi, 'dry-run API response');
 
       await cdp.setInputValue('#apply-confirmation', 'APPLY');
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
       await cdp.setTextareaValue('#config-editor', opencodeNativeJson('gui-editor-after-plan-secret'));
       await cdp.clickButton('保存配置');
       await cdp.waitForText('配置已保存');
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
       await cdp.waitForText('需要重新预览');
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'config save did not invalidate stale dry-run plan');
 
@@ -973,11 +958,11 @@ test('web GUI completes init pull diff dry-run preview and confirmed apply', asy
       await cdp.waitForText('预览完成');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, allAgents: true, configPath: allTargetsDirectory });
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'all-agent apply unlocked before confirmation');
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
       await assertSelectorVisible(cdp, '#local-apply-confirmation');
       assert.equal(await cdp.inputDisabled('#local-apply-confirmation'), true, 'local confirmation accepted an all-agent dry-run plan');
       assert.equal(await cdp.isButtonDisabledInPanel('#config-panel', '应用变更'), true, 'local apply unlocked for an all-agent dry-run plan');
-      await cdp.clickButton('同步到本地');
+      await cdp.clickSelector('#sync-tab');
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'execute apply unlocked without direct confirmation after visiting local config');
 
       const codexDiffApi = JSON.parse(await postJsonText(webServer.url, '/api/diff', { statePath, agent: 'codex', configPath: codexNativePath })) as CodexNoticeApiEnvelope;
@@ -1867,7 +1852,7 @@ async function assertConfigEditorLayout(cdp: CdpPage, label = 'desktop', expectT
       hiddenEditorAncestors,
       textareaDetails: JSON.stringify({
         label: ${JSON.stringify(label)},
-        appShell: rectObject(document.querySelector('.app-shell')),
+        appShell: rectObject(document.querySelector('.command-shell')),
         tabViewport: rectObject(tabViewport),
         dashboard: rectObject(dashboard),
         card: rectObject(card),

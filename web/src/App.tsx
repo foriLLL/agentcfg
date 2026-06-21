@@ -178,9 +178,10 @@ function App() {
     requestStatePath,
     onState: commitRuntimeState,
   });
+  const isFirstRunUser = isFirstRun({ runtimeState, status: commandCenterStatus, isPlanCurrent, canReview, applyResults });
   const workflowSteps = useMemo(
     () =>
-      isFirstRun({ runtimeState, status: commandCenterStatus, isPlanCurrent, canReview, applyResults })
+      isFirstRunUser
         ? buildOnboardingWorkflow({
             runtimeState,
             status: commandCenterStatus,
@@ -195,7 +196,7 @@ function App() {
             canReview,
             applyResults,
           }),
-    [applyResults, canReview, commandCenterStatus, isPlanCurrent, runtimeState],
+    [applyResults, canReview, commandCenterStatus, isFirstRunUser, isPlanCurrent, runtimeState],
   );
 
   useEffect(() => {
@@ -499,7 +500,14 @@ function App() {
         <NoticeToast notice={notice} remoteAccessWarning={remoteAccessWarning} onDismiss={() => setNotice(null)} />
         <section className="tab-viewport">
           {activeTab === 'overview' && (
-            <WorkflowOverview steps={workflowSteps} onNavigate={setActiveTab} onRunDryRun={handlePlan} />
+            <WorkflowOverview
+              isFirstRunUser={isFirstRunUser}
+              runtimeState={runtimeState}
+              configAvailability={configAvailability}
+              steps={workflowSteps}
+              onNavigate={setActiveTab}
+              onRunDryRun={handlePlan}
+            />
           )}
           {activeTab === 'remote' && (
             <RemoteSourcePanel
