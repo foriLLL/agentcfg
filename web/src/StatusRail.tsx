@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import type { AgentConfig, AgentName, ConfigAvailabilityEntry, RuntimeStateSummary } from './api';
+import type { AgentConfig, ConfigAvailabilityEntry, RuntimeStateSummary } from './api';
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
-import { AgentConfigIcon } from './AgentConfigIcon';
-import { agentLabel, formatDate } from './view-model';
+import { formatDate } from './view-model';
 import { maskApiKey } from './utils';
 import {
   cacheReadinessBadge,
@@ -12,13 +11,14 @@ import {
   syncServiceBadge,
 } from './strings';
 
-type StatusRailProps = {
+export type StatusRailProps = {
   readonly runtimeState: RuntimeStateSummary | null;
   readonly commandStatus: CommandCenterStatusSnapshot;
   readonly configAvailability: readonly ConfigAvailabilityEntry[];
+  readonly detailsId?: string;
 };
 
-export function StatusRail({ commandStatus, configAvailability, runtimeState }: StatusRailProps) {
+export function StatusRail({ commandStatus, configAvailability, detailsId = 'status-details', runtimeState }: StatusRailProps) {
   const availableAgents = configAvailability.filter((entry) => entry.available).length;
   const gistBadge = gistConnectionBadge(runtimeState);
   const cacheBadge = cacheReadinessBadge(runtimeState);
@@ -30,6 +30,7 @@ export function StatusRail({ commandStatus, configAvailability, runtimeState }: 
         <span className={`status-badge status-badge--${gistBadge.tone}`}>{gistBadge.label}</span>
         <span className={`status-badge status-badge--${cacheBadge.tone}`}>{cacheBadge.label}</span>
         <span className="status-badge status-badge--ready">{availableAgents} Agent 可用</span>
+        <span className={`status-badge status-badge--${serviceBadge.tone}`}>{serviceBadge.label}</span>
         {runtimeState?.autoSync?.enabled && (
           <span className="status-badge status-badge--ready">自动同步开</span>
         )}
@@ -40,21 +41,22 @@ export function StatusRail({ commandStatus, configAvailability, runtimeState }: 
       )}
 
       <div className="status-drawer__details">
-        <RailDetails runtimeState={runtimeState} commandStatus={commandStatus} configAvailability={configAvailability} />
+        <RailDetails runtimeState={runtimeState} commandStatus={commandStatus} configAvailability={configAvailability} detailsId={detailsId} />
       </div>
     </div>
   );
 }
 
-function RailDetails({ runtimeState, commandStatus, configAvailability }: StatusRailProps) {
+function RailDetails({ runtimeState, commandStatus, configAvailability, detailsId = 'status-details' }: StatusRailProps) {
   const gistBadge = gistConnectionBadge(runtimeState);
   const cacheBadge = cacheReadinessBadge(runtimeState);
   const remoteBadge = remoteRevisionBadge(runtimeState);
   const conflictBadge = conflictBaselineBadge(runtimeState);
   const serviceBadge = syncServiceBadge(commandStatus.service?.installed);
+  const availableAgentCount = configAvailability.filter((entry) => entry.available).length;
 
   return (
-    <details className="rail-card rail-card--collapsible" id="status-details">
+    <details className="rail-card rail-card--collapsible" id={detailsId}>
       <summary>
         <span>详细元数据</span>
         <small>Gist 来源、远端版本、缓存配置与基线</small>
@@ -70,6 +72,7 @@ function RailDetails({ runtimeState, commandStatus, configAvailability }: Status
           <Detail label="Gist ID" value={runtimeState?.gist.id ?? '未设置'} />
           <Detail label="缓存状态" value={cacheBadge.label} />
           <Detail label="缓存更新时间" value={formatDate(runtimeState?.cache.updatedAt)} />
+          <Detail label="Agent 可用性" value={`${availableAgentCount}/${configAvailability.length} 可用`} />
         </RailDetailGroup>
 
         <RailDetailGroup
@@ -176,24 +179,5 @@ function Detail({ label, value }: { readonly label: string; readonly value: stri
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
-  );
-}
-
-function RailAgentAvailability({ entries }: { readonly entries: readonly ConfigAvailabilityEntry[] }) {
-  if (entries.length === 0) {
-    return null;
-  }
-  return (
-    <ul className="rail-agent-availability" aria-label="本地 Agent 可用性">
-      {entries.map((entry) => (
-        <li
-          key={entry.agent}
-          className={`rail-agent-availability__item rail-agent-availability__item--${entry.available ? 'available' : 'missing'}`}
-          title={`${agentLabel(entry.agent as AgentName)}：${entry.available ? '已检测到' : '未检测到'}`}
-        >
-          <AgentConfigIcon agent={entry.agent as AgentName} />
-        </li>
-      ))}
-    </ul>
   );
 }

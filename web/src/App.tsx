@@ -22,6 +22,9 @@ import {
 import { NOTICES } from './strings';
 import { RemoteSourcePanel } from './panels/RemoteSourcePanel';
 import { RulesSkillsPanel } from './panels/RulesSkillsPanel';
+import { ConnectionPanel } from './panels/ConnectionPanel';
+import { LocalConfigPanel } from './panels/LocalConfigPanel';
+import { SettingsPanel } from './panels/SettingsPanel';
 import { SyncTargetsPanel } from './panels/SyncTargetsPanel';
 import { type OhMyOpenAgentAssignmentKind } from './panels/RemoteConfigPanel';
 import {
@@ -474,11 +477,84 @@ function App() {
     </section>
   );
 
+  const connectionPanelProps = {
+    runtimeState,
+    loadErrorNode,
+    githubToken,
+    githubTokenInputValue,
+    githubTokenPlaceholder: isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token',
+    onGithubTokenChange: setGithubToken,
+    gistId,
+    onGistIdChange: setGistId,
+    statePath,
+    onStatePathChange: setStatePath,
+    rememberGitHubToken,
+    onRememberGitHubTokenChange: setRememberGitHubToken,
+    rememberCheckboxChecked: isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken,
+    rememberCheckboxLabel: isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token',
+    hasSavedGitHubToken,
+    isEditingGitHubToken,
+    savedTokenStatusCopy: hasSavedGitHubToken
+      ? (isEditingGitHubToken
+          ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存到本机 secrets.json。'
+          : 'GitHub Token 已以明文保存到本机 secrets.json，输入框已锁定为固定掩码。')
+      : '尚未保存 GitHub Token。勾选下方复选框可在连接成功后保存到本机 secrets.json，避免下次重复粘贴。',
+    onEditSavedGitHubToken: beginEditSavedToken,
+    onCancelGitHubTokenEdit: cancelEditSavedToken,
+    onClearSavedGitHubToken: handleClearSavedGitHubToken,
+    onInitSubmit: handleInitSubmit,
+    submitButtonLabel: isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub',
+    isGitHubTokenLocked,
+    isSubmittingInit,
+    isSettingRemote,
+    isReplacingSavedGitHubToken,
+    isClearingGitHubToken,
+    isBusy,
+    setupSteps,
+  };
+
+  const localConfigPanelProps = {
+    runtimeState,
+    loadErrorNode,
+    targetMode,
+    onTargetModeChange: setTargetMode,
+    configAgent,
+    configAvailabilityByAgent,
+    isLoadingConfigAvailability,
+    selectedConfigAvailability,
+    configFile,
+    configPathModeLabel,
+    configPath,
+    onConfigPathChange: setConfigPath,
+    configDraft,
+    onConfigDraftChange: setConfigDraft,
+    configStatus,
+    onLoadConfigFile: handleLoadConfigFile,
+    onSaveConfigFile: handleSaveConfigFile,
+    canLoadConfig,
+    canSaveConfig,
+    isLoadingConfig,
+    isSavingConfig,
+    localSyncTargetLabel,
+    onPlan: handlePlan,
+    canReviewLocalConfig,
+    isPlanning,
+    confirmationText,
+    onConfirmationTextChange: setConfirmationText,
+    canConfirmLocalConfig,
+    canApplyLocalConfig,
+    isApplying,
+    onApply: handleApply,
+    planResponse,
+    isPlanCurrent,
+    applyResults,
+  };
+
   return (
     <CommandCenterShell
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      statusRail={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} />}
+      statusRail={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} detailsId="sidebar-status-details" />}
     >
         <NoticeToast notice={notice} remoteAccessWarning={remoteAccessWarning} onDismiss={() => setNotice(null)} />
         <section className="tab-viewport">
@@ -494,41 +570,7 @@ function App() {
           )}
           {activeTab === 'remote' && (
             <RemoteSourcePanel
-              connection={{
-                runtimeState,
-                loadErrorNode,
-                githubToken,
-                githubTokenInputValue,
-                githubTokenPlaceholder: isGitHubTokenLocked ? SAVED_GITHUB_TOKEN_MASK : '粘贴带 gist 权限的 token',
-                onGithubTokenChange: setGithubToken,
-                gistId,
-                onGistIdChange: setGistId,
-                statePath,
-                onStatePathChange: setStatePath,
-                rememberGitHubToken,
-                onRememberGitHubTokenChange: setRememberGitHubToken,
-                rememberCheckboxChecked: isReplacingSavedGitHubToken ? githubToken.trim() !== '' : rememberGitHubToken,
-                rememberCheckboxLabel: isReplacingSavedGitHubToken ? '替换保存的 Token（自动保存）' : '本地明文保存 Token',
-                hasSavedGitHubToken,
-                isEditingGitHubToken,
-                savedTokenStatusCopy: hasSavedGitHubToken
-                  ? (isEditingGitHubToken
-                      ? '正在替换已保存 GitHub Token，输入新 Token 后会自动保存到本机 secrets.json。'
-                      : 'GitHub Token 已以明文保存到本机 secrets.json，输入框已锁定为固定掩码。')
-                  : '尚未保存 GitHub Token。勾选下方复选框可在连接成功后保存到本机 secrets.json，避免下次重复粘贴。',
-                onEditSavedGitHubToken: beginEditSavedToken,
-                onCancelGitHubTokenEdit: cancelEditSavedToken,
-                onClearSavedGitHubToken: handleClearSavedGitHubToken,
-                onInitSubmit: handleInitSubmit,
-                submitButtonLabel: isSettingRemote ? '正在连接...' : isSubmittingInit ? '正在保存...' : '连接 GitHub',
-                isGitHubTokenLocked,
-                isSubmittingInit,
-                isSettingRemote,
-                isReplacingSavedGitHubToken,
-                isClearingGitHubToken,
-                isBusy,
-                setupSteps,
-              }}
+              connection={connectionPanelProps}
               editor={{
                 runtimeState,
                 loadErrorNode,
@@ -595,40 +637,7 @@ function App() {
                 applyResults,
               }}
               localConfig={{
-                runtimeState,
-                loadErrorNode,
-                targetMode,
-                onTargetModeChange: setTargetMode,
-                configAgent,
-                configAvailabilityByAgent,
-                isLoadingConfigAvailability,
-                selectedConfigAvailability,
-                configFile,
-                configPathModeLabel,
-                configPath,
-                onConfigPathChange: setConfigPath,
-                configDraft,
-                onConfigDraftChange: setConfigDraft,
-                configStatus,
-                onLoadConfigFile: handleLoadConfigFile,
-                onSaveConfigFile: handleSaveConfigFile,
-                canLoadConfig,
-                canSaveConfig,
-                isLoadingConfig,
-                isSavingConfig,
-                localSyncTargetLabel,
-                onPlan: handlePlan,
-                canReviewLocalConfig,
-                isPlanning,
-                confirmationText,
-                onConfirmationTextChange: setConfirmationText,
-                canConfirmLocalConfig,
-                canApplyLocalConfig,
-                isApplying,
-                onApply: handleApply,
-                planResponse,
-                isPlanCurrent,
-                applyResults,
+                ...localConfigPanelProps,
               }}
             />
           )}
@@ -658,12 +667,19 @@ function App() {
           )}
 
           {activeTab === 'automation' && (
-            <SyncPanel
-              runtimeState={runtimeState}
-              requestStatePath={requestStatePath}
-              buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
-              onState={commitRuntimeState}
-              onNotice={showNotice}
+            <SettingsPanel
+              connectionPanel={<ConnectionPanel {...connectionPanelProps} />}
+              automationPanel={
+                <SyncPanel
+                  runtimeState={runtimeState}
+                  requestStatePath={requestStatePath}
+                  buildGitHubTokenRequest={() => buildGitHubTokenRequest()}
+                  onState={commitRuntimeState}
+                  onNotice={showNotice}
+                />
+              }
+              rawConfigPanel={<LocalConfigPanel {...localConfigPanelProps} />}
+              debugPanel={<StatusRail runtimeState={runtimeState} commandStatus={commandCenterStatus} configAvailability={configAvailability} />}
             />
           )}
         </section>

@@ -3352,9 +3352,124 @@ h3 {
 /* PR4 IA: composite panels */
 
 .remote-source-panel,
-.sync-targets-panel {
+.sync-targets-panel,
+.settings-panel,
+.settings-panel__stack {
   display: grid;
   gap: var(--space-5);
+}
+
+.settings-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, auto);
+  gap: var(--space-5);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-7);
+  overflow: hidden;
+  border: var(--hairline) solid color-mix(in srgb, var(--color-link) 24%, var(--color-line));
+  border-radius: calc(var(--radius-large) + var(--space-1));
+  background:
+    radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--color-link-soft) 82%, transparent), transparent 32%),
+    linear-gradient(135deg, var(--color-panel-strong), var(--color-paper-soft));
+  box-shadow: var(--shadow-hero);
+}
+
+.settings-hero h2 {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--color-cocoa);
+  font-size: var(--text-section);
+  line-height: var(--line-tight);
+}
+
+.settings-hero p:not(.eyebrow) {
+  max-width: 46rem;
+  margin-top: var(--space-3);
+  color: var(--color-coffee);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
+.settings-hero__index {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  min-width: 12rem;
+}
+
+.settings-hero__index span {
+  display: inline-grid;
+  place-items: center;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-pill);
+  color: var(--color-link);
+  font-size: var(--text-caption);
+  font-weight: 900;
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-control);
+}
+
+.settings-panel__section,
+.settings-panel__debug {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.settings-panel__debug {
+  padding: var(--space-5);
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-panel-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.settings-panel__advanced {
+  border: var(--hairline) solid var(--color-line);
+  border-radius: var(--radius-large);
+  background: var(--color-paper-soft);
+}
+
+.settings-panel__advanced > summary {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-large);
+  transition: background-color var(--motion-fast);
+}
+
+.settings-panel__advanced > summary:hover {
+  background-color: var(--color-line);
+}
+
+.settings-panel__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-panel__advanced > summary > span {
+  color: var(--color-cocoa);
+  font-size: var(--text-card-title);
+  font-weight: 800;
+}
+
+.settings-panel__advanced > summary > small {
+  color: var(--color-coffee);
+  font-size: var(--text-caption);
+}
+
+.settings-panel__advanced[open] > summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.settings-panel__advanced > :not(summary) {
+  padding: var(--space-5);
 }
 
 .sync-targets-panel__advanced {
