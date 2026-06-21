@@ -652,9 +652,6 @@ function App() {
                 planResponse,
                 applyResults,
               }}
-              localConfig={{
-                ...localConfigPanelProps,
-              }}
             />
           )}
 

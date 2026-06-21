@@ -13,12 +13,12 @@ export function SettingsPanel({ automationPanel, connectionPanel, debugPanel, ra
       <header className="settings-hero">
         <div>
           <p className="eyebrow">设置</p>
-          <h2>连接、自动化与高级诊断集中管理。</h2>
+          <h2>连接、自动同步与高级诊断集中管理。</h2>
           <p>普通路径保持清爽；GitHub/Gist、本机自动同步、原生配置编辑器和调试元数据在这里统一收纳。</p>
         </div>
         <div className="settings-hero__index" aria-label="设置包含的能力">
           <span>连接</span>
-          <span>自动化</span>
+          <span>自动同步</span>
           <span>高级</span>
           <span>调试</span>
         </div>
@@ -29,7 +29,7 @@ export function SettingsPanel({ automationPanel, connectionPanel, debugPanel, ra
           {connectionPanel}
         </section>
 
-        <section className="settings-panel__section" aria-label="自动化控制">
+        <section className="settings-panel__section" aria-label="自动同步控制">
           {automationPanel}
         </section>
 

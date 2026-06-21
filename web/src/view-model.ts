@@ -20,31 +20,31 @@ export type Step = {
 export const MANAGED_FIELDS: ManagedField[] = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'];
 
 const REMOTE_ACCESS_WARNING_COPY = '局域网设备可能访问并读写本机 Agent 配置。仅在可信网络中使用。';
-const LOCAL_REVIEW_ACTION_COPY = 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。';
+const LOCAL_REVIEW_ACTION_COPY = '预览变更与应用都会使用当前选择的本地配置目标和路径覆盖。';
 
 export function buildSetupSteps(state: RuntimeStateSummary | null): Step[] {
   return [
     {
-      title: '连接远端真源',
+      title: '连接配置源',
       copy: state?.cache.present
-        ? '远端 agentcfg.yaml 已缓存到本地。'
+        ? '配置源的 agentcfg.yaml 已缓存到本地。'
         : state?.gist.present
-          ? '已连接 Gist，等待拉取缓存。'
+          ? '已连接 Gist，等待拉取配置。'
           : '保存 GitHub Token 或 Gist ID 后即可连接。',
       state: state?.cache.present ? 'ready' : 'pending',
     },
     {
-      title: '同步到本地',
+      title: '执行同步',
       copy: state?.cache.present
-        ? '选择目标后运行预览，确认后即可应用。'
-        : '拉取缓存后才能运行预览与应用。',
+        ? '选择目标后预览变更，确认后即可应用。'
+        : '拉取配置后才能运行预览变更与应用。',
       state: state?.cache.present ? 'pending' : 'locked',
     },
     {
-      title: '自动化（可选）',
+      title: '设置自动同步',
       copy: state?.autoSync?.enabled === true
         ? `已启用自动同步，每 ${state.autoSync.intervalMinutes} 分钟运行一次。`
-        : '完成首次同步后，可在自动同步页配置后台策略。',
+        : '完成首次同步后，可在设置页配置后台策略。',
       state: state?.autoSync?.enabled === true ? 'ready' : 'pending',
     },
   ];

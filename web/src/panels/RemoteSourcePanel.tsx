@@ -10,36 +10,18 @@ export type RemoteSourcePanelProps = {
 };
 
 /**
- * "远端真源" tab content.
+ * "配置" tab content.
  *
- * Composes the existing ConnectionPanel + RemoteConfigPanel into a
- * single tab so users see one page for "connect to Gist + edit
- * agentcfg.yaml" instead of two separate destinations. Both inner
- * panels keep their existing DOM ids (#connection-panel / #setup-panel
- * / #remote-panel) so deep links and the GUI test selectors continue
- * to work.
- *
- * Layout from top to bottom:
- *
- *   1. ConnectionPanel        Gist connection + token form
- *   2. DefaultsQuickEdit       one-liner: default provider/model/key
- *   3. <details> 详细编辑      collapsed by default; full RemoteConfigPanel
- *
- * The advanced editor lives inside a <details> block so users can
- * collapse it once they have set their defaults. The GUI flow test
- * now expands the section explicitly before touching the advanced
- * fields.
- *
- * The component itself is a pass-through. The aggregated props split
- * cleanly into the two inner panel contracts; App.tsx is the only
- * call site and forwards each slice with object spread, keeping prop
- * wiring identical to PR3.
+ * Composes ConnectionPanel, DefaultsQuickEdit, and RemoteConfigPanel
+ * into one page so users can connect Gist and edit agentcfg.yaml
+ * without leaving the redesigned Configuration section. The advanced
+ * editor remains collapsed by default and is expanded only when needed.
  */
 export function RemoteSourcePanel({ connection, editor, heading }: RemoteSourcePanelProps) {
   const hasProviders = Object.keys(editor.remoteDraft.providers).length > 0;
 
   return (
-    <section className="remote-source-panel" aria-label="远端真源">
+    <section className="remote-source-panel" aria-label="配置">
       {heading}
       <ConnectionPanel {...connection} />
       {hasProviders && (

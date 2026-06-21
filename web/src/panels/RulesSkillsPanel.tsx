@@ -32,7 +32,7 @@ export function RulesSkillsPanel({ rulesPanelNode, skillsPanelNode }: RulesSkill
             <h3>规则文件定义 Agent 行为</h3>
             <p>
               <strong>{RULE_FILES.join(' / ')}</strong> 记录不同 Agent 会读取的行为准则、编码偏好和协作约束。
-              agentcfg 负责把这些规则从私有 Gist 同步到本地官方用户级文件。
+              agentcfg 负责把这些规则从私有 Gist 同步到本机官方用户级文件。
             </p>
           </div>
         </article>

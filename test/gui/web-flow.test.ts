@@ -90,6 +90,8 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
       await cdp.installRuntimeErrorRecorder();
       await cdp.send('Page.navigate', { url: webServer.url });
       await cdp.waitForText('Agent 配置同步中心', 15000);
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === false');
+      await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === false');
 
       assert.equal(await cdp.clickButton('同步'), true, 'sync tab was not clickable');
       await cdp.waitForText('请选择一个目标');
@@ -397,6 +399,7 @@ test('Task 20 first-run invalid GitHub Token explains cause and next action', as
       await cdp.waitForFunction('document.querySelector("#connection-panel") !== null');
 
       await cdp.setInputValue('#github-token', 'invalid-github-token');
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === false');
       await cdp.clickSelector('.setup-form__advanced > summary');
       await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
       await cdp.setInputValue('#state-path', statePath);
@@ -474,6 +477,7 @@ test('Task 18 first-run flow connects, configures, previews, and applies from re
       await cdp.waitForFunction('document.querySelector("#connection-panel") !== null');
 
       await cdp.setInputValue('#github-token', GITHUB_TOKEN);
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === false');
       await cdp.clickSelector('.setup-form__advanced > summary');
       await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === true');
       await cdp.setInputValue('#state-path', statePath);
@@ -481,6 +485,7 @@ test('Task 18 first-run flow connects, configures, previews, and applies from re
       await cdp.submitForm('.setup-form');
       await cdp.waitForText('准备创建远端配置');
       await assertDomValuesDoNotContain(cdp, GITHUB_TOKEN, 'Task 18 first-run post-connect DOM values');
+      await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === false');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/remote/setup'), {
         statePath,
         githubToken: GITHUB_TOKEN,
@@ -517,7 +522,7 @@ test('Task 18 first-run flow connects, configures, previews, and applies from re
       await cdp.waitForText('中央目录映射');
       await cdp.waitForText('openai / gpt-4.1-mini (openai-compatible)');
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'Task 18 first-run apply unlocked before preview');
-      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)'), true, 'Task 18 first-run preview button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览变更'), true, 'Task 18 first-run preview button was not clickable');
       await cdp.waitForText('预览完成');
       await assertSelectorVisible(cdp, '.file-diff-editor');
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'Task 18 first-run apply unlocked before checkbox confirmation');
@@ -603,10 +608,9 @@ test('Task 18 returning-user flow covers Home, Configuration protocol fields, an
 
       await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('GitHub Token');
+      await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === false');
       await cdp.clickSelector('.remote-source-panel__advanced > summary');
       await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === true');
-      await cdp.clickSelector('.remote-command-advanced > summary');
-      await cdp.waitForFunction('document.querySelector(".remote-command-advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-command-advanced")?.open === true');
       assert.equal(await cdp.clickButtonInPanel('#remote-panel', '读取远端'), true, 'Task 18 returning load remote button was not clickable');
       await cdp.waitForText('远端配置已加载');
       assert.equal(await cdp.inputValue('#defaults-quick-api-key'), maskTask5QuickApiKey(TASK5_API_KEY));
@@ -626,7 +630,7 @@ test('Task 18 returning-user flow covers Home, Configuration protocol fields, an
       await cdp.waitForText('中央目录映射');
       await cdp.waitForText('openai / gpt-4.1-mini (openai-compatible)');
       assert.equal(await cdp.isButtonDisabledInPanel('#review-panel', '应用变更'), true, 'Task 18 returning apply unlocked before preview');
-      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览 (Dry-run)'), true, 'Task 18 returning preview button was not clickable');
+      assert.equal(await cdp.clickButtonInPanel('#review-panel', '预览变更'), true, 'Task 18 returning preview button was not clickable');
       await cdp.waitForText('预览完成');
       assert.deepEqual(await lastRecordedJsonBody(cdp, '/api/apply/plan'), { statePath, agent: 'opencode', configPath: nativePath });
       assert.equal(await cdp.inputDisabled('#apply-confirmation'), false, 'Task 18 returning confirmation checkbox stayed disabled after preview');
@@ -660,7 +664,7 @@ test('Task 18 returning-user flow covers Home, Configuration protocol fields, an
   }
 });
 
-test('Task 18 Settings exposes masked token, automation controls, raw editor expansion, and debug details', async () => {
+test('Task 18 Settings exposes masked token, auto sync controls, raw editor expansion, and debug details', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agentcfg-gui-task18-settings-'));
   const statePath = join(directory, 'state.json');
   const browserProfile = join(directory, 'chrome-profile');
@@ -691,7 +695,7 @@ test('Task 18 Settings exposes masked token, automation controls, raw editor exp
       await cdp.send('Page.navigate', { url: webServer.url });
       await cdp.waitForText('工作台', 15000);
       await cdp.clickSelector('#automation-tab');
-      await cdp.waitForText('连接、自动化与高级诊断集中管理');
+      await cdp.waitForText('连接、自动同步与高级诊断集中管理');
       await assertSavedGitHubTokenLocked(cdp, 'Task 18 Settings saved GitHub Token input');
       await assertDomValuesDoNotContain(cdp, GITHUB_TOKEN, 'Task 18 Settings masked GitHub Token DOM values');
       await assertSelectorVisible(cdp, '#auto-sync-enabled');
@@ -703,9 +707,9 @@ test('Task 18 Settings exposes masked token, automation controls, raw editor exp
       assert.equal(rawEditorInitiallyOpen, false, 'Task 18 Settings raw editor should be collapsed by default');
       await cdp.clickSelector('#settings-raw-editor > summary');
       await cdp.waitForFunction('document.querySelector("#settings-raw-editor") instanceof HTMLDetailsElement && document.querySelector("#settings-raw-editor")?.open === true');
-      await assertSelectorVisible(cdp, '#config-path-editor');
-      await assertSelectorVisible(cdp, '#config-editor');
-      await assertSelectorVisible(cdp, '#config-agent-opencode-tab');
+      await assertSelectorVisible(cdp, '.settings-panel__advanced .config-editor-toolbar');
+      await assertSelectorVisible(cdp, '.settings-panel__advanced .config-editor-card');
+      await assertSelectorVisible(cdp, '.settings-panel__advanced .config-agent-tabs');
 
       await assertSelectorVisible(cdp, '#status-details');
       const debugText = await cdp.textContent('#status-details');

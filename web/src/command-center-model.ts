@@ -1,7 +1,7 @@
 import type { ApplyAgentResult, RuntimeStateSummary } from './api';
 import type { CommandCenterStatusSnapshot } from './useCommandCenterStatus';
 import type { AppTab } from './navigation';
-import { BUTTONS } from './strings';
+import { ACTIONS } from './strings';
 
 export type WorkflowStepStatus = 'complete' | 'ready' | 'pending' | 'blocked' | 'warning';
 
@@ -50,7 +50,7 @@ export function buildOnboardingWorkflow(input: WorkflowModelInput): WorkflowStep
       id: 'onboarding-connect',
       order: 1,
       title: '连接 GitHub',
-      copy: '提供 Token 并创建私有 Gist 作为远端真源。',
+      copy: '提供 Token 并创建私有 Gist 作为配置源。',
       detail: hasGist ? '已连接' : '等待 GitHub Token。',
       status: hasGist ? 'complete' : 'ready',
       target: 'remote',
@@ -91,7 +91,7 @@ export function buildOnboardingWorkflow(input: WorkflowModelInput): WorkflowStep
               : 'blocked',
       target: 'sync',
       action: input.canReview
-        ? { kind: 'dry-run', label: BUTTONS.dryRun }
+        ? { kind: 'dry-run', label: ACTIONS.previewChanges }
         : { kind: 'navigate', target: 'sync', label: hasPlan ? '去应用' : '进入同步' },
     },
   ];
@@ -122,7 +122,7 @@ export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowS
     {
       id: 'remote-source',
       order: 1,
-      title: '连接远端真源',
+      title: '连接配置源',
       copy: '连接 Gist 并把 agentcfg.yaml 拉取到本地缓存。',
       detail: hasCache
         ? `缓存更新于 ${input.runtimeState?.cache.updatedAt ?? '当前会话'}`
@@ -136,17 +136,17 @@ export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowS
     {
       id: 'sync-targets',
       order: 2,
-      title: '同步到本地',
+      title: '执行同步',
       copy: '把远端配置、规则文件与 Skills 目录写入本地 Agent。',
       detail: hasApplied
         ? '最近已有应用结果。'
         : hasPlan
-          ? '预览已就绪，等待 APPLY 确认。'
+          ? '预览已就绪，等待确认。'
           : input.canReview
-            ? '可直接运行预览。'
+            ? '可直接运行预览变更。'
             : hasCache
-              ? '选择目标后即可运行预览。'
-              : '需要先拉取远端配置。',
+              ? '选择目标后即可运行预览变更。'
+              : '需要先拉取配置。',
       status: hasApplied
         ? 'complete'
         : hasPlan
@@ -158,14 +158,14 @@ export function buildCommandCenterWorkflow(input: WorkflowModelInput): WorkflowS
               : 'blocked',
       target: 'sync',
       action: input.canReview
-        ? { kind: 'dry-run', label: BUTTONS.dryRun }
+        ? { kind: 'dry-run', label: ACTIONS.previewChanges }
         : { kind: 'navigate', target: 'sync', label: hasPlan ? '去应用' : '进入同步' },
     },
     {
       id: 'automation',
       order: 3,
-      title: '自动化（可选）',
-      copy: '配置定时同步目标和系统后台服务。',
+      title: '设置自动同步',
+      copy: '配置定时同步目标和后台服务。',
       detail: syncEnabled
         ? `已启用，每 ${input.runtimeState?.autoSync?.intervalMinutes ?? 60} 分钟`
         : hasGist

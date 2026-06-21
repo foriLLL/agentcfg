@@ -6,7 +6,7 @@ import type {
   RuntimeStateSummary,
 } from "../api";
 import { AgentConfigIcon } from "../AgentConfigIcon";
-import { BUTTONS, GATES, previewReadinessBadge } from "../strings";
+import { ACTIONS, GATES, previewReadinessBadge } from '../strings';
 import { StatusBadge } from "../widgets";
 import { ApplyResults, PlanResults } from "./PlanApplyResults";
 
@@ -212,7 +212,7 @@ export function ExecutePanel(props: ExecutePanelProps) {
                 onClick={props.onPlan}
                 disabled={!props.canReview}
               >
-                {props.isPlanning ? BUTTONS.dryRunRunning : BUTTONS.dryRun}
+                {props.isPlanning ? ACTIONS.previewChangesRunning : ACTIONS.previewChanges}
               </button>
             </div>
 
@@ -245,7 +245,7 @@ export function ExecutePanel(props: ExecutePanelProps) {
                 onClick={props.onApply}
                 disabled={!props.canApply}
               >
-                {props.isApplying ? BUTTONS.applyRunning : BUTTONS.apply}
+                {props.isApplying ? ACTIONS.applyChangesRunning : ACTIONS.applyChanges}
               </button>
             </div>
           </section>
