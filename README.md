@@ -251,6 +251,32 @@ Claude Code uses `settings.json`.
 
 agentcfg updates the selected model and provider environment variables for Anthropic-compatible Claude Code settings while preserving unrelated settings structurally.
 
+#### Claude Code multi-model routes
+
+You can map specific model roles to Claude Code environment variables with `claudeCode.modelMap`. Each key is a canonical slot and each value is a bare model ID that must exist under `providers.<defaults.provider>.models`.
+
+Supported slots and their env outputs:
+
+- `primary` → `ANTHROPIC_MODEL`
+- `opus` → `ANTHROPIC_DEFAULT_OPUS_MODEL`
+- `sonnet` → `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `haiku` → `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+- `smallFast` → `ANTHROPIC_SMALL_FAST_MODEL` (deprecated upstream, kept for compatibility)
+
+Example:
+
+```yaml
+claudeCode:
+  modelMap:
+    primary: claude-sonnet-4
+    opus: claude-opus-4
+    sonnet: claude-sonnet-4
+    haiku: claude-haiku-4
+    smallFast: claude-haiku-4
+```
+
+Values are plain model IDs, not `provider/model` strings. Do not set `env.ANTHROPIC_AUTH_TOKEN` in your canonical config; it would override managed API key auth and is not supported.
+
 ### OhMyOpenAgent
 
 OhMyOpenAgent uses JSON at `~/.config/opencode/oh-my-openagent.json` by default.

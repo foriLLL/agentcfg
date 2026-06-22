@@ -251,6 +251,32 @@ Claude Code 使用 `settings.json`。
 
 agentcfg 会更新 Anthropic-compatible Claude Code settings 中的所选 model 和 provider environment variables，同时按结构保留无关设置。
 
+#### Claude Code 多模型路由
+
+你可以通过 `claudeCode.modelMap` 将特定模型角色映射到 Claude Code 的环境变量。每个 key 是一个 canonical slot，每个 value 是一个 bare model ID，且该 model ID 必须存在于 `providers.<defaults.provider>.models` 下。
+
+支持的 slot 及其对应的环境变量：
+
+- `primary` → `ANTHROPIC_MODEL`
+- `opus` → `ANTHROPIC_DEFAULT_OPUS_MODEL`
+- `sonnet` → `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `haiku` → `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+- `smallFast` → `ANTHROPIC_SMALL_FAST_MODEL`（upstream 已弃用，为兼容保留）
+
+示例：
+
+```yaml
+claudeCode:
+  modelMap:
+    primary: claude-sonnet-4
+    opus: claude-opus-4
+    sonnet: claude-sonnet-4
+    haiku: claude-haiku-4
+    smallFast: claude-haiku-4
+```
+
+值为纯 model ID，不是 `provider/model` 字符串。请勿在 canonical config 中设置 `env.ANTHROPIC_AUTH_TOKEN`，因为它会覆盖受管理的 API key 认证，且不受支持。
+
 ### OhMyOpenAgent
 
 OhMyOpenAgent 默认使用 `~/.config/opencode/oh-my-openagent.json` 中的 JSON 配置。
