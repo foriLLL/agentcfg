@@ -8,6 +8,7 @@ import {
   applyResultNextAction,
   applyResultsAreNoOp,
   buildRemoteYamlPreview,
+  configToDraft,
   formatError,
   formatRemoteValidationError,
   localReviewActionCopyForAgent,
@@ -15,7 +16,7 @@ import {
   statusLabel,
   statusTone,
 } from '../../web/src/view-model';
-import { RuntimeClientError, type ApplyAgentResult, type EditableAgentConfig, type RuntimeStateSummary } from '../../web/src/api';
+import { RuntimeClientError, type AgentConfig, type ApplyAgentResult, type EditableAgentConfig, type RuntimeStateSummary } from '../../web/src/api';
 
 test('buildRemoteYamlPreview serializes the complete nested remote config', () => {
   const config: EditableAgentConfig = {
@@ -26,6 +27,7 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
     },
     providers: {
       openai: {
+        protocol: 'openai-compatible',
         baseURL: 'https://api.openai.com/v1',
         apiKey: {
           type: 'plain',
@@ -45,6 +47,7 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
         },
       },
       anthropic: {
+        protocol: 'anthropic-compatible',
         baseURL: 'https://api.anthropic.com/v1',
         apiKey: {
           type: 'plain',
@@ -82,8 +85,10 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
   assert.match(preview, /schemaVersion: 1/);
   assert.match(preview, /defaults:/);
   assert.match(preview, /providers:/);
-  assert.match(preview, /"openai":/);
-  assert.match(preview, /"anthropic":/);
+  assert.match(preview, /"openai":\n    protocol: "openai-compatible"\n    baseURL: "https:\/\/api\.openai\.com\/v1"/);
+  assert.match(preview, /"anthropic":\n    protocol: "anthropic-compatible"\n    baseURL: "https:\/\/api\.anthropic\.com\/v1"/);
+  assert.match(preview, /protocol: "openai-compatible"/);
+  assert.match(preview, /protocol: "anthropic-compatible"/);
   assert.match(preview, /modelDiscovery:/);
   assert.match(preview, /path: "\/models"/);
   assert.match(preview, /sk-visible-openai-preview/);
@@ -102,6 +107,55 @@ test('buildRemoteYamlPreview serializes the complete nested remote config', () =
   assert.match(preview, /categories:/);
   assert.match(preview, /"visual-engineering":/);
   assert.match(preview, /model: "anthropic\/claude-3-5-sonnet-latest"/);
+});
+
+test('configToDraft preserves optional provider protocols from loaded configs', () => {
+  const config: AgentConfig = {
+    schemaVersion: 1,
+    defaults: {
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+    },
+    providers: {
+      openai: {
+        protocol: 'openai-compatible',
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: 'sk-openai',
+        },
+        modelDiscovery: {
+          path: '/models',
+        },
+        models: {
+          'gpt-4.1-mini': {
+            contextWindow: 1047576,
+          },
+        },
+      },
+      anthropic: {
+        protocol: 'anthropic-compatible',
+        baseURL: 'https://api.anthropic.com/v1',
+        apiKey: {
+          type: 'plain',
+          value: 'sk-anthropic',
+        },
+        models: {
+          'claude-3-5-sonnet-latest': {
+            maxTokens: 8192,
+          },
+        },
+      },
+    },
+  };
+
+  const draft = configToDraft(config);
+
+  assert.deepEqual(draft, config);
+  assert.equal(draft.providers.openai.protocol, 'openai-compatible');
+  assert.equal(draft.providers.anthropic.protocol, 'anthropic-compatible');
+  assert.notEqual(draft.providers.openai, config.providers.openai);
+  assert.notEqual(draft.providers.openai.models, config.providers.openai.models);
 });
 
 test('buildRemoteYamlPreview omits empty OhMyOpenAgent mappings', () => {

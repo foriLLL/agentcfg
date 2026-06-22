@@ -125,8 +125,13 @@ export function buildRemoteYamlPreview(config: EditableAgentConfig): string {
   ];
 
   for (const [providerId, provider] of Object.entries(config.providers)) {
+    lines.push(`  ${yamlScalar(providerId)}:`);
+
+    if (provider.protocol !== undefined) {
+      lines.push(`    protocol: ${yamlScalar(provider.protocol)}`);
+    }
+
     lines.push(
-      `  ${yamlScalar(providerId)}:`,
       `    baseURL: ${yamlScalar(provider.baseURL)}`,
       '    apiKey:',
       `      type: ${yamlScalar(provider.apiKey.type)}`,
@@ -383,6 +388,7 @@ function cloneProviders(providers: AgentConfig['providers']): EditableAgentConfi
     }
 
     draftProviders[providerId] = {
+      ...(provider.protocol === undefined ? {} : { protocol: provider.protocol }),
       baseURL: provider.baseURL,
       apiKey: {
         type: 'plain',
