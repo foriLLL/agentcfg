@@ -90,8 +90,10 @@ test('web GUI selecting a sync target stays mounted without React/zustand snapsh
       await cdp.installRuntimeErrorRecorder();
       await cdp.send('Page.navigate', { url: webServer.url });
       await cdp.waitForText('Agent 配置同步中心', 15000);
-      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === false');
+      assert.equal(await cdp.clickButton('配置'), true, 'configuration tab was not clickable');
       await cdp.waitForFunction('document.querySelector(".remote-source-panel__advanced") instanceof HTMLDetailsElement && document.querySelector(".remote-source-panel__advanced")?.open === false');
+      assert.equal(await cdp.clickButton('设置'), true, 'settings tab was not clickable');
+      await cdp.waitForFunction('document.querySelector(".setup-form__advanced") instanceof HTMLDetailsElement && document.querySelector(".setup-form__advanced")?.open === false');
 
       assert.equal(await cdp.clickButton('同步'), true, 'sync tab was not clickable');
       await cdp.waitForText('请选择一个目标');
@@ -250,7 +252,7 @@ test('Task 5 security keeps saved GitHub Token masked and allows intentional qui
       await cdp.waitForText('工作台', 15000);
       await cdp.clickSelector('#remote-tab');
       await cdp.waitForText('GitHub Token 已以明文保存到本机 secrets.json');
-      await cdp.waitForText('远端配置已自动刷新');
+      await cdp.waitForText('配置源的 agentcfg.yaml 已缓存到本地。');
       await assertSavedGitHubTokenLocked(cdp, 'Task 5 saved GitHub Token input');
       await assertDomValuesDoNotContain(cdp, TASK5_GITHUB_TOKEN, 'Task 5 saved GitHub Token DOM values');
 

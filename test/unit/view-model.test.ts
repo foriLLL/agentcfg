@@ -172,14 +172,14 @@ test('remote access warning helper only warns for non-loopback browser hostnames
   assert.equal(remoteAccessWarningForHostname('192.168.1.10'), '当前浏览器正在通过非本机回环地址 192.168.1.10 访问 agentcfg Web API，局域网设备可能访问并读写本机 Agent 配置。仅在可信网络中使用。');
 });
 
-test('OhMyOpenAgent uses dry-run instead of field-level diff in the web flow', () => {
+test('local review copy uses redesigned preview/apply wording for all agents', () => {
   assert.equal(agentSupportsManagedFieldDiff('codex'), true);
   assert.equal(agentSupportsManagedFieldDiff('opencode'), true);
   assert.equal(agentSupportsManagedFieldDiff('openclaw'), true);
   assert.equal(agentSupportsManagedFieldDiff('claude'), true);
   assert.equal(agentSupportsManagedFieldDiff('ohmyopenagent'), false);
-  assert.equal(localReviewActionCopyForAgent('ohmyopenagent'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
-  assert.equal(localReviewActionCopyForAgent('opencode'), 'dry-run 与应用都会使用当前选择的本地配置目标和路径覆盖。');
+  assert.equal(localReviewActionCopyForAgent('ohmyopenagent'), '预览变更与应用都会使用当前选择的本地配置目标和路径覆盖。');
+  assert.equal(localReviewActionCopyForAgent('opencode'), '预览变更与应用都会使用当前选择的本地配置目标和路径覆盖。');
 });
 
 test('formatError gives GitHub Token failures a clear cause and next action', () => {
