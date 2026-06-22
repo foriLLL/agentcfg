@@ -318,6 +318,11 @@ function claudeSnapshot(config: NativeConfigObject): ManagedDiffSnapshot {
     model: getString(config, ['model']),
     baseURL: getString(config, ['env', 'ANTHROPIC_BASE_URL']),
     apiKey: getString(config, ['env', 'ANTHROPIC_API_KEY']),
+    ANTHROPIC_MODEL: getString(config, ['env', 'ANTHROPIC_MODEL']),
+    ANTHROPIC_DEFAULT_OPUS_MODEL: getString(config, ['env', 'ANTHROPIC_DEFAULT_OPUS_MODEL']),
+    ANTHROPIC_DEFAULT_SONNET_MODEL: getString(config, ['env', 'ANTHROPIC_DEFAULT_SONNET_MODEL']),
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: getString(config, ['env', 'ANTHROPIC_DEFAULT_HAIKU_MODEL']),
+    ANTHROPIC_SMALL_FAST_MODEL: getString(config, ['env', 'ANTHROPIC_SMALL_FAST_MODEL']),
   };
 }
 

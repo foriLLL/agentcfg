@@ -53,6 +53,39 @@ const CANONICAL_CONFIG = {
   },
 } as const;
 
+const CLAUDE_MODEL_MAP_CONFIG = {
+  schemaVersion: 1,
+  defaults: {
+    provider: 'anthropic',
+    model: 'claude-primary-route',
+  },
+  providers: {
+    anthropic: {
+      baseURL: 'https://api.anthropic.com/v1',
+      apiKey: {
+        type: 'plain',
+        value: CACHED_SECRET,
+      },
+      models: {
+        'claude-primary-route': {},
+        'claude-opus-route': {},
+        'claude-sonnet-route': {},
+        'claude-haiku-route': {},
+        'claude-small-fast-route': {},
+      },
+    },
+  },
+  claudeCode: {
+    modelMap: {
+      primary: 'claude-primary-route',
+      opus: 'claude-opus-route',
+      sonnet: 'claude-sonnet-route',
+      haiku: 'claude-haiku-route',
+      smallFast: 'claude-small-fast-route',
+    },
+  },
+} as const;
+
 const LEGACY_CACHED_CONFIG = {
   schemaVersion: 1,
   defaults: {
@@ -788,6 +821,63 @@ test('runtime diff and apply payloads show provider API keys and require explici
     assert.equal(JSON.stringify(applied).includes(CACHED_SECRET), true);
     assert.equal(JSON.stringify(applied).includes(NATIVE_SECRET), true);
     assert.equal((await readFile(nativePath, 'utf8')).includes(CACHED_SECRET), true);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('runtime Claude diff and apply payloads include model map env slots idempotently', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agentcfg-api-claude-model-map-'));
+  const statePath = join(directory, 'state.json');
+  const nativePath = join(directory, 'settings.json');
+  const slotExpectations = {
+    ANTHROPIC_MODEL: 'claude-primary-route',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-route',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-route',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-route',
+    ANTHROPIC_SMALL_FAST_MODEL: 'claude-small-fast-route',
+  } as const;
+
+  try {
+    await writeStateWithConfig(statePath, CLAUDE_MODEL_MAP_CONFIG);
+    await writeFile(nativePath, claudeNativeJson(NATIVE_SECRET));
+
+    const diff = await diffRuntime({ statePath, agent: 'claude', configPath: nativePath });
+    for (const [field, expected] of Object.entries(slotExpectations)) {
+      assert.deepEqual(diff.results[0]?.changes.find((change) => change.field === field), {
+        field,
+        current: undefined,
+        expected,
+        secret: false,
+      });
+    }
+
+    const plan = await planApplyRuntime({ statePath, agent: 'claude', configPath: nativePath });
+    assert.equal(plan.results[0]?.status, 'would-change');
+    assert.equal(plan.plans[0]?.operationCount, 1);
+    assert.deepEqual(plan.plans[0]?.operationPaths, [nativePath]);
+    for (const field of Object.keys(slotExpectations)) {
+      assert.equal(plan.plans[0]?.changes.some((change) => change.field === field), true);
+    }
+
+    const applied = await applyRuntime({ statePath, agent: 'claude', configPath: nativePath, confirm: 'APPLY' });
+    assert.equal(applied.results[0]?.status, 'applied');
+    const written = JSON.parse(await readFile(nativePath, 'utf8')) as { env?: Record<string, string> };
+    assert.deepEqual(
+      Object.fromEntries(Object.keys(slotExpectations).map((field) => [field, written.env?.[field]])),
+      slotExpectations,
+    );
+
+    const afterDiff = await diffRuntime({ statePath, agent: 'claude', configPath: nativePath });
+    assert.deepEqual(afterDiff.results[0]?.changes, []);
+
+    const afterPlan = await planApplyRuntime({ statePath, agent: 'claude', configPath: nativePath });
+    assert.equal(afterPlan.results[0]?.status, 'unchanged');
+    assert.equal(afterPlan.plans[0]?.operationCount, 0);
+    assert.deepEqual(afterPlan.plans[0]?.operationPaths, []);
+
+    const secondApply = await applyRuntime({ statePath, agent: 'claude', configPath: nativePath, confirm: 'APPLY' });
+    assert.equal(secondApply.results[0]?.status, 'unchanged');
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

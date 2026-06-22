@@ -1,4 +1,17 @@
-export const MANAGED_DIFF_FIELDS = ['provider', 'model', 'baseURL', 'apiKey', 'contextWindow', 'contextTokens', 'maxTokens'] as const;
+export const MANAGED_DIFF_FIELDS = [
+  'provider',
+  'model',
+  'baseURL',
+  'apiKey',
+  'contextWindow',
+  'contextTokens',
+  'maxTokens',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+] as const;
 
 export type OhMyOpenAgentManagedDiffField = `ohMyOpenAgent.${'agents' | 'categories'}.${string}.${'model' | 'variant'}`;
 
