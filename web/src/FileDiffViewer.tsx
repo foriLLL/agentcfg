@@ -16,8 +16,8 @@ export function FileDiffViewer({ path, currentContent, expectedContent }: FileDi
       </div>
       <div className="file-diff-editor">
         <DiffEditor
-          original={currentContent}
-          modified={expectedContent}
+          original={redactSensitiveContent(currentContent)}
+          modified={redactSensitiveContent(expectedContent)}
           language={languageForPath(path)}
           options={{
             automaticLayout: true,
@@ -34,6 +34,12 @@ export function FileDiffViewer({ path, currentContent, expectedContent }: FileDi
       </div>
     </section>
   );
+}
+
+function redactSensitiveContent(content: string): string {
+  return content
+    .replace(/(apiKey\s*[:=]\s*)([\"']?)([^\n,}\"']+)([\"']?)/gi, '$1$2***MASKED***$4')
+    .replace(/(OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY)(\s*=\s*)([^\n]+)/gi, '$1$2***MASKED***');
 }
 
 function languageForPath(path: string): string {

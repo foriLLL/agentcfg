@@ -227,13 +227,20 @@ function FieldRows({ changes }: { changes: ManagedDiffChange[] }) {
         return (
           <div className={`field-row ${change === undefined ? 'field-row--same' : 'field-row--change'}`} key={field}>
             <span className="field-name">{fieldLabel(field)}</span>
-            <span>{formatManagedValue(change, 'current')}</span>
-            <span>{formatManagedValue(change, 'expected')}</span>
+            <span>{formatFieldValue(field, change, 'current')}</span>
+            <span>{formatFieldValue(field, change, 'expected')}</span>
           </div>
         );
       })}
     </div>
   );
+}
+
+function formatFieldValue(field: string, change: ManagedDiffChange | undefined, side: 'current' | 'expected'): string {
+  if (field === 'apiKey' && change !== undefined) {
+    return '***MASKED***';
+  }
+  return formatManagedValue(change, side);
 }
 
 function PathList({ title, paths, empty }: { title: string; paths: string[]; empty: string }) {

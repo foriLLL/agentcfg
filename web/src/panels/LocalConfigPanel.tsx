@@ -266,6 +266,7 @@ export function LocalConfigPanel(props: LocalConfigPanelProps) {
             value={props.configDraft}
             onChange={(event) => props.onConfigDraftChange(event.target.value)}
             placeholder="加载配置后可在此编辑原始文件内容。"
+            aria-label="原生配置文件内容编辑器"
             spellCheck={false}
             wrap="off"
           />
