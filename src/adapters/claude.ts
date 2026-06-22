@@ -1,5 +1,13 @@
-import { getSelectedProviderConfig, type CanonicalAgentConfig } from '../core/schema';
+import { getSelectedProviderConfig, type CanonicalAgentConfig, type ClaudeCodeModelMapSlot } from '../core/schema';
 import { parseNativeConfig, serializeNativeConfig, type NativeConfigObject, type NativeConfigValue } from '../core/native-io';
+
+const CLAUDE_CODE_MODEL_ENV_KEYS: Record<ClaudeCodeModelMapSlot, string> = {
+  primary: 'ANTHROPIC_MODEL',
+  opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  smallFast: 'ANTHROPIC_SMALL_FAST_MODEL',
+};
 
 export class ClaudeCodeAdapterError extends Error {
   constructor(message: string) {
@@ -23,13 +31,19 @@ export function renderClaudeCodeConfigObject(
   if (env.ANTHROPIC_AUTH_TOKEN !== undefined) {
     throw new ClaudeCodeAdapterError('Claude Code env.ANTHROPIC_AUTH_TOKEN overrides managed API key; remove it before agentcfg can manage Claude Code auth');
   }
-  if (env.ANTHROPIC_MODEL !== undefined) {
-    throw new ClaudeCodeAdapterError('Claude Code env.ANTHROPIC_MODEL overrides managed model; remove it before agentcfg can manage Claude Code model');
-  }
 
-  output.model = selected.modelId;
+  const modelMap = config.claudeCode?.modelMap;
+
+  output.model = modelMap?.primary ?? selected.modelId;
   env.ANTHROPIC_API_KEY = selected.provider.apiKey.value;
   env.ANTHROPIC_BASE_URL = selected.provider.baseURL;
+
+  for (const slot of Object.keys(CLAUDE_CODE_MODEL_ENV_KEYS) as ClaudeCodeModelMapSlot[]) {
+    const modelId = modelMap?.[slot];
+    if (modelId !== undefined) {
+      env[CLAUDE_CODE_MODEL_ENV_KEYS[slot]] = modelId;
+    }
+  }
 
   return output;
 }
