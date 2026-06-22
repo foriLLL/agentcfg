@@ -275,7 +275,7 @@ claudeCode:
     smallFast: claude-haiku-4
 ```
 
-Values are plain model IDs, not `provider/model` strings. Do not set `env.ANTHROPIC_AUTH_TOKEN` in your canonical config; it would override managed API key auth and is not supported.
+Values are plain model IDs, not `provider/model` strings. Do not set `env.ANTHROPIC_AUTH_TOKEN` in Claude Code `settings.json`; it would override managed API key auth and is not supported.
 
 ### OhMyOpenAgent
 

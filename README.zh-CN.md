@@ -275,7 +275,7 @@ claudeCode:
     smallFast: claude-haiku-4
 ```
 
-值为纯 model ID，不是 `provider/model` 字符串。请勿在 canonical config 中设置 `env.ANTHROPIC_AUTH_TOKEN`，因为它会覆盖受管理的 API key 认证，且不受支持。
+值为纯 model ID，不是 `provider/model` 字符串。请勿在 Claude Code `settings.json` 中设置 `env.ANTHROPIC_AUTH_TOKEN`，因为它会覆盖受管理的 API key 认证，且不受支持。
 
 ### OhMyOpenAgent
 
