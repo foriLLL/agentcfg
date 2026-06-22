@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
 import './monaco';
 
 type FileDiffViewerProps = {
@@ -8,6 +10,13 @@ type FileDiffViewerProps = {
 };
 
 export function FileDiffViewer({ path, currentContent, expectedContent }: FileDiffViewerProps) {
+  const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
+
+  useEffect(() => () => {
+    diffEditorRef.current?.setModel(null);
+    diffEditorRef.current = null;
+  }, []);
+
   return (
     <section className="file-diff-viewer" aria-label={`${path} 当前内容与应用后内容差异`}>
       <div className="file-diff-viewer__legend" aria-hidden="true">
@@ -19,6 +28,9 @@ export function FileDiffViewer({ path, currentContent, expectedContent }: FileDi
           original={redactSensitiveContent(currentContent)}
           modified={redactSensitiveContent(expectedContent)}
           language={languageForPath(path)}
+          onMount={(diffEditor) => {
+            diffEditorRef.current = diffEditor;
+          }}
           options={{
             automaticLayout: true,
             domReadOnly: true,
@@ -38,7 +50,7 @@ export function FileDiffViewer({ path, currentContent, expectedContent }: FileDi
 
 function redactSensitiveContent(content: string): string {
   return content
-    .replace(/(apiKey\s*[:=]\s*)([\"']?)([^\n,}\"']+)([\"']?)/gi, '$1$2***MASKED***$4')
+    .replace(/((?:[\"']?apiKey[\"']?\s*[:=]\s*)([\"']?))([^\n,}\"']+)([\"']?)/gi, '$1***MASKED***$4')
     .replace(/(OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY)(\s*=\s*)([^\n]+)/gi, '$1$2***MASKED***');
 }
 
