@@ -89,15 +89,23 @@ Web UI 可以选择记住用于 Gist 操作的 GitHub Token。启用后，agentc
 
 ## Web UI
 
-agentcfg 包含一个本地 Web UI，用于 init、pull、diff review、dry-run planning 和确认 apply 流程。
+agentcfg 包含一个本地 Web UI，作为 Agent 配置同步中心。重新设计的界面分为五个板块：首页、配置、同步、规则与 Skills、设置。
 
-UI 会显示当前状态、缓存配置、远端 Gist metadata，以及 provider API Key，显示内容与本地 runtime API 将要写入的值保持一致。请把 Web UI 视为 trusted-local 工具。
-
-apply 页面使用强确认流程。你必须先运行 dry-run，选择目标 agents，并输入 `APPLY`，UI 才会发送写入请求。
-
-Web UI 遵循与 CLI 相同的安全警告。私有 Gist 会以明文存储 provider 和 agent API Key，因此不要把它当作 secret vault。
+请把 Web UI 视为 trusted-local 工具。它遵循与 CLI 相同的安全警告：私有 Gist 会以明文存储 provider 和 agent 的 API Key，因此不要把它当作 secret vault。
 
 如果选择记住 GitHub Token，UI 会把该 token 写入本地明文 `secrets.json`。这只适合可信任的本机环境。
+
+### 板块说明
+
+**首页** 展示当前连接状态、缓存配置摘要和远端 Gist 元数据。它还会引导首次使用的用户完成连接 Gist 和加载远端配置。
+
+**配置** 用于管理 provider catalog 和模型列表。你可以添加或编辑 provider、设置 base URL、API Key 以及单模型元数据，如 `variant`、`contextWindow`、`contextTokens`、`maxTokens` 和可选的 `supportsVision`。每个 provider 可以声明 `protocol`（`openai-compatible` 或 `anthropic-compatible`），帮助 adapter 选择正确的集成方式。保存时会同时写入 Gist 和本地缓存。
+
+**同步** 是主要的应用流程。选择目标 agents、预览计划变更、审阅文件级 diff、通过复选框确认，然后应用。预览步骤会展示即将发生的变更但不写入文件；应用步骤会先创建备份，再原子写入，最后显示结果摘要和备份路径。CLI 等价命令（`diff`、`apply --dry-run`、`apply --yes`）仍然存在，但正常的 Web UI 路径使用预览和复选框确认，而不再要求输入 `APPLY`。
+
+**规则与 Skills** 管理 Agent 行为文件（如 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`）以及 `~/.agents/skills` 目录，作为可跨设备复用的能力库。
+
+**设置** 管理 GitHub Token、Gist ID、本地状态路径、自动化开关、原生配置原始编辑器和调试元数据。保存的 GitHub Token 不会完整暴露；UI 仅显示是否已保存。
 
 ### 本地运行
 
@@ -140,13 +148,13 @@ PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" agentcfg web
 - `Init` 把 Gist ID 存入本地状态。
 - `Remember GitHub Token` 把 GitHub Token 以明文保存在本地，并且 UI 只暴露 saved/not-saved 状态。
 - `Pull` 获取 `agentcfg.yaml` 并刷新缓存。
-- Dashboard 显示 state、cache 和 remote metadata。
-- `Config file` 允许你选择 Codex、OpenCode、OpenClaw 或 Claude Code，并在编辑或应用更改前查看原始 native config file。
-- `Diff` 显示单个 agent 或所有 agents 的 managed-field changes，包括 provider API key values。
-- `Dry-run` 显示计划但不写入文件，包括每个计划文件的当前内容和 apply 后内容。
-- `Apply` 要求输入 `APPLY`，再次验证，写入 backups，并显示 backup paths 和结果摘要。
+- 首页 Dashboard 显示 state、cache 和 remote metadata。
+- 配置页面允许你编辑 provider、模型和默认值，然后一键保存到 Gist。
+- 同步页面可以选择目标、预览变更、通过复选框确认并应用。应用后会显示备份和结果摘要。
+- 规则与 Skills 管理行为文件和 Skills 目录同步。
+- 设置页面管理 GitHub Token、Gist ID、状态路径、自动化、原生配置原始编辑器和调试元数据。
 
-Web UI 和本地 runtime API 会在远端表单、缓存摘要、diff/apply 摘要和文件预览中直接显示 provider API Key，使屏幕上的值与最终写入的值一致。保存的 GitHub Token 不同：runtime API 响应只暴露 token 是否已保存，永远不会暴露保存的 token 值。
+高阶状态和 Dashboard UI 中，provider API Key 会被掩码处理。在配置表单或原始配置预览等有意编辑或复制的界面中，它们可能被显示或编辑。保存的 GitHub Token 永远不会完整暴露：runtime API 响应仅报告 token 是否已保存。
 
 ## Setup
 

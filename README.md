@@ -89,15 +89,23 @@ The Web UI can optionally remember the GitHub Token for Gist operations. When en
 
 ## Web UI
 
-agentcfg includes a local Web UI for init, pull, diff review, dry-run planning, and confirmed apply flows.
+agentcfg includes a local Web UI that works as an Agent configuration sync center. The redesigned interface is organized into five sections: Home, Configuration, Sync, Rules & Skills, and Settings.
 
-The UI shows the current state, cached config, remote Gist metadata, and provider API keys exactly as the local runtime API will write them. Treat the Web UI as trusted-local only.
-
-The apply screen uses strong confirmation. You must run a dry-run first, pick the target agents, and type `APPLY` before the UI sends a write request.
-
-The Web UI still respects the same security warning as the CLI. The private Gist stores provider and agent API keys in plain text, so don’t treat it as a secret vault.
+Treat the Web UI as trusted-local only. It still respects the same security warning as the CLI: the private Gist stores provider and agent API keys in plain text, so don’t treat it as a secret vault.
 
 If you choose to remember the GitHub Token, the UI writes that token to local plain text `secrets.json`. This is intended for trusted local machines only.
+
+### Sections
+
+**Home** shows the current connection state, cached config summary, and remote Gist metadata at a glance. It also guides first-run users through connecting a Gist and loading the remote configuration.
+
+**Configuration** is where you manage the provider catalog and model list. You can add or edit providers, set base URLs, API keys, and per-model metadata such as `variant`, `contextWindow`, `contextTokens`, `maxTokens`, and optional `supportsVision`. Each provider can declare a `protocol` (`openai-compatible` or `anthropic-compatible`) to help adapters pick the right integration style. Changes are saved to the Gist and the local cache in one step.
+
+**Sync** is the main apply flow. Pick target agents, preview the planned changes, review the file-level diff, confirm with a checkbox, and apply. The preview step shows what will change without writing files; the apply step creates backups, writes atomically, and then shows a result summary with backup paths. The CLI equivalents (`diff`, `apply --dry-run`, `apply --yes`) still exist, but the normal Web UI path uses the preview and checkbox confirmation instead of typing `APPLY`.
+
+**Rules & Skills** manages Agent behavior files (such as `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`) and the `~/.agents/skills` directory as a reusable cross-device capability library.
+
+**Settings** handles the GitHub Token, Gist ID, local state path, automation toggles, raw native config editor, and debug metadata. The saved GitHub Token is never exposed in full; the UI only shows whether one is saved.
 
 ### Run locally
 
@@ -140,13 +148,13 @@ Use `docs/testing-capability.md` as the development-time test design contract be
 - `Init` stores the Gist ID in local state.
 - `Remember GitHub Token` stores the GitHub Token locally in plain text and exposes only a saved/not-saved status in the UI.
 - `Pull` fetches `agentcfg.yaml` and refreshes the cache.
-- The dashboard shows state, cache, and remote metadata.
-- `Config file` lets you choose Codex, OpenCode, OpenClaw, or Claude Code and inspect the raw native config file before editing or applying changes.
-- `Diff` shows managed-field changes for one agent or all agents, including provider API key values.
-- `Dry-run` shows the plan without writing files, including each planned file's current content and post-apply content.
-- `Apply` requires typed `APPLY`, validates again, writes backups, and shows the backup paths and result summary.
+- The Home dashboard shows state, cache, and remote metadata.
+- Configuration lets you edit providers, models, and defaults, then save to the Gist in one step.
+- Sync lets you pick targets, preview changes, confirm with a checkbox, and apply. Backups and a result summary are shown after apply.
+- Rules & Skills manages behavior files and the Skills directory sync.
+- Settings handles the GitHub Token, Gist ID, state path, automation, raw native config editor, and debug metadata.
 
-The Web UI and local runtime API show provider API keys directly in the remote form, cache summary, diff/apply summaries, and file previews so the values on screen match the final values that will be written. Saved GitHub Tokens are different: runtime API responses only expose whether a token is saved, never the saved token value.
+Provider API keys are masked in the high-level status and dashboard UI. They may be visible or editable in intentional edit or copy surfaces, such as the Configuration form or raw config previews. Saved GitHub Tokens are never exposed in full: runtime API responses only report whether a token is saved.
 
 ## Setup
 
