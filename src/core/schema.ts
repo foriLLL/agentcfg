@@ -63,6 +63,15 @@ export type OhMyOpenAgentConfig = {
   categories?: Partial<Record<OhMyOpenAgentCategoryName, OhMyOpenAgentModelAssignment>>;
 };
 
+export const CLAUDE_CODE_MODEL_MAP_SLOTS = ['primary', 'opus', 'sonnet', 'haiku', 'smallFast'] as const;
+
+export type ClaudeCodeModelMapSlot = (typeof CLAUDE_CODE_MODEL_MAP_SLOTS)[number];
+export type ClaudeCodeModelMap = Partial<Record<ClaudeCodeModelMapSlot, string>>;
+
+export type ClaudeCodeConfig = {
+  modelMap?: ClaudeCodeModelMap;
+};
+
 export type ProviderConfig = {
   protocol?: ProviderProtocol;
   baseURL: string;
@@ -78,6 +87,7 @@ export type CanonicalAgentConfig = {
   defaults: AgentConfigDefaults;
   providers: Record<string, ProviderConfig>;
   ohMyOpenAgent?: OhMyOpenAgentConfig;
+  claudeCode?: ClaudeCodeConfig;
 };
 
 export type SelectedProviderConfig = {
@@ -96,6 +106,7 @@ export type AgentConfigInput = {
   defaults?: unknown;
   providers?: unknown;
   ohMyOpenAgent?: unknown;
+  claudeCode?: unknown;
 };
 
 export class AgentConfigValidationError extends Error {
@@ -150,6 +161,7 @@ export function serializeCanonicalAgentConfig(config: AgentConfigInput): string 
     },
     providers,
     ...(canonicalConfig.ohMyOpenAgent === undefined ? {} : { ohMyOpenAgent: canonicalConfig.ohMyOpenAgent }),
+    ...(canonicalConfig.claudeCode === undefined ? {} : { claudeCode: canonicalConfig.claudeCode }),
   });
 }
 
@@ -187,6 +199,8 @@ function validateNestedAgentConfig(input: AgentConfigInput): CanonicalAgentConfi
   const defaults = validateDefaults(input.defaults, issues);
   const providers = validateProviders(input.providers, issues);
   const ohMyOpenAgent = providers === undefined ? undefined : validateOhMyOpenAgentConfig(input.ohMyOpenAgent, providers, issues);
+  const claudeCode =
+    defaults === undefined || providers === undefined ? undefined : validateClaudeCodeConfig(input.claudeCode, defaults, providers, issues);
 
   if (defaults !== undefined && providers !== undefined) {
     const defaultProvider = providers[defaults.provider];
@@ -207,6 +221,7 @@ function validateNestedAgentConfig(input: AgentConfigInput): CanonicalAgentConfi
     defaults: defaults as AgentConfigDefaults,
     providers: providers as Record<string, ProviderConfig>,
     ...(ohMyOpenAgent === undefined ? {} : { ohMyOpenAgent }),
+    ...(claudeCode === undefined ? {} : { claudeCode }),
   };
 }
 
@@ -597,6 +612,79 @@ function validateOhMyOpenAgentAssignment(
   }
 
   return assignment;
+}
+
+function validateClaudeCodeConfig(
+  value: unknown,
+  defaults: AgentConfigDefaults,
+  providers: Record<string, ProviderConfig>,
+  issues: string[],
+): ClaudeCodeConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const path = 'claudeCode';
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object when present`);
+    return undefined;
+  }
+
+  const modelMap = validateClaudeCodeModelMap(`${path}.modelMap`, value.modelMap, defaults, providers, issues);
+  if (modelMap === undefined) {
+    return undefined;
+  }
+
+  return { modelMap };
+}
+
+function validateClaudeCodeModelMap(
+  path: string,
+  value: unknown,
+  defaults: AgentConfigDefaults,
+  providers: Record<string, ProviderConfig>,
+  issues: string[],
+): ClaudeCodeModelMap | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    issues.push(`${path} must be an object when present`);
+    return undefined;
+  }
+
+  const allowedSlots = new Set<string>(CLAUDE_CODE_MODEL_MAP_SLOTS);
+  const defaultProvider = providers[defaults.provider];
+  const modelMap: ClaudeCodeModelMap = {};
+
+  for (const [slot, modelId] of Object.entries(value)) {
+    const slotPath = `${path}.${slot}`;
+
+    if (!allowedSlots.has(slot)) {
+      issues.push(`${slotPath} must use a supported Claude Code modelMap slot`);
+      continue;
+    }
+
+    if (!isNonEmptyString(modelId)) {
+      issues.push(`${slotPath} must be a non-empty string`);
+      continue;
+    }
+
+    if (defaultProvider === undefined) {
+      issues.push(`${slotPath}: cannot validate model id "${modelId}" because defaults.provider does not reference an existing provider`);
+      continue;
+    }
+
+    if (defaultProvider.models[modelId] === undefined) {
+      issues.push(`${slotPath}: unknown model id "${modelId}"`);
+      continue;
+    }
+
+    modelMap[slot as ClaudeCodeModelMapSlot] = modelId;
+  }
+
+  return Object.keys(modelMap).length === 0 ? undefined : modelMap;
 }
 
 function isKnownProviderModelReference(value: string, providers: Record<string, ProviderConfig>): boolean {

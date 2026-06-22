@@ -61,6 +61,34 @@ const PROTOCOL_CATALOG_YAML = [
   '',
 ].join('\n');
 
+const CLAUDE_CODE_MODEL_MAP_YAML = [
+  'schemaVersion: 1',
+  'defaults:',
+  '  provider: anthropic',
+  '  model: claude-primary',
+  'providers:',
+  '  anthropic:',
+  '    protocol: anthropic-compatible',
+  '    baseURL: https://api.anthropic.com/v1',
+  '    apiKey:',
+  '      type: plain',
+  '      value: sk-ant-visible-anthropic',
+  '    models:',
+  '      claude-primary: {}',
+  '      claude-opus: {}',
+  '      claude-sonnet: {}',
+  '      claude-haiku: {}',
+  '      claude-small-fast: {}',
+  'claudeCode:',
+  '  modelMap:',
+  '    primary: claude-primary',
+  '    opus: claude-opus',
+  '    sonnet: claude-sonnet',
+  '    haiku: claude-haiku',
+  '    smallFast: claude-small-fast',
+  '',
+].join('\n');
+
 const EXPECTED_CANONICAL_CONFIG = {
   schemaVersion: 1,
   defaults: {
@@ -140,6 +168,53 @@ test('serializes the canonical multi-provider shape without masking provider API
   assert.deepEqual(reparsed, EXPECTED_CANONICAL_CONFIG);
   assert.match(serialized, /sk-test-visible-openai/);
   assert.match(serialized, /sk-ant-visible-anthropic/);
+});
+
+test('parses and serializes Claude Code model map routes for all supported slots', () => {
+  const config = parseCanonicalAgentConfig(CLAUDE_CODE_MODEL_MAP_YAML);
+
+  assert.deepEqual(config.claudeCode?.modelMap, {
+    primary: 'claude-primary',
+    opus: 'claude-opus',
+    sonnet: 'claude-sonnet',
+    haiku: 'claude-haiku',
+    smallFast: 'claude-small-fast',
+  });
+
+  const serialized = serializeCanonicalAgentConfig(config);
+  const reparsed = parseCanonicalAgentConfig(serialized);
+
+  assert.deepEqual(reparsed.claudeCode?.modelMap, config.claudeCode?.modelMap);
+});
+
+test('keeps legacy canonical configs without Claude Code routes unchanged', () => {
+  const config = parseCanonicalAgentConfig(readFileSync(VALID_FIXTURE, 'utf8'));
+
+  assert.equal(config.claudeCode, undefined);
+});
+
+test('rejects unsupported Claude Code model map slots', () => {
+  assert.throws(
+    () => parseCanonicalAgentConfig(CLAUDE_CODE_MODEL_MAP_YAML.replace('opus: claude-opus', 'opusx: claude-opus')),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /claudeCode\.modelMap\.opusx/);
+      assert.match(error.message, /supported Claude Code modelMap slot/);
+      return true;
+    },
+  );
+});
+
+test('rejects Claude Code model map values outside the selected provider models', () => {
+  assert.throws(
+    () => parseCanonicalAgentConfig(CLAUDE_CODE_MODEL_MAP_YAML.replace('sonnet: claude-sonnet', 'sonnet: claude-missing')),
+    (error) => {
+      assert.ok(error instanceof AgentConfigValidationError);
+      assert.match(error.message, /claudeCode\.modelMap\.sonnet/);
+      assert.match(error.message, /unknown model id "claude-missing"/);
+      return true;
+    },
+  );
 });
 
 
@@ -437,6 +512,26 @@ test('omits empty OhMyOpenAgent mappings from normalized and serialized config',
   assert.doesNotMatch(serialized, /ohMyOpenAgent/);
 });
 
+test('omits empty Claude Code model maps from normalized and serialized config', () => {
+  for (const claudeCode of [{}, { modelMap: {} }]) {
+    const config = validateAgentConfig({
+      ...EXPECTED_CANONICAL_CONFIG,
+      claudeCode,
+    });
+
+    assert.equal(config.claudeCode, undefined);
+  }
+
+  const serialized = serializeCanonicalAgentConfig({
+    ...EXPECTED_CANONICAL_CONFIG,
+    claudeCode: {
+      modelMap: {},
+    },
+  });
+
+  assert.doesNotMatch(serialized, /claudeCode/);
+});
+
 test('documents every canonical agentcfg.yaml schema field', () => {
   const fieldPaths = AGENTCFG_SCHEMA_DOCS.map((field) => field.path as string);
 
@@ -470,6 +565,9 @@ test('documents every canonical agentcfg.yaml schema field', () => {
     'ohMyOpenAgent.categories.<category>',
     'ohMyOpenAgent.categories.<category>.model',
     'ohMyOpenAgent.categories.<category>.variant',
+    'claudeCode',
+    'claudeCode.modelMap',
+    'claudeCode.modelMap.<slot>',
   ]);
   assert.equal(new Set(fieldPaths).size, fieldPaths.length);
 

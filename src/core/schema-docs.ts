@@ -27,7 +27,10 @@ export type AgentConfigSchemaFieldPath =
   | 'ohMyOpenAgent.categories'
   | 'ohMyOpenAgent.categories.<category>'
   | 'ohMyOpenAgent.categories.<category>.model'
-  | 'ohMyOpenAgent.categories.<category>.variant';
+  | 'ohMyOpenAgent.categories.<category>.variant'
+  | 'claudeCode'
+  | 'claudeCode.modelMap'
+  | 'claudeCode.modelMap.<slot>';
 
 export type AgentConfigSchemaDoc = {
   path: AgentConfigSchemaFieldPath;
@@ -240,5 +243,26 @@ export const AGENTCFG_SCHEMA_DOCS: readonly AgentConfigSchemaDoc[] = [
     type: 'max | high | medium | low | xhigh',
     required: false,
     description: 'OhMyOpenAgent 官方 category variant override。仅在所选任务模型需要特定推理档位时填写。',
+  },
+  {
+    path: 'claudeCode',
+    label: 'Claude Code 配置',
+    type: 'object',
+    required: false,
+    description: '专用于保存 Claude Code 的模型路由配置，不与通用默认模型选择混用。',
+  },
+  {
+    path: 'claudeCode.modelMap',
+    label: 'Claude Code 模型映射',
+    type: 'object',
+    required: false,
+    description: '按 Claude Code 支持的槽位索引模型 ID。空映射会在生成 YAML 时省略。',
+  },
+  {
+    path: 'claudeCode.modelMap.<slot>',
+    label: 'Claude Code 槽位模型',
+    type: 'primary | opus | sonnet | haiku | smallFast: non-empty string',
+    required: false,
+    description: '单个 Claude Code 槽位的模型 ID，必须引用 defaults.provider 下 providers 模型目录中的 model key。',
   },
 ];
